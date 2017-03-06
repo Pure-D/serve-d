@@ -126,7 +126,12 @@ void processNotify(RequestMessage msg)
 
 void printVersion()
 {
-	import workspaced.info : WorkspacedVersion = Version;
+	static if (__traits(compiles, {
+			import workspaced.info : WorkspacedVersion = Version;
+		}))
+		import workspaced.info : WorkspacedVersion = Version;
+	else
+		import source.workspaced.info : WorkspacedVersion = Version;
 	import source.served.info;
 
 	io.writefln("serve-d v%(%s.%) with workspace-d v%(%s.%)", Version, WorkspacedVersion);
