@@ -6,3 +6,5 @@ __dummy.html
 *-test-library
 dub.selections.json
 /serve-d
+*.dll
+*.exe
