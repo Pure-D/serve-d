@@ -119,10 +119,12 @@ string[] getPossibleSourceRoots()
 	return [workspaceRoot];
 }
 
+__gshared bool initialStart = true;
 InitializeResult initialize(InitializeParams params)
 {
 	import std.file;
 
+	initialStart = true;
 	workspaceRoot = params.rootPath;
 	chdir(workspaceRoot);
 	hasDub = safe!(dub.startup)(workspaceRoot);
@@ -133,6 +135,34 @@ InitializeResult initialize(InitializeParams params)
 	}
 	InitializeResult result;
 	result.capabilities.textDocumentSync = documents.syncKind;
+
+	result.capabilities.completionProvider = CompletionOptions(false, [".", "("]);
+	result.capabilities.signatureHelpProvider = SignatureHelpOptions(["(", ","]);
+	result.capabilities.workspaceSymbolProvider = true;
+	result.capabilities.definitionProvider = true;
+	result.capabilities.hoverProvider = true;
+	result.capabilities.codeActionProvider = true;
+	
+	result.capabilities.documentSymbolProvider = true;
+	
+	result.capabilities.documentFormattingProvider = true;
+
+	dlangui.start();
+	importer.start();
+
+	result.capabilities.codeActionProvider = true;
+
+	changedConfig([__traits(allMembers, Configuration.D)].map!(a => "d." ~ a).array);
+
+	return result;
+}
+
+@protocolNotification("workspace/didChangeConfiguration")
+void configNotify(DidChangeConfigurationParams params)
+{
+	if (!initialStart)
+		return;
+	initialStart = false;
 
 	hasDCD = safe!(dcd.start)(workspaceRoot, config.d.dcdClientPath,
 			config.d.dcdServerPath, cast(ushort) 9166, false);
@@ -152,12 +182,6 @@ InitializeResult initialize(InitializeParams params)
 			goto DCDEnd;
 		}
 		io.stderr.writeln("Imports: ", importPathProvider());
-		result.capabilities.completionProvider = CompletionOptions(false, [".", "("]);
-		result.capabilities.signatureHelpProvider = SignatureHelpOptions(["(", ","]);
-		result.capabilities.workspaceSymbolProvider = true;
-		result.capabilities.definitionProvider = true;
-		result.capabilities.hoverProvider = true;
-		result.capabilities.codeActionProvider = true;
 	}
 	else
 		rpc.window.showErrorMessage(format("Could not start DCD. (root=%s, path=%s, %s)", workspaceRoot, config.d.dcdClientPath,
@@ -165,25 +189,12 @@ InitializeResult initialize(InitializeParams params)
 DCDEnd:
 
 	hasDscanner = safe!(dscanner.start)(workspaceRoot, config.d.dscannerPath);
-	if (hasDscanner)
-		result.capabilities.documentSymbolProvider = true;
-	else
+	if (!hasDscanner)
 		rpc.window.showErrorMessage(format("Could not start DScanner. (root=%s, path=%s)", workspaceRoot, config.d.dscannerPath));
 
 	hasDfmt = safe!(dfmt.start)(workspaceRoot, config.d.dfmtPath);
-	if (hasDfmt)
-		result.capabilities.documentFormattingProvider = true;
-	else
+	if (!hasDfmt)
 		rpc.window.showErrorMessage(format("Could not start Dfmt. (root=%s, path=%s)", workspaceRoot, config.d.dfmtPath));
-
-	dlangui.start();
-	importer.start();
-
-	result.capabilities.codeActionProvider = true;
-
-	changedConfig([__traits(allMembers, Configuration.D)].map!(a => "d." ~ a).array);
-
-	return result;
 }
 
 @protocolMethod("shutdown")

@@ -48,6 +48,14 @@ struct Optional(T)
 		isNull = true;
 	}
 
+	string toString() const
+	{
+		if (isNull)
+			return "null(" ~ T.stringof ~ ")";
+		else
+			return value.to!string;
+	}
+
 	const JSONValue _toJSON()
 	{
 		if (isNull)

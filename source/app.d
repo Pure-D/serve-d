@@ -116,7 +116,7 @@ void processNotify(RequestMessage msg)
 						}
 						catch (MethodException e)
 						{
-							io.stderr.writeln(e);
+							error("Failed notify: ", e);
 						}
 					}
 				}
@@ -179,7 +179,7 @@ void main(string[] args)
 		{
 			trace("Has Message");
 			auto msg = rpc.poll;
-			trace("Message: %s", msg);
+			trace("Message: ", msg);
 			if (msg.id.hasData)
 				fibers ~= new Fiber({
 					ResponseMessage res;
@@ -187,13 +187,13 @@ void main(string[] args)
 					{
 						trace("Processing as request");
 						res = processRequest(msg);
-						trace("Responding with: %s", res);
+						trace("Responding with: ", res);
 					}
 					catch (Exception e)
 					{
 						res.error = ResponseError(e);
 						res.error.code = ErrorCode.internalError;
-						error("Failed processing request: %s", e);
+						error("Failed processing request: ", e);
 					}
 					rpc.send(res);
 				}, 4096 * 16);
@@ -206,7 +206,7 @@ void main(string[] args)
 					}
 					catch (Exception e)
 					{
-						error("Failed processing notification: %s", e);
+						error("Failed processing notification: ", e);
 					}
 				}, 4096 * 16);
 		}
