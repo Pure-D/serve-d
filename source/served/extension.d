@@ -447,8 +447,10 @@ unittest
 @protocolMethod("textDocument/completion")
 CompletionList provideComplete(TextDocumentPositionParams params)
 {
-	require!hasDCD;
 	auto document = documents[params.textDocument.uri];
+	if (document.languageId != "d")
+		return CompletionList.init;
+	require!hasDCD;
 	auto result = syncYield!(dcd.listCompletion)(document.text,
 			cast(int) document.positionToBytes(params.position));
 	CompletionItem[] completion;
@@ -457,12 +459,9 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 	case "identifiers":
 		foreach (identifier; result["identifiers"].array)
 		{
-			//dfmt off
-			CompletionItem item = {
-				label: identifier["identifier"].str,
-				kind: identifier["type"].str.convertFromDCDType
-			};
-			//dfmt on
+			CompletionItem item;
+			item.label = identifier["identifier"].str;
+			item.kind = identifier["type"].str.convertFromDCDType;
 			completion ~= item;
 		}
 		goto case;
@@ -476,8 +475,10 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 @protocolMethod("textDocument/signatureHelp")
 SignatureHelp provideSignatureHelp(TextDocumentPositionParams params)
 {
-	require!hasDCD;
 	auto document = documents[params.textDocument.uri];
+	if (document.languageId != "d")
+		return SignatureHelp.init;
+	require!hasDCD;
 	auto pos = cast(int) document.positionToBytes(params.position);
 	auto result = syncYield!(dcd.listCompletion)(document.text, pos);
 	SignatureInformation[] signatures;
@@ -581,8 +582,10 @@ SymbolInformation[] provideDocumentSymbols(DocumentSymbolParams params)
 @protocolMethod("textDocument/definition")
 ArrayOrSingle!Location provideDefinition(TextDocumentPositionParams params)
 {
-	require!hasDCD;
 	auto document = documents[params.textDocument.uri];
+	if (document.languageId != "d")
+		return ArrayOrSingle!Location.init;
+	require!hasDCD;
 	auto result = syncYield!(dcd.findDeclaration)(document.text,
 			cast(int) document.positionToBytes(params.position));
 	if (result.type == JSON_TYPE.NULL)
@@ -617,8 +620,10 @@ ArrayOrSingle!Location provideDefinition(TextDocumentPositionParams params)
 @protocolMethod("textDocument/formatting")
 TextEdit[] provideFormatting(DocumentFormattingParams params)
 {
-	require!hasDfmt;
 	auto document = documents[params.textDocument.uri];
+	if (document.languageId != "d")
+		return [];
+	require!hasDfmt;
 	string[] args;
 	if (config.d.overrideDfmtEditorconfig)
 	{
@@ -661,8 +666,10 @@ TextEdit[] provideFormatting(DocumentFormattingParams params)
 @protocolMethod("textDocument/hover")
 Hover provideHover(TextDocumentPositionParams params)
 {
-	require!hasDCD;
 	auto document = documents[params.textDocument.uri];
+	if (document.languageId != "d")
+		return Hover.init;
+	require!hasDCD;
 	auto docs = syncYield!(dcd.getDocumentation)(document.text,
 			cast(int) document.positionToBytes(params.position));
 	Hover ret;
@@ -684,6 +691,8 @@ private auto whitespace = regex(`\s*`);
 Command[] provideCodeActions(CodeActionParams params)
 {
 	auto document = documents[params.textDocument.uri];
+	if (document.languageId != "d")
+		return [];
 	Command[] ret;
 	foreach (diagnostic; params.context.diagnostics)
 	{
