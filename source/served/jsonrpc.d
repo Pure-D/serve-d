@@ -64,7 +64,7 @@ class RPCProcessor : Fiber
 		}
 		const content = raw.toString();
 		string data = "Content-Length: " ~ content.length.to!string ~ "\r\n\r\n" ~ content;
-		writer.write(data);
+		writer.rawWrite(data);
 		writer.flush();
 	}
 
