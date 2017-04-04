@@ -10,6 +10,7 @@ import std.json;
 import std.path;
 import std.conv;
 import std.traits;
+import std.experimental.logger;
 
 import served.fibermanager;
 import served.filereader;
@@ -140,6 +141,8 @@ void printVersion()
 
 void main(string[] args)
 {
+	debug globalLogLevel = LogLevel.trace;
+
 	bool printVer;
 	string[] features;
 	auto argInfo = args.getopt("r|require",
@@ -161,28 +164,36 @@ void main(string[] args)
 	foreach (feature; features)
 		if (!IncludedFeatures.canFind(feature.toLower.strip))
 			throw new Exception("Feature set '" ~ feature ~ "' not in this version of serve-d");
+	trace("Features fulfilled");
 	auto input = new FileReader(io.stdin);
 	input.start();
+	trace("Started reading from stdin");
 	rpc = new RPCProcessor(input, io.stdout);
 	rpc.call();
+	trace("RPC started");
 	FiberManager fibers;
 	fibers ~= rpc;
 	while (rpc.state != Fiber.State.TERM)
 	{
 		while (rpc.hasData)
 		{
+			trace("Has Message");
 			auto msg = rpc.poll;
+			trace("Message: %s", msg);
 			if (msg.id.hasData)
 				fibers ~= new Fiber({
 					ResponseMessage res;
 					try
 					{
+						trace("Processing as request");
 						res = processRequest(msg);
+						trace("Responding with: %s", res);
 					}
 					catch (Exception e)
 					{
 						res.error = ResponseError(e);
 						res.error.code = ErrorCode.internalError;
+						error("Failed processing request: %s", e);
 					}
 					rpc.send(res);
 				}, 4096 * 16);
@@ -190,11 +201,12 @@ void main(string[] args)
 				fibers ~= new Fiber({
 					try
 					{
+						trace("Processing as notification");
 						processNotify(msg);
 					}
 					catch (Exception e)
 					{
-						io.stderr.writeln(e);
+						error("Failed processing notification: %s", e);
 					}
 				}, 4096 * 16);
 		}

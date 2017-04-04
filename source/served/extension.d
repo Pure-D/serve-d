@@ -160,20 +160,21 @@ InitializeResult initialize(InitializeParams params)
 		result.capabilities.codeActionProvider = true;
 	}
 	else
-		rpc.window.showErrorMessage("Could not start DCD.");
+		rpc.window.showErrorMessage(format("Could not start DCD. (root=%s, path=%s, %s)", workspaceRoot, config.d.dcdClientPath,
+			config.d.dcdServerPath));
 DCDEnd:
 
-	hasDscanner = safe!(dscanner.start)(workspaceRoot);
+	hasDscanner = safe!(dscanner.start)(workspaceRoot, config.d.dscannerPath);
 	if (hasDscanner)
 		result.capabilities.documentSymbolProvider = true;
 	else
-		rpc.window.showErrorMessage("Could not start DScanner.");
+		rpc.window.showErrorMessage(format("Could not start DScanner. (root=%s, path=%s)", workspaceRoot, config.d.dscannerPath));
 
-	hasDfmt = safe!(dfmt.start)(workspaceRoot);
+	hasDfmt = safe!(dfmt.start)(workspaceRoot, config.d.dfmtPath);
 	if (hasDfmt)
 		result.capabilities.documentFormattingProvider = true;
 	else
-		rpc.window.showErrorMessage("Could not start Dfmt.");
+		rpc.window.showErrorMessage(format("Could not start Dfmt. (root=%s, path=%s)", workspaceRoot, config.d.dfmtPath));
 
 	dlangui.start();
 	importer.start();

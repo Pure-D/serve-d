@@ -7,6 +7,7 @@ import painlessjson;
 
 import std.container.dlist;
 import std.conv;
+import std.experimental.logger;
 import std.json;
 import std.stdio;
 import std.string;
@@ -151,13 +152,17 @@ private:
 struct WindowFunctions
 {
 	RPCProcessor rpc;
+	private bool safeShowMessage;
 
 	void showMessage(MessageType type, string message)
 	{
+		if (!safeShowMessage)
+			warningf("%s message: %s", type, message);
 		RequestMessage req;
 		req.method = "window/showMessage";
 		req.params = ShowMessageParams(type, message).toJSON;
 		rpc.send(req);
+		safeShowMessage = false;
 	}
 
 	void runOrMessage(lazy void fn, MessageType type, string message)
@@ -175,21 +180,29 @@ struct WindowFunctions
 
 	void showErrorMessage(string message)
 	{
+		error("Error message: ", message);
+		safeShowMessage = true;
 		showMessage(MessageType.error, message);
 	}
 
 	void showWarningMessage(string message)
 	{
+		warning("Warning message: ", message);
+		safeShowMessage = true;
 		showMessage(MessageType.warning, message);
 	}
 
 	void showInformationMessage(string message)
 	{
+		info("Info message: ", message);
+		safeShowMessage = true;
 		showMessage(MessageType.info, message);
 	}
 
 	void showLogMessage(string message)
 	{
+		trace("Log message: ", message);
+		safeShowMessage = true;
 		showMessage(MessageType.log, message);
 	}
 }
