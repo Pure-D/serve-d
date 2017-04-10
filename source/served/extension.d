@@ -8,6 +8,7 @@ import std.path;
 import std.regex;
 import io = std.stdio;
 import std.string;
+import std.experimental.logger;
 
 import served.fibermanager;
 import served.types;
@@ -33,7 +34,7 @@ bool safe(alias fn, Args...)(Args args)
 	}
 	catch (Exception e)
 	{
-		io.stderr.writeln(e);
+		error(e);
 		return false;
 	}
 }
@@ -124,13 +125,16 @@ InitializeResult initialize(InitializeParams params)
 {
 	import std.file;
 
+	trace("Initializing serve-d for " ~ params.rootPath);
+
 	initialStart = true;
 	workspaceRoot = params.rootPath;
 	chdir(workspaceRoot);
+	trace("Starting dub...");
 	hasDub = safe!(dub.startup)(workspaceRoot);
 	if (!hasDub)
 	{
-		io.stderr.writeln("Falling back to fsworkspace");
+		error("Failed starting dub - falling back to fsworkspace");
 		fsworkspace.start(workspaceRoot, getPossibleSourceRoots);
 	}
 	InitializeResult result;
@@ -147,12 +151,12 @@ InitializeResult initialize(InitializeParams params)
 	
 	result.capabilities.documentFormattingProvider = true;
 
+	trace("Starting dlangui");
 	dlangui.start();
+	trace("Starting importer");
 	importer.start();
 
 	result.capabilities.codeActionProvider = true;
-
-	changedConfig([__traits(allMembers, Configuration.D)].map!(a => "d." ~ a).array);
 
 	return result;
 }
@@ -164,6 +168,7 @@ void configNotify(DidChangeConfigurationParams params)
 		return;
 	initialStart = false;
 
+	trace("Received configuration");
 	hasDCD = safe!(dcd.start)(workspaceRoot, config.d.dcdClientPath,
 			config.d.dcdServerPath, cast(ushort) 9166, false);
 	if (hasDCD)
@@ -451,8 +456,13 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 	if (document.languageId != "d")
 		return CompletionList.init;
 	require!hasDCD;
-	auto result = syncYield!(dcd.listCompletion)(document.text,
-			cast(int) document.positionToBytes(params.position));
+	auto byteOff = cast(int) document.positionToBytes(params.position);
+	JSONValue result;
+	joinAll({
+		result = syncYield!(dcd.listCompletion)(document.text, byteOff);
+	}, {
+
+	});
 	CompletionItem[] completion;
 	switch (result["type"].str)
 	{
