@@ -19,6 +19,20 @@ import served.types;
 
 static import served.extension;
 
+__gshared io.File stdin, stdout;
+shared static this()
+{
+	stdin = io.stdin;
+	stdout = io.stdout;
+	version (Windows)
+		io.stdin = io.File("NUL", "r");
+	else version (Posix)
+		io.stdin = io.File("/dev/null", "r");
+	else
+		io.stderr.writeln("warning: no /dev/null implementation on this OS");
+	io.stdout = io.stderr;
+}
+
 import painlessjson;
 
 bool initialized = false;
@@ -31,12 +45,15 @@ ResponseMessage processRequest(RequestMessage msg)
 	res.id = msg.id;
 	if (msg.method == "initialize" && !initialized)
 	{
+		trace("Initializing");
 		res.result = served.extension.initialize(msg.params.fromJSON!InitializeParams).toJSON;
+		trace("Initialized");
 		initialized = true;
 		return res;
 	}
 	if (!initialized)
 	{
+		trace("Tried to call command without initializing");
 		res.error = ResponseError(ErrorCode.serverNotInitialized);
 		return res;
 	}
@@ -55,6 +72,7 @@ ResponseMessage processRequest(RequestMessage msg)
 						alias params = Parameters!symbol;
 						try
 						{
+							trace("Calling " ~ name);
 							static if (params.length == 0)
 								res.result = symbol[0]().toJSON;
 							else static if (params.length == 1)
@@ -165,10 +183,10 @@ void main(string[] args)
 		if (!IncludedFeatures.canFind(feature.toLower.strip))
 			throw new Exception("Feature set '" ~ feature ~ "' not in this version of serve-d");
 	trace("Features fulfilled");
-	auto input = new FileReader(io.stdin);
+	auto input = new FileReader(stdin);
 	input.start();
 	trace("Started reading from stdin");
-	rpc = new RPCProcessor(input, io.stdout);
+	rpc = new RPCProcessor(input, stdout);
 	rpc.call();
 	trace("RPC started");
 	FiberManager fibers;
@@ -189,7 +207,7 @@ void main(string[] args)
 						res = processRequest(msg);
 						trace("Responding with: ", res);
 					}
-					catch (Exception e)
+					catch (Throwable e)
 					{
 						res.error = ResponseError(e);
 						res.error.code = ErrorCode.internalError;
@@ -204,7 +222,7 @@ void main(string[] args)
 						trace("Processing as notification");
 						processNotify(msg);
 					}
-					catch (Exception e)
+					catch (Throwable e)
 					{
 						error("Failed processing notification: ", e);
 					}
