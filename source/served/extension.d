@@ -565,7 +565,7 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 @protocolMethod("textDocument/documentSymbol")
 SymbolInformation[] provideDocumentSymbols(DocumentSymbolParams params)
 {
-	require!hasDCD;
+	require!hasDscanner;
 	auto result = syncYield!(dscanner.listDefinitions)(uriToFile(params.textDocument.uri));
 	if (result.type == JSON_TYPE.NULL)
 		return [];
