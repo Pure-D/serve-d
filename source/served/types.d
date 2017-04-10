@@ -121,7 +121,7 @@ RPCProcessor rpc;
 
 DocumentUri uriFromFile(string file)
 {
-	import std.uri : encode;
+	import std.uri : encodeComponent;
 
 	version (Windows)
 		enum absPrefix = "file:///"; // file:///c:/...
@@ -129,21 +129,21 @@ DocumentUri uriFromFile(string file)
 		enum absPrefix = "file://";
 
 	if (isAbsolute(file))
-		return absPrefix ~ file.buildNormalizedPath.replace("\\", "/").encode;
+		return absPrefix ~ file.buildNormalizedPath.replace("\\", "/").encodeComponent;
 	else
-		return "file://" ~ buildNormalizedPath(workspaceRoot, file).replace("\\", "/").encode;
+		return "file://" ~ buildNormalizedPath(workspaceRoot, file).replace("\\", "/").encodeComponent;
 }
 
 string uriToFile(DocumentUri uri)
 {
-	import std.uri;
-	import std.string;
+	import std.uri : decodeComponent;
+	import std.string : startsWith;
 
 	version (Windows)
 		if (uri.startsWith("file:///"))
-			return uri["file:///".length .. $].decode;
+			return uri["file:///".length .. $].decodeComponent;
 	if (uri.startsWith("file://"))
-		return uri["file://".length .. $].decode;
+		return uri["file://".length .. $].decodeComponent;
 	else
 		return null;
 }
