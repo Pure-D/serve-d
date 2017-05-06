@@ -123,15 +123,16 @@ DocumentUri uriFromFile(string file)
 {
 	import std.uri : encodeComponent;
 
-	version (Windows)
-		enum absPrefix = "file:///"; // file:///c:/...
-	else
-		enum absPrefix = "file://";
-
-	if (isAbsolute(file))
-		return absPrefix ~ file.buildNormalizedPath.replace("\\", "/").encodeComponent;
-	else
-		return "file://" ~ buildNormalizedPath(workspaceRoot, file).replace("\\", "/").encodeComponent;
+	if (!isAbsolute(file))
+		file = buildNormalizedPath(workspaceRoot, file);
+	file = file.buildNormalizedPath.replace("\\", "/");
+	if (file.length == 0)
+		return "";
+	if (file[0] != '/')
+		file = '/' ~ file; // always triple slash at start but never quad slash
+	if (file.length >= 2 && file[0 .. 2] == "//") // Shares (\\share\bob) are different somehow
+		file = file[2 .. $];
+	return "file://" ~ file.encodeComponent.replace("%2F", "/");
 }
 
 string uriToFile(DocumentUri uri)
@@ -139,13 +140,35 @@ string uriToFile(DocumentUri uri)
 	import std.uri : decodeComponent;
 	import std.string : startsWith;
 
-	version (Windows)
-		if (uri.startsWith("file:///"))
-			return uri["file:///".length .. $].decodeComponent;
 	if (uri.startsWith("file://"))
-		return uri["file://".length .. $].decodeComponent;
+	{
+		string ret = uri["file://".length .. $].decodeComponent;
+		if (ret.length >= 3 && ret[0] == '/' && ret[2] == ':')
+			return ret[1 .. $].replace("/", "\\");
+		else if (ret.length >= 1 && ret[0] != '/')
+			return "\\\\" ~ ret.replace("/", "\\");
+		return ret;
+	}
 	else
 		return null;
+}
+
+@system unittest
+{
+	void testUri(string a, string b)
+	{
+		assert(a.uriFromFile == b, a.uriFromFile ~ " != " ~ b);
+		assert(a == b.uriToFile, a ~ " != " ~ b.uriToFile);
+		assert(a.uriFromFile.uriToFile == a, a.uriFromFile.uriToFile ~ " != " ~ a);
+	}
+
+	testUri(`/home/pi/.bashrc`, `file:///home/pi/.bashrc`);
+	// taken from vscode-uri
+	testUri(`c:\test with %\path`, `file:///c%3A/test%20with%20%25/path`);
+	testUri(`c:\test with %25\path`, `file:///c%3A/test%20with%20%2525/path`);
+	testUri(`c:\test with %25\c#code`, `file:///c%3A/test%20with%20%2525/c%23code`);
+	testUri(`\\shäres\path\c#\plugin.json`, `file://sh%C3%A4res/path/c%23/plugin.json`);
+	testUri(`\\localhost\c$\GitDevelopment\express`, `file://localhost/c%24/GitDevelopment/express`);
 }
 
 DocumentUri uri(string scheme, string authority, string path, string query, string fragment)
