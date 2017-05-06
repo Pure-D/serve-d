@@ -16,6 +16,7 @@ import served.fibermanager;
 import served.filereader;
 import served.jsonrpc;
 import served.types;
+import served.translate;
 
 static import served.extension;
 
@@ -163,9 +164,11 @@ void main(string[] args)
 
 	bool printVer;
 	string[] features;
+	string lang = "en";
 	auto argInfo = args.getopt("r|require",
 			"Adds a feature set that is required. Unknown feature sets will intentionally crash on startup",
-			&features, "v|version", "Print version of program", &printVer);
+			&features, "v|version", "Print version of program",
+			&printVer, "lang", "Change the language of GUI messages", &lang);
 	if (argInfo.helpWanted)
 	{
 		if (printVer)
@@ -178,6 +181,10 @@ void main(string[] args)
 		printVersion();
 		return;
 	}
+	if (lang.length >= 2) // ja-JP -> ja, en-GB -> en, etc
+		currentLanguage = lang[0 .. 2];
+	if (currentLanguage != "en")
+		info("Setting language to ", currentLanguage);
 	served.types.workspaceRoot = fs.getcwd();
 	foreach (feature; features)
 		if (!IncludedFeatures.canFind(feature.toLower.strip))

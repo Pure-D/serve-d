@@ -12,6 +12,7 @@ import std.experimental.logger;
 
 import served.fibermanager;
 import served.types;
+import served.translate;
 
 import workspaced.api;
 import workspaced.coms;
@@ -58,8 +59,7 @@ void changedConfig(string[] paths)
 			{
 				auto configs = dub.configurations;
 				if (configs.length == 0)
-					rpc.window.showInformationMessage(
-							"No configurations available for this project. Autocomplete could be broken!");
+					rpc.window.showInformationMessage(translate!"d.ext.noConfigurations.project");
 				else
 				{
 					auto defaultConfig = config.d.dubConfiguration;
@@ -67,8 +67,7 @@ void changedConfig(string[] paths)
 					{
 						if (!configs.canFind(defaultConfig))
 							rpc.window.showErrorMessage(
-									"Configuration '" ~ defaultConfig
-									~ "' which is specified in the config is not available!");
+									translate!"d.ext.config.invalid.configuration"(defaultConfig));
 						else
 							dub.setConfiguration(defaultConfig);
 					}
@@ -81,21 +80,18 @@ void changedConfig(string[] paths)
 			if (hasDub && config.d.dubArchType.length
 					&& !dub.setArchType(JSONValue(config.d.dubArchType)))
 				rpc.window.showErrorMessage(
-						"Arch Type '" ~ config.d.dubArchType
-						~ "' which is specified in the config is not available!");
+						translate!"d.ext.config.invalid.archType"(config.d.dubArchType));
 			break;
 		case "d.dubBuildType":
 			if (hasDub && config.d.dubBuildType.length
 					&& !dub.setBuildType(JSONValue(config.d.dubBuildType)))
 				rpc.window.showErrorMessage(
-						"Build Type '" ~ config.d.dubBuildType
-						~ "' which is specified in the config is not available!");
+						translate!"d.ext.config.invalid.buildType"(config.d.dubBuildType));
 			break;
 		case "d.dubCompiler":
 			if (hasDub && config.d.dubCompiler.length && !dub.setCompiler(config.d.dubCompiler))
 				rpc.window.showErrorMessage(
-						"Compiler '" ~ config.d.dubCompiler
-						~ "' which is specified in the config is not available!");
+						translate!"d.ext.config.invalid.compiler"(config.d.dubCompiler));
 			break;
 		default:
 			break;
@@ -146,9 +142,9 @@ InitializeResult initialize(InitializeParams params)
 	result.capabilities.definitionProvider = true;
 	result.capabilities.hoverProvider = true;
 	result.capabilities.codeActionProvider = true;
-	
+
 	result.capabilities.documentSymbolProvider = true;
-	
+
 	result.capabilities.documentFormattingProvider = true;
 
 	trace("Starting dlangui");
@@ -181,7 +177,7 @@ void configNotify(DidChangeConfigurationParams params)
 		}
 		catch (Exception e)
 		{
-			rpc.window.showErrorMessage("Could not initialize DCD. See log for details!");
+			rpc.window.showErrorMessage(translate!"d.ext.dcdFail");
 			io.stderr.writeln(e);
 			hasDCD = false;
 			goto DCDEnd;
@@ -189,17 +185,18 @@ void configNotify(DidChangeConfigurationParams params)
 		io.stderr.writeln("Imports: ", importPathProvider());
 	}
 	else
-		rpc.window.showErrorMessage(format("Could not start DCD. (root=%s, path=%s, %s)", workspaceRoot, config.d.dcdClientPath,
-			config.d.dcdServerPath));
+		rpc.window.showErrorMessage(translate!"d.served.failDCD"(workspaceRoot,
+				config.d.dcdClientPath, config.d.dcdServerPath));
 DCDEnd:
 
 	hasDscanner = safe!(dscanner.start)(workspaceRoot, config.d.dscannerPath);
 	if (!hasDscanner)
-		rpc.window.showErrorMessage(format("Could not start DScanner. (root=%s, path=%s)", workspaceRoot, config.d.dscannerPath));
+		rpc.window.showErrorMessage(translate!"d.served.failDscanner"(workspaceRoot,
+				config.d.dscannerPath));
 
 	hasDfmt = safe!(dfmt.start)(workspaceRoot, config.d.dfmtPath);
 	if (!hasDfmt)
-		rpc.window.showErrorMessage(format("Could not start Dfmt. (root=%s, path=%s)", workspaceRoot, config.d.dfmtPath));
+		rpc.window.showErrorMessage(translate!"d.served.failDfmt"(workspaceRoot, config.d.dfmtPath));
 }
 
 @protocolMethod("shutdown")
@@ -458,9 +455,7 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 	require!hasDCD;
 	auto byteOff = cast(int) document.positionToBytes(params.position);
 	JSONValue result;
-	joinAll({
-		result = syncYield!(dcd.listCompletion)(document.text, byteOff);
-	}, {
+	joinAll({ result = syncYield!(dcd.listCompletion)(document.text, byteOff); }, {
 
 	});
 	CompletionItem[] completion;
@@ -691,7 +686,8 @@ Hover provideHover(TextDocumentPositionParams params)
 }
 
 private auto importRegex = regex(`import ([a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*)?`);
-private auto undefinedIdentifier = regex(`^undefined identifier '(\w+)'(?:, did you mean .*? '(\w+)'\?)?$`);
+private auto undefinedIdentifier = regex(
+		`^undefined identifier '(\w+)'(?:, did you mean .*? '(\w+)'\?)?$`);
 private auto undefinedTemplate = regex(`template '(\w+)' is not defined`);
 private auto noProperty = regex(`^no property '(\w+)'(?: for type '.*?')?$`);
 private auto moduleRegex = regex(`module\s+([a-zA-Z_]\w*\s*(?:\s*\.\s*[a-zA-Z_]\w*)*)\s*;`);
@@ -878,9 +874,9 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 	else if (fileName == "dub.json" || fileName == "dub.sdl")
 	{
 		io.stderr.writeln("Updating dependencies");
-		rpc.window.runOrMessage(dub.upgrade(), MessageType.warning, "Could not upgrade dub project");
+		rpc.window.runOrMessage(dub.upgrade(), MessageType.warning, translate!"d.ext.dubUpgradeFail");
 		rpc.window.runOrMessage(dub.updateImportPaths(true), MessageType.warning,
-				"Could not update import paths. Please check your build settings in the status bar.");
+				translate!"d.ext.dubImportFail");
 	}
 }
 
