@@ -151,6 +151,8 @@ InitializeResult initialize(InitializeParams params)
 	dlangui.start();
 	trace("Starting importer");
 	importer.start();
+	trace("Starting moduleman");
+	moduleman.start(workspaceRoot);
 
 	result.capabilities.codeActionProvider = true;
 
@@ -210,6 +212,9 @@ JSONValue shutdown()
 		dfmt.stop();
 	if (hasDscanner)
 		dscanner.stop();
+	dlangui.stop();
+	importer.stop();
+	moduleman.stop();
 	return JSONValue(null);
 }
 
@@ -841,6 +846,30 @@ bool updateImports()
 }
 
 // === Protocol Notifications starting here ===
+
+@protocolNotification("workspace/didChangeWatchedFiles")
+void onChangeFiles(DidChangeWatchedFilesParams params)
+{
+	import std.file : readText, write;
+
+	info(params);
+
+	foreach (change; params.changes)
+	{
+		string file = change.uri.uriToFile;
+		if (change.type == FileChangeType.created && file.extension == ".d")
+		{
+			string code = readText(file);
+			auto patches = moduleman.normalizeModules(file, code);
+			if (patches.length)
+			{
+				foreach_reverse (patch; patches)
+					code = patch.apply(code);
+				write(file, code);
+			}
+		}
+	}
+}
 
 @protocolNotification("textDocument/didSave")
 void onDidSaveDocument(DidSaveTextDocumentParams params)

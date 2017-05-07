@@ -3,7 +3,7 @@
 	"description": "Microsoft Language Server Protocol implementation using workspace-d",
 	"license": "MIT",
 	"dependencies": {
-		"workspace-d": "2.10.1",
+		"workspace-d": "~master",
 		"eventsystem": "~>1.1.0",
 		"painlessjson": "~>1.3.8"
 	},

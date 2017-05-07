@@ -683,7 +683,7 @@ struct DidCloseTextDocumentParams
 	TextDocumentIdentifier textDocument;
 }
 
-struct DidChangedWatchedFilesParams
+struct DidChangeWatchedFilesParams
 {
 	FileEvent[] changes;
 }
