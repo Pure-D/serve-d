@@ -59,13 +59,23 @@ class RPCProcessor : Fiber
 	{
 		if (!("jsonrpc" in raw))
 		{
-			stderr.writeln(raw);
+			error(raw);
 			throw new Exception("Sent objects must have a jsonrpc");
 		}
-		const content = raw.toString();
+		const content = raw.toString().replace("\\/", "/");
+		trace(content);
 		string data = "Content-Length: " ~ content.length.to!string ~ "\r\n\r\n" ~ content;
 		writer.rawWrite(data);
 		writer.flush();
+	}
+
+	void sendMethod(T)(string method, T value)
+	{
+		RequestMessage req;
+		req.id = RequestToken.random;
+		req.method = method;
+		req.params = value.toJSON;
+		send(req);
 	}
 
 	void log(MessageType type = MessageType.log, Args...)(Args args)
@@ -158,10 +168,7 @@ struct WindowFunctions
 	{
 		if (!safeShowMessage)
 			warningf("%s message: %s", type, message);
-		RequestMessage req;
-		req.method = "window/showMessage";
-		req.params = ShowMessageParams(type, message).toJSON;
-		rpc.send(req);
+		rpc.sendMethod("window/showMessageRequest", ShowMessageParams(type, message));
 		safeShowMessage = false;
 	}
 
