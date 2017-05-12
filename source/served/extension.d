@@ -8,6 +8,7 @@ import std.path;
 import std.regex;
 import io = std.stdio;
 import std.string;
+import std.datetime;
 import std.experimental.logger;
 
 import served.fibermanager;
@@ -180,11 +181,11 @@ void configNotify(DidChangeConfigurationParams params)
 		catch (Exception e)
 		{
 			rpc.window.showErrorMessage(translate!"d.ext.dcdFail");
-			io.stderr.writeln(e);
+			error(e);
 			hasDCD = false;
 			goto DCDEnd;
 		}
-		io.stderr.writeln("Imports: ", importPathProvider());
+		info("Imports: ", importPathProvider());
 	}
 	else
 		rpc.window.showErrorMessage(translate!"d.served.failDCD"(workspaceRoot,
@@ -548,7 +549,7 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 			}
 			catch (Exception e)
 			{
-				io.stderr.writeln(e);
+				error(e);
 			}
 		}
 		if (doc.text)
@@ -847,34 +848,60 @@ bool updateImports()
 
 // === Protocol Notifications starting here ===
 
+struct FileOpenInfo
+{
+	SysTime at;
+}
+
+__gshared FileOpenInfo[string] freshlyOpened;
+
 @protocolNotification("workspace/didChangeWatchedFiles")
 void onChangeFiles(DidChangeWatchedFilesParams params)
 {
-	import std.file : readText, write;
-
 	info(params);
 
 	foreach (change; params.changes)
 	{
-		string file = change.uri.uriToFile;
-		if (change.type == FileChangeType.created && file.extension == ".d")
+		string file = change.uri;
+		if (change.type == FileChangeType.created && file.endsWith(".d"))
 		{
-			string code = readText(file);
-			auto patches = moduleman.normalizeModules(file, code);
-			if (patches.length)
+			auto document = documents[file];
+			auto isNew = file in freshlyOpened;
+			info(file);
+			if (isNew)
 			{
-				foreach_reverse (patch; patches)
-					code = patch.apply(code);
-				write(file, code);
+				// Only edit if creation & opening is < 800msecs apart (vscode automatically opens on creation),
+				// we don't want to affect creation from/in other programs/editors.
+				if (Clock.currTime - isNew.at > 800.msecs)
+				{
+					freshlyOpened.remove(file);
+					continue;
+				}
+				// Sending applyEdit so it is undoable
+				auto patches = moduleman.normalizeModules(file.uriToFile, document.text);
+				if (patches.length)
+				{
+					WorkspaceEdit edit;
+					edit.changes[file] = patches.map!(a => TextEdit(TextRange(document.bytesToPosition(a.range[0]),
+							document.bytesToPosition(a.range[1])), a.content)).array;
+					rpc.sendMethod("workspace/applyEdit", ApplyWorkspaceEditParams(edit));
+				}
 			}
 		}
 	}
 }
 
+@protocolNotification("textDocument/didOpen")
+void onDidOpenDocument(DidOpenTextDocumentParams params)
+{
+	freshlyOpened[params.textDocument.uri] = FileOpenInfo(Clock.currTime);
+
+	info(freshlyOpened);
+}
+
 @protocolNotification("textDocument/didSave")
 void onDidSaveDocument(DidSaveTextDocumentParams params)
 {
-	io.stderr.writeln(params);
 	auto document = documents[params.textDocument.uri];
 	auto fileName = params.textDocument.uri.uriToFile.baseName;
 
@@ -902,7 +929,7 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 	}
 	else if (fileName == "dub.json" || fileName == "dub.sdl")
 	{
-		io.stderr.writeln("Updating dependencies");
+		info("Updating dependencies");
 		rpc.window.runOrMessage(dub.upgrade(), MessageType.warning, translate!"d.ext.dubUpgradeFail");
 		rpc.window.runOrMessage(dub.updateImportPaths(true), MessageType.warning,
 				translate!"d.ext.dubImportFail");

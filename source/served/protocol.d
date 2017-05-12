@@ -180,6 +180,14 @@ struct RequestToken
 	{
 		return hasData ? (isString ? str : num.to!string) : "none";
 	}
+
+	static RequestToken random()
+	{
+		import std.uuid;
+
+		JSONValue id = JSONValue(randomUUID.toString);
+		return RequestToken(&id);
+	}
 }
 
 struct RequestMessage
