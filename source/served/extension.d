@@ -906,9 +906,8 @@ int changeTimeout;
 void onDidChangeDocument(DocumentLinkParams params)
 {
 	auto document = documents[params.textDocument.uri];
-	if (document.languageId == "diet")
+	if (document.languageId != "d")
 		return;
-	trace("Change Document");
 	int delay = document.text.length > 50 * 1024 ? 1000 : 100; // be slower after 50KiB
 	if (hasDscanner)
 	{
