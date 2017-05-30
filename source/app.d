@@ -158,6 +158,7 @@ void printVersion()
 	io.writefln("Included features: %(%s, %)", IncludedFeatures);
 }
 
+FiberManager fibers;
 void main(string[] args)
 {
 	debug globalLogLevel = LogLevel.trace;
@@ -196,8 +197,8 @@ void main(string[] args)
 	rpc = new RPCProcessor(input, stdout);
 	rpc.call();
 	trace("RPC started");
-	FiberManager fibers;
 	fibers ~= rpc;
+	pushFiber(&served.extension.parallelMain);
 	while (rpc.state != Fiber.State.TERM)
 	{
 		while (rpc.hasData)
@@ -206,7 +207,7 @@ void main(string[] args)
 			auto msg = rpc.poll;
 			trace("Message: ", msg);
 			if (msg.id.hasData)
-				fibers ~= new Fiber({
+				pushFiber({
 					ResponseMessage res;
 					try
 					{
@@ -221,9 +222,9 @@ void main(string[] args)
 						error("Failed processing request: ", e);
 					}
 					rpc.send(res);
-				}, 4096 * 16);
+				});
 			else
-				fibers ~= new Fiber({
+				pushFiber({
 					try
 					{
 						trace("Processing as notification");
@@ -233,9 +234,14 @@ void main(string[] args)
 					{
 						error("Failed processing notification: ", e);
 					}
-				}, 4096 * 16);
+				});
 		}
 		Thread.sleep(10.msecs);
 		fibers.call();
 	}
+}
+
+void pushFiber(T)(T callback)
+{
+	fibers ~= new Fiber(callback, 4096 * 16);
 }

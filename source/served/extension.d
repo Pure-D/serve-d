@@ -566,8 +566,10 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 @protocolMethod("textDocument/documentSymbol")
 SymbolInformation[] provideDocumentSymbols(DocumentSymbolParams params)
 {
+	auto document = documents[params.textDocument.uri];
 	require!hasDscanner;
-	auto result = syncYield!(dscanner.listDefinitions)(uriToFile(params.textDocument.uri));
+	auto result = syncYield!(dscanner.listDefinitions)(uriToFile(params.textDocument.uri),
+			document.text);
 	if (result.type == JSON_TYPE.NULL)
 		return [];
 	SymbolInformation[] ret;
@@ -899,6 +901,27 @@ void onDidOpenDocument(DidOpenTextDocumentParams params)
 	info(freshlyOpened);
 }
 
+int changeTimeout;
+@protocolNotification("textDocument/didChange")
+void onDidChangeDocument(DocumentLinkParams params)
+{
+	auto document = documents[params.textDocument.uri];
+	if (document.languageId == "diet")
+		return;
+	trace("Change Document");
+	int delay = document.text.length > 50 * 1024 ? 1000 : 100; // be slower after 50KiB
+	if (hasDscanner)
+	{
+		clearTimeout(changeTimeout);
+		changeTimeout = setTimeout({
+			import served.linters.dscanner;
+
+			lint(document);
+			// Delay to avoid too many requests
+		}, delay);
+	}
+}
+
 @protocolNotification("textDocument/didSave")
 void onDidSaveDocument(DidSaveTextDocumentParams params)
 {
@@ -940,4 +963,70 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 void killServer()
 {
 	dcd.killServer();
+}
+
+struct Timeout
+{
+	StopWatch sw;
+	int msTimeout;
+	void delegate() callback;
+	int id;
+}
+
+int setTimeout(void delegate() callback, int ms)
+{
+	trace("Setting timeout for ", ms, " ms");
+	Timeout to;
+	to.msTimeout = ms;
+	to.callback = callback;
+	to.sw.start();
+	to.id = ++timeoutID;
+	timeouts ~= to;
+	return to.id;
+}
+
+int setTimeout(void delegate() callback, Duration timeout)
+{
+	return setTimeout(callback, cast(int) timeout.total!"msecs");
+}
+
+void clearTimeout(int id)
+{
+	foreach_reverse (i, ref timeout; timeouts)
+	{
+		if (timeout.id == id)
+		{
+			timeout.sw.stop();
+			if (timeouts.length > 1)
+				timeouts[i] = timeouts[$ - 1];
+			timeouts.length--;
+			return;
+		}
+	}
+}
+
+int timeoutID;
+Timeout[] timeouts;
+
+// Called at most 100x per second
+void parallelMain()
+{
+	import core.thread;
+
+	while (true)
+	{
+		foreach_reverse (i, ref timeout; timeouts)
+		{
+			if (timeout.sw.peek.msecs >= timeout.msTimeout)
+			{
+				timeout.sw.stop();
+				timeout.callback();
+				trace("Calling timeout");
+				if (timeouts.length > 1)
+					timeouts[i] = timeouts[$ - 1];
+				timeouts.length--;
+			}
+		}
+		Fiber.yield();
+	}
 }

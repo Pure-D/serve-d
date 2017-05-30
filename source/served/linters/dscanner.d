@@ -19,7 +19,7 @@ void lint(Document document)
 	auto ini = buildPath(workspaceRoot, "dscanner.ini");
 	if (!exists(ini))
 		ini = "dscanner.ini";
-	auto issues = syncYield!(dscanner.lint)(document.uri.uriToFile, ini);
+	auto issues = syncYield!(dscanner.lint)(document.uri.uriToFile, ini, document.text);
 	Diagnostic[] result;
 
 	if (issues.type == JSON_TYPE.ARRAY)
