@@ -1,15 +1,17 @@
 module served.extension;
 
+import core.exception;
+
 import std.algorithm;
 import std.array;
 import std.conv;
+import std.datetime;
+import std.experimental.logger;
 import std.json;
 import std.path;
 import std.regex;
 import io = std.stdio;
 import std.string;
-import std.datetime;
-import std.experimental.logger;
 
 import served.fibermanager;
 import served.types;
@@ -35,6 +37,11 @@ bool safe(alias fn, Args...)(Args args)
 		return true;
 	}
 	catch (Exception e)
+	{
+		error(e);
+		return false;
+	}
+	catch (AssertError e)
 	{
 		error(e);
 		return false;
@@ -132,7 +139,16 @@ InitializeResult initialize(InitializeParams params)
 	if (!hasDub)
 	{
 		error("Failed starting dub - falling back to fsworkspace");
-		fsworkspace.start(workspaceRoot, getPossibleSourceRoots);
+		rpc.window.showErrorMessage(translate!"d.ext.dubFail");
+		try
+		{
+			fsworkspace.start(workspaceRoot, getPossibleSourceRoots);
+		}
+		catch (Exception e)
+		{
+			error(e);
+			rpc.window.showErrorMessage(translate!"d.ext.fsworkspaceFail");
+		}
 	}
 	InitializeResult result;
 	result.capabilities.textDocumentSync = documents.syncKind;
@@ -908,7 +924,7 @@ void onDidChangeDocument(DocumentLinkParams params)
 	auto document = documents[params.textDocument.uri];
 	if (document.languageId != "d")
 		return;
-	int delay = document.text.length > 50 * 1024 ? 1000 : 100; // be slower after 50KiB
+	int delay = document.text.length > 50 * 1024 ? 1000 : 200; // be slower after 50KiB
 	if (hasDscanner)
 	{
 		clearTimeout(changeTimeout);
