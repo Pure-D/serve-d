@@ -45,8 +45,10 @@ struct Configuration
 		string dubPath = "dub";
 		bool enableLinting = true;
 		bool enableSDLLinting = true;
+		bool enableStaticLinting = true;
 		bool enableDubLinting = true;
 		bool enableAutoComplete = true;
+		bool enableFormatting = true;
 		bool neverUseDub = false;
 		string[] projectImportPaths;
 		string dubConfiguration;

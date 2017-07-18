@@ -649,6 +649,8 @@ ArrayOrSingle!Location provideDefinition(TextDocumentPositionParams params)
 @protocolMethod("textDocument/formatting")
 TextEdit[] provideFormatting(DocumentFormattingParams params)
 {
+	if (!config.d.enableFormatting)
+		return [];
 	auto document = documents[params.textDocument.uri];
 	if (document.languageId != "d")
 		return [];
@@ -948,7 +950,7 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 		if (!config.d.enableLinting)
 			return;
 		joinAll({
-			if (hasDscanner)
+			if (hasDscanner && config.d.enableStaticLinting)
 			{
 				if (document.languageId == "diet")
 					return;
