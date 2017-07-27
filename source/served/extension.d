@@ -13,6 +13,7 @@ import std.regex;
 import io = std.stdio;
 import std.string;
 
+import served.ddoc;
 import served.fibermanager;
 import served.types;
 import served.translate;
@@ -704,10 +705,10 @@ Hover provideHover(TextDocumentPositionParams params)
 	auto docs = syncYield!(dcd.getDocumentation)(document.text,
 			cast(int) document.positionToBytes(params.position));
 	Hover ret;
-	if (docs.type == JSON_TYPE.ARRAY)
-		ret.contents = MarkedString(docs.array.map!(a => a.str).join("\n\n"));
-	else if (docs.type == JSON_TYPE.STRING)
-		ret.contents = MarkedString(docs.str);
+	if (docs.type == JSON_TYPE.ARRAY && docs.array.length)
+		ret.contents = docs.array.map!(a => a.str.ddocToMarked).join();
+	else if (docs.type == JSON_TYPE.STRING && docs.str.length)
+		ret.contents = docs.str.ddocToMarked;
 	return ret;
 }
 
