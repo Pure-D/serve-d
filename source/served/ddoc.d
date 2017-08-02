@@ -38,24 +38,64 @@ string prepareDDoc(string str)
 {
 	import ddoc.lexer;
 	import ddoc.macros : tokOffset;
-	import std.array : appender;
 
 	auto lex = Lexer(str, true);
-	auto output = appender!string;
+	string output;
+	bool wasHeader = false;
+	bool hadWhitespace = false;
+	bool insertNewlineIntoPos = false;
+	bool wroteSomething = false;
+	size_t newlinePos = 0;
+	int numNewlines = 0;
 	foreach (tok; lex)
 	{
 		if (tok.type == Type.embedded || tok.type == Type.inlined)
 		{
-			output.put(tok.type == Type.embedded ? "$(D_CODE " : "$(DDOC_BACKQUOTED ");
-			output.put(tok.text);
-			output.put(")");
+			if (tok.type == Type.embedded)
+			{
+				if (numNewlines == 0)
+					output ~= "\n\n";
+				else if (numNewlines == 1)
+					output ~= "\n";
+			}
+			output ~= tok.type == Type.embedded ? "$(D_CODE " : "$(DDOC_BACKQUOTED ";
+			output ~= tok.text;
+			output ~= ")";
+		}
+		else if (tok.type == Type.newline)
+		{
+			numNewlines++;
+			if (insertNewlineIntoPos)
+			{
+				output = output[0 .. newlinePos] ~ "\n" ~ output[newlinePos .. $];
+				insertNewlineIntoPos = false;
+			}
+			if (wasHeader)
+				output ~= "\n";
+			output ~= tok.text;
+			newlinePos = output.length;
+			hadWhitespace = false;
+			wroteSomething = false;
+		}
+		else if (tok.type == Type.whitespace)
+		{
+			insertNewlineIntoPos = false;
+			hadWhitespace = true;
+			if (wroteSomething)
+				output ~= tok.text;
 		}
 		else
 		{
-			output.put(tok.text);
+			numNewlines = 0;
+			insertNewlineIntoPos = false;
+			if (!hadWhitespace && tok.text.length && tok.text[$ - 1] == ':')
+				insertNewlineIntoPos = true;
+			output ~= tok.text;
+			wroteSomething = true;
 		}
+		wasHeader = tok.text.length && tok.text[$ - 1] == ':';
 	}
-	return output.data;
+	return output;
 }
 
 string[string] markdownMacros;
@@ -178,9 +218,9 @@ assert (whatever);
 
 Params:
 
-	a = **param**
+a = **param**
 
 Returns:
 
-	nothing of consequence", md);
+nothing of consequence", md);
 }
