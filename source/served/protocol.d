@@ -14,11 +14,13 @@ struct Optional(T)
 	this(T val)
 	{
 		value = val;
+		isNull = false;
 	}
 
 	this(U)(U val)
 	{
 		value = val;
+		isNull = false;
 	}
 
 	this(typeof(null))
@@ -78,6 +80,11 @@ struct Optional(T)
 	}
 
 	alias value this;
+}
+
+Optional!T opt(T)(T val)
+{
+	return Optional!T(val);
 }
 
 struct ArrayOrSingle(T)
@@ -168,12 +175,12 @@ struct RequestToken
 
 	JSONValue _toJSON()()
 	{
-		static assert(0, "Attempted painlesstraits.toJSON on RequestToken");
+		pragma(msg, "Attempted painlesstraits.toJSON on RequestToken");
 	}
 
 	void _fromJSON()(JSONValue val)
 	{
-		static assert(0, "Attempted painlesstraits.toJSON on RequestToken");
+		pragma(msg, "Attempted painlesstraits.fromJSON on RequestToken");
 	}
 
 	string toString()
@@ -187,6 +194,11 @@ struct RequestToken
 
 		JSONValue id = JSONValue(randomUUID.toString);
 		return RequestToken(&id);
+	}
+
+	bool opEquals(RequestToken b) const
+	{
+		return isString == b.isString && (isString ? str == b.str : num == b.num);
 	}
 }
 
