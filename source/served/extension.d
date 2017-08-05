@@ -1014,13 +1014,12 @@ bool restartServer()
 @protocolMethod("served/updateImports")
 bool updateImports()
 {
-	require!hasDub;
-	auto success = syncYield!(dub.update).type == JSON_TYPE.TRUE;
-	if (!success)
-		return false;
+	bool success;
+	if (hasDub)
+		success = syncYield!(dub.update).type == JSON_TYPE.TRUE;
 	require!hasDCD;
 	dcd.refreshImports();
-	return true;
+	return success;
 }
 
 // === Protocol Notifications starting here ===
