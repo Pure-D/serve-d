@@ -5,7 +5,7 @@ import core.exception;
 
 import painlessjson;
 
-import std.container.dlist;
+import std.container : DList, SList;
 import std.conv;
 import std.experimental.logger;
 import std.json;
@@ -69,6 +69,29 @@ class RPCProcessor : Fiber
 		writer.flush();
 	}
 
+	void notifyMethod(string method)
+	{
+		RequestMessage req;
+		req.method = method;
+		send(req);
+	}
+
+	void notifyMethod(T)(string method, T value)
+	{
+		RequestMessage req;
+		req.method = method;
+		req.params = value.toJSON;
+		send(req);
+	}
+
+	void sendMethod(string method)
+	{
+		RequestMessage req;
+		req.id = RequestToken.random;
+		req.method = method;
+		send(req);
+	}
+
 	void sendMethod(T)(string method, T value)
 	{
 		RequestMessage req;
@@ -76,6 +99,16 @@ class RPCProcessor : Fiber
 		req.method = method;
 		req.params = value.toJSON;
 		send(req);
+	}
+
+	ResponseMessage sendRequest(T)(string method, T value)
+	{
+		RequestMessage req;
+		req.id = RequestToken.random;
+		req.method = method;
+		req.params = value.toJSON;
+		send(req);
+		return awaitResponse(req.id);
 	}
 
 	void log(MessageType type = MessageType.log, Args...)(Args args)
@@ -105,6 +138,30 @@ class RPCProcessor : Fiber
 		return WindowFunctions(this);
 	}
 
+	ResponseMessage awaitResponse(RequestToken tok)
+	{
+		size_t i;
+		bool found = false;
+		foreach (n, t; responseTokens)
+		{
+			if (t.handled)
+			{
+				// replace handled responses (overwrite reusable memory)
+				i = n;
+				found = true;
+				break;
+			}
+		}
+		if (!found)
+			i = responseTokens.length++;
+		responseTokens[i] = RequestWait(tok);
+		while (!responseTokens[i].got)
+			yield(); // yield until main loop placed a response
+		auto res = responseTokens[i].ret;
+		responseTokens[i].handled = true; // make memory reusable
+		return res;
+	}
+
 private:
 	void onData(RequestMessage req)
 	{
@@ -115,6 +172,16 @@ private:
 	File writer;
 	bool stopped;
 	DList!RequestMessage messageQueue;
+
+	struct RequestWait
+	{
+		RequestToken token;
+		bool got = false;
+		bool handled = false;
+		ResponseMessage ret;
+	}
+
+	RequestWait[] responseTokens;
 
 	void run()
 	{
@@ -136,19 +203,55 @@ private:
 			bool validRequest = false;
 			try
 			{
-				request = RequestMessage(parseJSON(content));
-				validRequest = true;
+				auto json = parseJSON(content);
+				auto id = "id" in json;
+				bool isResponse = false;
+				if (id)
+				{
+					auto tok = RequestToken(id);
+					foreach (ref waiting; responseTokens)
+					{
+						if (!waiting.got && waiting.token == tok)
+						{
+							waiting.got = true;
+							waiting.ret.id = tok;
+							auto res = "result" in json;
+							auto err = "error" in json;
+							if (res)
+								waiting.ret.result = *res;
+							if (err)
+								waiting.ret.error = (*err).fromJSON!ResponseError;
+							isResponse = true;
+							break;
+						}
+					}
+				}
+				if (!isResponse)
+				{
+					request = RequestMessage(json);
+					validRequest = true;
+				}
 			}
 			catch (Exception e)
 			{
-				auto idx = content.indexOf("\"id\":");
-				auto endIdx = content.indexOf(",", idx);
-				JSONValue fallback;
-				if (idx != -1 && endIdx != -1)
-					fallback = parseJSON(content[idx .. endIdx].strip);
-				else
-					fallback = JSONValue(0);
-				send(ResponseMessage(RequestToken(&fallback), ResponseError(ErrorCode.parseError)));
+				try
+				{
+					trace(e);
+					trace(content);
+					auto idx = content.indexOf("\"id\":");
+					auto endIdx = content.indexOf(",", idx);
+					JSONValue fallback;
+					if (idx != -1 && endIdx != -1)
+						fallback = parseJSON(content[idx .. endIdx].strip);
+					else
+						fallback = JSONValue(0);
+					send(ResponseMessage(RequestToken(&fallback), ResponseError(ErrorCode.parseError)));
+				}
+				catch (Exception e)
+				{
+					errorf("Got invalid request '%s'!", content);
+					trace(e);
+				}
 			}
 			if (validRequest)
 			{
@@ -168,8 +271,25 @@ struct WindowFunctions
 	{
 		if (!safeShowMessage)
 			warningf("%s message: %s", type, message);
-		rpc.sendMethod("window/showMessageRequest", ShowMessageParams(type, message));
+		rpc.notifyMethod("window/showMessage", ShowMessageParams(type, message));
 		safeShowMessage = false;
+	}
+
+	MessageActionItem requestMessage(MessageType type, string message, MessageActionItem[] actions)
+	{
+		auto res = rpc.sendRequest("window/showMessageRequest",
+				ShowMessageRequestParams(type, message, actions.opt));
+		if (res.result == JSONValue.init)
+			return MessageActionItem(null);
+		return res.result.fromJSON!MessageActionItem;
+	}
+
+	string requestMessage(MessageType type, string message, string[] actions)
+	{
+		MessageActionItem[] a = new MessageActionItem[actions.length];
+		foreach (i, action; actions)
+			a[i] = MessageActionItem(action);
+		return requestMessage(type, message, a).title;
 	}
 
 	void runOrMessage(lazy void fn, MessageType type, string message)
