@@ -164,4 +164,3 @@ d.coverage.tooltip: Coverage in this file generated from the according .lst file
 
 d.served.failDCD: Could not start DCD. (root={0}, path={1}, {2})
 d.served.failDscanner: Could not start DScanner. (root={0}, path={1})
-d.served.failDfmt: Could not start Dfmt. (root={0}, path={1})

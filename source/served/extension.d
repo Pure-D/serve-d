@@ -1,12 +1,15 @@
 module served.extension;
 
 import core.exception;
+import core.thread : Fiber;
 
 import std.algorithm;
 import std.array;
 import std.conv;
 import std.datetime;
+import fs = std.file;
 import std.experimental.logger;
+import std.functional;
 import std.json;
 import std.path;
 import std.regex;
@@ -187,6 +190,40 @@ void configNotify(DidChangeConfigurationParams params)
 	initialStart = false;
 
 	trace("Received configuration");
+	startDCD();
+	if (!hasDCD || dcd.isOutdated)
+	{
+		if (config.d.aggressiveUpdate)
+			spawnFiber((&updateDCD).toDelegate);
+		else
+		{
+			auto action = translate!"d.ext.compileProgram"("DCD");
+			auto res = rpc.window.requestMessage(MessageType.error, translate!"d.served.failDCD"(workspaceRoot,
+					config.d.dcdClientPath, config.d.dcdServerPath), [action]);
+			if (res == action)
+				spawnFiber((&updateDCD).toDelegate);
+		}
+	}
+
+	startDScanner();
+	if (!hasDscanner || dscanner.isOutdated)
+	{
+		if (config.d.aggressiveUpdate)
+			spawnFiber((&updateDscanner).toDelegate);
+		else
+		{
+			auto action = translate!"d.ext.compileProgram"("dscanner");
+			auto res = rpc.window.requestMessage(MessageType.error,
+					translate!"d.served.failDscanner"(workspaceRoot, config.d.dscannerPath), [action]);
+			if (res == action)
+				spawnFiber((&updateDscanner).toDelegate);
+		}
+	}
+}
+
+void startDCD()
+{
+
 	hasDCD = safe!(dcd.start)(workspaceRoot, config.d.dcdClientPath,
 			config.d.dcdServerPath, cast(ushort) 9166, false);
 	if (hasDCD)
@@ -202,19 +239,139 @@ void configNotify(DidChangeConfigurationParams params)
 			rpc.window.showErrorMessage(translate!"d.ext.dcdFail");
 			error(e);
 			hasDCD = false;
-			goto DCDEnd;
+			return;
 		}
 		info("Imports: ", importPathProvider());
 	}
-	else
-		rpc.window.showErrorMessage(translate!"d.served.failDCD"(workspaceRoot,
-				config.d.dcdClientPath, config.d.dcdServerPath));
-DCDEnd:
+}
 
+void startDScanner()
+{
 	hasDscanner = safe!(dscanner.start)(workspaceRoot, config.d.dscannerPath);
-	if (!hasDscanner)
-		rpc.window.showErrorMessage(translate!"d.served.failDscanner"(workspaceRoot,
-				config.d.dscannerPath));
+}
+
+string determineOutputFolder()
+{
+	import std.process : environment;
+
+	version (linux)
+	{
+		if (fs.exists(buildPath(environment["HOME"], ".local", "share")))
+			return buildPath(environment["HOME"], ".local", "share", "code-d", "bin");
+		else
+			return buildPath(environment["HOME"], ".code-d", "bin");
+	}
+	else version (Windows)
+	{
+		return buildPath(environment["APPDATA"], "code-d", "bin");
+	}
+	else
+	{
+		return buildPath(environment["HOME"], ".code-d", "bin");
+	}
+}
+
+@protocolNotification("served/updateDscanner")
+void updateDscanner()
+{
+	rpc.notifyMethod("coded/logInstall", "Installing dscanner");
+	string outputFolder = determineOutputFolder;
+	if (!fs.exists(outputFolder))
+		fs.mkdirRecurse(outputFolder);
+	version (Windows)
+		auto buildCmd = ["cmd.exe", "/c", "build.bat"];
+	else
+		auto buildCmd = ["make"];
+	bool success = compileDependency(outputFolder, "Dscanner", "https://github.com/Hackerpilot/Dscanner.git",
+			[[config.git.path, "submodule", "update", "--init", "--recursive"], buildCmd]);
+	if (success)
+	{
+		version (Windows)
+			string finalDestination = buildPath(outputFolder, "Dscanner", "bin", "dscanner.exe");
+		else
+			string finalDestination = buildPath(outputFolder, "Dscanner", "bin", "dscanner");
+		config.d.dscannerPath = finalDestination;
+		rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("dscannerPath",
+				JSONValue(finalDestination), true));
+		rpc.notifyMethod("coded/logInstall", "Successfully installed Dscanner");
+		startDScanner();
+	}
+}
+
+@protocolNotification("served/updateDCD")
+void updateDCD()
+{
+	rpc.notifyMethod("coded/logInstall", "Installing DCD");
+	string outputFolder = determineOutputFolder;
+	if (!fs.exists(outputFolder))
+		fs.mkdirRecurse(outputFolder);
+	version (Windows)
+		auto buildCmd = ["cmd.exe", "/c", "build.bat"];
+	else
+		auto buildCmd = ["make"];
+	bool success = compileDependency(outputFolder, "DCD", "https://github.com/Hackerpilot/DCD.git",
+			[[config.git.path, "submodule", "update", "--init", "--recursive"], buildCmd]);
+	if (success)
+	{
+		string finalDestinationClient = buildPath(outputFolder, "DCD", "bin", "dcd-client");
+		string finalDestinationServer = buildPath(outputFolder, "DCD", "bin", "dcd-server");
+		version (Windows)
+		{
+			finalDestinationClient ~= ".exe";
+			finalDestinationServer ~= ".exe";
+		}
+		config.d.dcdClientPath = finalDestinationClient;
+		config.d.dcdServerPath = finalDestinationServer;
+		rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("dcdClientPath",
+				JSONValue(finalDestinationClient), true));
+		rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("dcdServerPath",
+				JSONValue(finalDestinationServer), true));
+		rpc.notifyMethod("coded/logInstall", "Successfully installed DCD");
+		startDCD();
+	}
+}
+
+bool compileDependency(string cwd, string name, string gitURI, string[][] commands)
+{
+	import std.process;
+
+	int run(string[] cmd, string cwd)
+	{
+		rpc.notifyMethod("coded/logInstall", "> " ~ cmd.join(" "));
+		auto stdin = pipe();
+		auto stdout = pipe();
+		auto pid = spawnProcess(cmd, stdin.readEnd, stdout.writeEnd,
+				stdout.writeEnd, null, Config.none, cwd);
+		stdin.writeEnd.close();
+		while (!pid.tryWait().terminated)
+			Fiber.yield();
+		foreach (line; stdout.readEnd.byLine)
+			rpc.notifyMethod("coded/logInstall", line.idup);
+		return pid.wait;
+	}
+
+	rpc.notifyMethod("coded/logInstall", "Installing into " ~ cwd);
+	try
+	{
+		auto newCwd = buildPath(cwd, name);
+		if (fs.exists(newCwd))
+		{
+			rpc.notifyMethod("coded/logInstall", "Deleting old installation from " ~ newCwd);
+			fs.rmdirRecurse(newCwd);
+		}
+		auto ret = run([config.git.path, "clone", "--recursive", gitURI, name], cwd);
+		if (ret != 0)
+			throw new Exception("git ended with error code " ~ ret.to!string);
+		foreach (command; commands)
+			run(command, newCwd);
+		return true;
+	}
+	catch (Exception e)
+	{
+		rpc.notifyMethod("coded/logInstall", "Failed to install " ~ name);
+		rpc.notifyMethod("coded/logInstall", e.toString);
+		return false;
+	}
 }
 
 @protocolMethod("shutdown")
@@ -999,6 +1156,11 @@ int setTimeout(void delegate() callback, int ms)
 	return to.id;
 }
 
+void setImmediate(void delegate() callback)
+{
+	setTimeout(callback, 0);
+}
+
 int setTimeout(void delegate() callback, Duration timeout)
 {
 	return setTimeout(callback, cast(int) timeout.total!"msecs");
@@ -1019,14 +1181,19 @@ void clearTimeout(int id)
 	}
 }
 
+void delegate(void delegate()) spawnFiber;
+
+shared static this()
+{
+	spawnFiber = (&setImmediate).toDelegate;
+}
+
 int timeoutID;
 Timeout[] timeouts;
 
 // Called at most 100x per second
 void parallelMain()
 {
-	import core.thread;
-
 	while (true)
 	{
 		foreach_reverse (i, ref timeout; timeouts)

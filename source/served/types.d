@@ -56,6 +56,7 @@ struct Configuration
 		string dubBuildType;
 		string dubCompiler;
 		bool overrideDfmtEditorconfig = true;
+		bool aggressiveUpdate = true;
 	}
 
 	struct DFmt
@@ -75,9 +76,15 @@ struct Configuration
 		int[] rulers;
 	}
 
+	struct Git
+	{
+		string path = "git";
+	}
+
 	D d;
 	DFmt dfmt;
 	Editor editor;
+	Git git;
 
 	string[] stdlibPath()
 	{

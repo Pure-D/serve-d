@@ -200,6 +200,7 @@ void main(string[] args)
 	rpc.call();
 	trace("RPC started");
 	fibers ~= rpc;
+	served.extension.spawnFiber = (&pushFiber!(void delegate())).toDelegate;
 	pushFiber(&served.extension.parallelMain);
 	while (rpc.state != Fiber.State.TERM)
 	{
