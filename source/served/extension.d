@@ -139,10 +139,13 @@ InitializeResult initialize(InitializeParams params)
 	workspaceRoot = params.rootPath;
 	chdir(workspaceRoot);
 	trace("Starting dub...");
-	hasDub = safe!(dub.startup)(workspaceRoot);
+	bool disableDub = !config.d.neverUseDub;
+	if (!disableDub)
+		hasDub = safe!(dub.startup)(workspaceRoot);
 	if (!hasDub)
 	{
-		error("Failed starting dub - falling back to fsworkspace");
+		if (!disableDub)
+			error("Failed starting dub - falling back to fsworkspace");
 		rpc.window.showErrorMessage(translate!"d.ext.dubFail");
 		try
 		{
