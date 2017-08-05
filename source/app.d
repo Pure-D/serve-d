@@ -166,10 +166,12 @@ void main(string[] args)
 	bool printVer;
 	string[] features;
 	string lang = "en";
-	auto argInfo = args.getopt("r|require",
-			"Adds a feature set that is required. Unknown feature sets will intentionally crash on startup",
-			&features, "v|version", "Print version of program",
-			&printVer, "lang", "Change the language of GUI messages", &lang);
+	//dfmt off
+	auto argInfo = args.getopt(
+		"r|require", "Adds a feature set that is required. Unknown feature sets will intentionally crash on startup", &features,
+		"v|version", "Print version of program", &printVer,
+		"lang", "Change the language of GUI messages", &lang);
+	//dfmt on
 	if (argInfo.helpWanted)
 	{
 		if (printVer)
