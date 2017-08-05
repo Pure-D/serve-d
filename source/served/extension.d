@@ -21,7 +21,7 @@ import served.translate;
 import workspaced.api;
 import workspaced.coms;
 
-bool hasDCD, hasDub, hasDfmt, hasDscanner;
+bool hasDCD, hasDub, hasDscanner;
 
 void require(alias val)()
 {
@@ -165,6 +165,8 @@ InitializeResult initialize(InitializeParams params)
 
 	result.capabilities.documentFormattingProvider = true;
 
+	trace("Starting dfmt");
+	dfmt.start();
 	trace("Starting dlangui");
 	dlangui.start();
 	trace("Starting importer");
@@ -213,10 +215,6 @@ DCDEnd:
 	if (!hasDscanner)
 		rpc.window.showErrorMessage(translate!"d.served.failDscanner"(workspaceRoot,
 				config.d.dscannerPath));
-
-	hasDfmt = safe!(dfmt.start)(workspaceRoot, config.d.dfmtPath);
-	if (!hasDfmt)
-		rpc.window.showErrorMessage(translate!"d.served.failDfmt"(workspaceRoot, config.d.dfmtPath));
 }
 
 @protocolMethod("shutdown")
@@ -226,10 +224,9 @@ JSONValue shutdown()
 		dub.stop();
 	if (hasDCD)
 		dcd.stop();
-	if (hasDfmt)
-		dfmt.stop();
 	if (hasDscanner)
 		dscanner.stop();
+	dfmt.stop();
 	dlangui.stop();
 	importer.stop();
 	moduleman.stop();
@@ -655,7 +652,6 @@ TextEdit[] provideFormatting(DocumentFormattingParams params)
 	auto document = documents[params.textDocument.uri];
 	if (document.languageId != "d")
 		return [];
-	require!hasDfmt;
 	string[] args;
 	if (config.d.overrideDfmtEditorconfig)
 	{
