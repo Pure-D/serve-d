@@ -139,7 +139,7 @@ InitializeResult initialize(InitializeParams params)
 	workspaceRoot = params.rootPath;
 	chdir(workspaceRoot);
 	trace("Starting dub...");
-	bool disableDub = !config.d.neverUseDub;
+	bool disableDub = config.d.neverUseDub;
 	if (!disableDub)
 		hasDub = safe!(dub.startup)(workspaceRoot);
 	if (!hasDub)
