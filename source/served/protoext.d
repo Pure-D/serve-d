@@ -25,7 +25,15 @@ struct DubDependency
 	string name;
 	@SerializedName("version")
 	string version_;
+	string path;
+	string description;
+	string homepage;
+	const(string)[] authors;
+	string copyright;
+	string license;
+	const(string)[] subPackages;
 	bool hasDependencies;
+	bool root;
 }
 
 struct InstallRequest

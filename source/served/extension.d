@@ -140,15 +140,23 @@ InitializeResult initialize(InitializeParams params)
 	crossThreadBroadcastCallback = &handleBroadcast;
 	workspaceRoot = params.rootPath;
 	chdir(workspaceRoot);
-	trace("Starting dub...");
 	bool disableDub = config.d.neverUseDub;
+	if (!fs.exists(buildPath(workspaceRoot, "dub.json"))
+			&& !fs.exists(buildPath(workspaceRoot, "dub.sdl"))
+			&& !fs.exists(buildPath(workspaceRoot, "package.json")))
+		disableDub = true;
 	if (!disableDub)
+	{
+		trace("Starting dub...");
 		hasDub = safe!(dub.startup)(workspaceRoot);
+	}
 	if (!hasDub)
 	{
 		if (!disableDub)
+		{
 			error("Failed starting dub - falling back to fsworkspace");
-		rpc.window.showErrorMessage(translate!"d.ext.dubFail");
+			rpc.window.showErrorMessage(translate!"d.ext.dubFail");
+		}
 		try
 		{
 			fsworkspace.start(workspaceRoot, getPossibleSourceRoots);
@@ -1065,10 +1073,18 @@ DubDependency[] listDependencies(string packageName)
 		{
 			DubDependency r;
 			r.name = dep;
+			r.root = true;
 			foreach (other; allDeps)
 				if (other.name == dep)
 				{
 					r.version_ = other.ver;
+					r.path = other.path;
+					r.description = other.description;
+					r.homepage = other.homepage;
+					r.authors = other.authors;
+					r.copyright = other.copyright;
+					r.license = other.license;
+					r.subPackages = other.subPackages.map!"a.name".array;
 					r.hasDependencies = other.dependencies.length > 0;
 					break;
 				}
@@ -1092,6 +1108,13 @@ DubDependency[] listDependencies(string packageName)
 			foreach (other; allDeps)
 				if (other.name == name)
 				{
+					r.path = other.path;
+					r.description = other.description;
+					r.homepage = other.homepage;
+					r.authors = other.authors;
+					r.copyright = other.copyright;
+					r.license = other.license;
+					r.subPackages = other.subPackages.map!"a.name".array;
 					r.hasDependencies = other.dependencies.length > 0;
 					break;
 				}
@@ -1222,6 +1245,11 @@ void killServer()
 void installDependency(InstallRequest req)
 {
 	injectDependency(req);
+	if (hasDub)
+	{
+		dub.upgrade();
+		dub.updateImportPaths(true);
+	}
 	updateImports();
 }
 
@@ -1308,11 +1336,22 @@ void injectDependency(InstallRequest req)
 		}
 		else if (content.length)
 		{
+			if (content.length > 1)
+				content[$ - 2] = content[$ - 2].stripRight;
 			content = content[0 .. $ - 1] ~ (
 					"," ~ lineEnding ~ `	"dependencies": {
 		"` ~ req.name ~ `": "~>` ~ req.version_ ~ `"
 	}` ~ lineEnding)
 				~ content[$ - 1 .. $];
+			fs.write(json, content.join());
+		}
+		else
+		{
+			content ~= `{
+	"dependencies": {
+		"` ~ req.name ~ `": "~>` ~ req.version_ ~ `"
+	}
+}`;
 			fs.write(json, content.join());
 		}
 	}
