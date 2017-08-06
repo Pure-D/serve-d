@@ -159,6 +159,9 @@ InitializeResult initialize(InitializeParams params)
 			rpc.window.showErrorMessage(translate!"d.ext.fsworkspaceFail");
 		}
 	}
+	else
+		setTimeout({ rpc.notifyMethod("coded/initDubTree"); }, 50);
+
 	InitializeResult result;
 	result.capabilities.textDocumentSync = documents.syncKind;
 
@@ -1039,10 +1042,63 @@ bool updateImports()
 {
 	bool success;
 	if (hasDub)
+	{
 		success = syncYield!(dub.update).type == JSON_TYPE.TRUE;
+		if (success)
+			rpc.notifyMethod("coded/updateDubTree");
+	}
 	require!hasDCD;
 	dcd.refreshImports();
 	return success;
+}
+
+@protocolMethod("served/listDependencies")
+DubDependency[] listDependencies(string packageName)
+{
+	require!hasDub;
+	DubDependency[] ret;
+	auto allDeps = dub.dependencies;
+	if (!packageName.length)
+	{
+		auto deps = dub.rootDependencies;
+		foreach (dep; deps)
+		{
+			DubDependency r;
+			r.name = dep;
+			foreach (other; allDeps)
+				if (other.name == dep)
+				{
+					r.version_ = other.ver;
+					r.hasDependencies = other.dependencies.length > 0;
+					break;
+				}
+			ret ~= r;
+		}
+	}
+	else
+	{
+		string[string] aa;
+		foreach (other; allDeps)
+			if (other.name == packageName)
+			{
+				aa = other.dependencies;
+				break;
+			}
+		foreach (name, ver; aa)
+		{
+			DubDependency r;
+			r.name = name;
+			r.version_ = ver;
+			foreach (other; allDeps)
+				if (other.name == name)
+				{
+					r.hasDependencies = other.dependencies.length > 0;
+					break;
+				}
+			ret ~= r;
+		}
+	}
+	return ret;
 }
 
 // === Protocol Notifications starting here ===
@@ -1152,6 +1208,7 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 		rpc.window.runOrMessage(dub.upgrade(), MessageType.warning, translate!"d.ext.dubUpgradeFail");
 		rpc.window.runOrMessage(dub.updateImportPaths(true), MessageType.warning,
 				translate!"d.ext.dubImportFail");
+		rpc.notifyMethod("coded/updateDubTree");
 	}
 }
 
@@ -1159,6 +1216,106 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 void killServer()
 {
 	dcd.killServer();
+}
+
+@protocolNotification("served/installDependency")
+void installDependency(InstallRequest req)
+{
+	injectDependency(req);
+	updateImports();
+}
+
+void injectDependency(InstallRequest req)
+{
+	auto sdl = buildPath(workspaceRoot, "dub.sdl");
+	if (fs.exists(sdl))
+	{
+		int depth = 0;
+		auto content = fs.readText(sdl).splitLines(KeepTerminator.yes);
+		auto insertAt = content.length;
+		bool gotLineEnding = false;
+		string lineEnding = "\n";
+		foreach (i, line; content)
+		{
+			if (!gotLineEnding && line.length >= 2)
+			{
+				lineEnding = line[$ - 2 .. $];
+				if (lineEnding[0] != '\r')
+					lineEnding = line[$ - 1 .. $];
+				gotLineEnding = true;
+			}
+			if (depth == 0 && line.strip.startsWith("dependency "))
+				insertAt = i + 1;
+			depth += line.count('{') - line.count('}');
+		}
+		content = content[0 .. insertAt] ~ ((insertAt == content.length ? lineEnding
+				: "") ~ "dependency \"" ~ req.name ~ "\" version=\"~>" ~ req.version_ ~ "\"" ~ lineEnding)
+			~ content[insertAt .. $];
+		fs.write(sdl, content.join());
+	}
+	else
+	{
+		auto json = buildPath(workspaceRoot, "dub.json");
+		if (!fs.exists(json))
+			json = buildPath(workspaceRoot, "package.json");
+		if (!fs.exists(json))
+			return;
+		auto content = fs.readText(json).splitLines(KeepTerminator.yes);
+		auto insertAt = content.length ? content.length - 1 : 0;
+		string lineEnding = "\n";
+		bool gotLineEnding = false;
+		int depth = 0;
+		bool insertNext;
+		string indent;
+		bool foundBlock;
+		foreach (i, line; content)
+		{
+			if (!gotLineEnding && line.length >= 2)
+			{
+				lineEnding = line[$ - 2 .. $];
+				if (lineEnding[0] != '\r')
+					lineEnding = line[$ - 1 .. $];
+				gotLineEnding = true;
+			}
+			if (insertNext)
+			{
+				indent = line[0 .. $ - line.stripLeft.length];
+				insertAt = i + 1;
+				break;
+			}
+			if (depth == 1 && line.strip.startsWith(`"dependencies":`))
+			{
+				foundBlock = true;
+				if (line.strip.endsWith("{"))
+				{
+					indent = line[0 .. $ - line.stripLeft.length];
+					insertAt = i + 1;
+					break;
+				}
+				else
+				{
+					insertNext = true;
+				}
+			}
+			depth += line.count('{') - line.count('}') + line.count('[') - line.count(']');
+		}
+		if (foundBlock)
+		{
+			content = content[0 .. insertAt] ~ (
+					indent ~ indent ~ `"` ~ req.name ~ `": "~>` ~ req.version_ ~ `",` ~ lineEnding)
+				~ content[insertAt .. $];
+			fs.write(json, content.join());
+		}
+		else if (content.length)
+		{
+			content = content[0 .. $ - 1] ~ (
+					"," ~ lineEnding ~ `	"dependencies": {
+		"` ~ req.name ~ `": "~>` ~ req.version_ ~ `"
+	}` ~ lineEnding)
+				~ content[$ - 1 .. $];
+			fs.write(json, content.join());
+		}
+	}
 }
 
 struct Timeout
