@@ -42,3 +42,15 @@ struct InstallRequest
 	@SerializedName("version")
 	string version_;
 }
+
+struct UpdateRequest
+{
+	string name;
+	@SerializedName("version")
+	string version_;
+}
+
+struct UninstallRequest
+{
+	string name;
+}

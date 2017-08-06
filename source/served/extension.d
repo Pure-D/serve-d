@@ -1253,6 +1253,32 @@ void installDependency(InstallRequest req)
 	updateImports();
 }
 
+@protocolNotification("served/updateDependency")
+void updateDependency(UpdateRequest req)
+{
+	if (changeDependency(req))
+	{
+		if (hasDub)
+		{
+			dub.upgrade();
+			dub.updateImportPaths(true);
+		}
+		updateImports();
+	}
+}
+
+@protocolNotification("served/uninstallDependency")
+void uninstallDependency(UninstallRequest req)
+{
+	removeDependency(req.name);
+	if (hasDub)
+	{
+		dub.upgrade();
+		dub.updateImportPaths(true);
+	}
+	updateImports();
+}
+
 void injectDependency(InstallRequest req)
 {
 	auto sdl = buildPath(workspaceRoot, "dub.sdl");
@@ -1354,6 +1380,104 @@ void injectDependency(InstallRequest req)
 }`;
 			fs.write(json, content.join());
 		}
+	}
+}
+
+bool changeDependency(UpdateRequest req)
+{
+	auto sdl = buildPath(workspaceRoot, "dub.sdl");
+	if (fs.exists(sdl))
+	{
+		int depth = 0;
+		auto content = fs.readText(sdl).splitLines(KeepTerminator.yes);
+		size_t target = size_t.max;
+		foreach (i, line; content)
+		{
+			if (depth == 0 && line.strip.startsWith("dependency ")
+					&& line.strip["dependency".length .. $].strip.startsWith('"' ~ req.name ~ '"'))
+			{
+				target = i;
+				break;
+			}
+			depth += line.count('{') - line.count('}');
+		}
+		if (target == size_t.max)
+			return false;
+		auto ver = content[target].indexOf("version");
+		if (ver == -1)
+			return false;
+		auto quotStart = content[target].indexOf("\"", ver);
+		if (quotStart == -1)
+			return false;
+		auto quotEnd = content[target].indexOf("\"", quotStart + 1);
+		if (quotEnd == -1)
+			return false;
+		content[target] = content[target][0 .. quotStart] ~ '"' ~ req.version_ ~ '"'
+			~ content[target][quotEnd .. $];
+		fs.write(sdl, content.join());
+		return true;
+	}
+	else
+	{
+		auto json = buildPath(workspaceRoot, "dub.json");
+		if (!fs.exists(json))
+			json = buildPath(workspaceRoot, "package.json");
+		if (!fs.exists(json))
+			return false;
+		auto content = fs.readText(json);
+		auto replaced = content.replaceFirst(regex(`("` ~ req.name ~ `"\s*:\s*)"[^"]*"`),
+				`$1"` ~ req.version_ ~ `"`);
+		if (content == replaced)
+			return false;
+		fs.write(json, replaced);
+		return true;
+	}
+}
+
+bool removeDependency(string name)
+{
+	auto sdl = buildPath(workspaceRoot, "dub.sdl");
+	if (fs.exists(sdl))
+	{
+		int depth = 0;
+		auto content = fs.readText(sdl).splitLines(KeepTerminator.yes);
+		size_t target = size_t.max;
+		foreach (i, line; content)
+		{
+			if (depth == 0 && line.strip.startsWith("dependency ")
+					&& line.strip["dependency".length .. $].strip.startsWith('"' ~ name ~ '"'))
+			{
+				target = i;
+				break;
+			}
+			depth += line.count('{') - line.count('}');
+		}
+		if (target == size_t.max)
+			return false;
+		fs.write(sdl, (content[0 .. target] ~ content[target + 1 .. $]).join());
+		return true;
+	}
+	else
+	{
+		auto json = buildPath(workspaceRoot, "dub.json");
+		if (!fs.exists(json))
+			json = buildPath(workspaceRoot, "package.json");
+		if (!fs.exists(json))
+			return false;
+		auto content = fs.readText(json);
+		auto replaced = content.replaceFirst(regex(`"` ~ name ~ `"\s*:\s*"[^"]*"\s*,\s*`), "");
+		if (content == replaced)
+			replaced = content.replaceFirst(regex(`\s*,\s*"` ~ name ~ `"\s*:\s*"[^"]*"`), "");
+		if (content == replaced)
+			replaced = content.replaceFirst(
+					regex(`"dependencies"\s*:\s*\{\s*"` ~ name ~ `"\s*:\s*"[^"]*"\s*\}\s*,\s*`), "");
+		if (content == replaced)
+			replaced = content.replaceFirst(
+					regex(`\s*,\s*"dependencies"\s*:\s*\{\s*"` ~ name ~ `"\s*:\s*"[^"]*"\s*\}`), "");
+		if (content == replaced)
+			return false;
+		fs.write(json, replaced);
+		return true;
 	}
 }
 
