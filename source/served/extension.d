@@ -2,6 +2,7 @@ module served.extension;
 
 import core.exception;
 import core.thread : Fiber;
+import core.sync.mutex;
 
 import std.algorithm;
 import std.array;
@@ -136,6 +137,7 @@ InitializeResult initialize(InitializeParams params)
 	trace("Initializing serve-d for " ~ params.rootPath);
 
 	initialStart = true;
+	crossThreadBroadcastCallback = &handleBroadcast;
 	workspaceRoot = params.rootPath;
 	chdir(workspaceRoot);
 	trace("Starting dub...");
@@ -224,9 +226,18 @@ void configNotify(DidChangeConfigurationParams params)
 	}
 }
 
+void handleBroadcast(JSONValue data)
+{
+	auto type = "type" in data;
+	if (type && type.type == JSON_TYPE.STRING && type.str == "crash")
+	{
+		if (data["component"].str == "dcd")
+			spawnFiber((&startDCD).toDelegate);
+	}
+}
+
 void startDCD()
 {
-
 	hasDCD = safe!(dcd.start)(workspaceRoot, config.d.dcdClientPath,
 			config.d.dcdServerPath, cast(ushort) 9166, false);
 	if (hasDCD)
@@ -934,66 +945,77 @@ Command[] provideCodeActions(CodeActionParams params)
 @protocolMethod("served/listConfigurations")
 string[] listConfigurations()
 {
+	require!hasDub;
 	return dub.configurations;
 }
 
 @protocolMethod("served/switchConfig")
 bool switchConfig(string value)
 {
+	require!hasDub;
 	return dub.setConfiguration(value);
 }
 
 @protocolMethod("served/getConfig")
 string getConfig(string value)
 {
+	require!hasDub;
 	return dub.configuration;
 }
 
 @protocolMethod("served/listArchTypes")
 string[] listArchTypes()
 {
+	require!hasDub;
 	return dub.archTypes;
 }
 
 @protocolMethod("served/switchArchType")
 bool switchArchType(string value)
 {
+	require!hasDub;
 	return dub.setArchType(JSONValue(["arch-type" : JSONValue(value)]));
 }
 
 @protocolMethod("served/getArchType")
 string getArchType(string value)
 {
+	require!hasDub;
 	return dub.archType;
 }
 
 @protocolMethod("served/listBuildTypes")
 string[] listBuildTypes()
 {
+	require!hasDub;
 	return dub.buildTypes;
 }
 
 @protocolMethod("served/switchBuildType")
 bool switchBuildType(string value)
 {
+	require!hasDub;
 	return dub.setBuildType(JSONValue(["build-type" : JSONValue(value)]));
 }
 
 @protocolMethod("served/getBuildType")
 string getBuildType()
 {
+	require!hasDub;
 	return dub.buildType;
 }
 
 @protocolMethod("served/getCompiler")
 string getCompiler()
 {
+	require!hasDub;
 	return dub.compiler;
 }
 
 @protocolMethod("served/switchCompiler")
 bool switchCompiler(string value)
 {
+	require!hasDub;
 	return dub.setCompiler(value);
 }
 
@@ -1007,6 +1029,7 @@ auto addImport(AddImportParams params)
 @protocolMethod("served/restartServer")
 bool restartServer()
 {
+	require!hasDCD;
 	syncYield!(dcd.restartServer);
 	return true;
 }
@@ -1154,7 +1177,8 @@ int setTimeout(void delegate() callback, int ms)
 	to.callback = callback;
 	to.sw.start();
 	to.id = ++timeoutID;
-	timeouts ~= to;
+	synchronized (timeoutsMutex)
+		timeouts ~= to;
 	return to.id;
 }
 
@@ -1170,46 +1194,50 @@ int setTimeout(void delegate() callback, Duration timeout)
 
 void clearTimeout(int id)
 {
-	foreach_reverse (i, ref timeout; timeouts)
-	{
-		if (timeout.id == id)
+	synchronized (timeoutsMutex)
+		foreach_reverse (i, ref timeout; timeouts)
 		{
-			timeout.sw.stop();
-			if (timeouts.length > 1)
-				timeouts[i] = timeouts[$ - 1];
-			timeouts.length--;
-			return;
+			if (timeout.id == id)
+			{
+				timeout.sw.stop();
+				if (timeouts.length > 1)
+					timeouts[i] = timeouts[$ - 1];
+				timeouts.length--;
+				return;
+			}
 		}
-	}
 }
 
-void delegate(void delegate()) spawnFiber;
+__gshared void delegate(void delegate()) spawnFiber;
 
 shared static this()
 {
 	spawnFiber = (&setImmediate).toDelegate;
 }
 
-int timeoutID;
-Timeout[] timeouts;
+__gshared int timeoutID;
+__gshared Timeout[] timeouts;
+__gshared Mutex timeoutsMutex;
 
 // Called at most 100x per second
 void parallelMain()
 {
+	timeoutsMutex = new Mutex;
 	while (true)
 	{
-		foreach_reverse (i, ref timeout; timeouts)
-		{
-			if (timeout.sw.peek.msecs >= timeout.msTimeout)
+		synchronized (timeoutsMutex)
+			foreach_reverse (i, ref timeout; timeouts)
 			{
-				timeout.sw.stop();
-				timeout.callback();
-				trace("Calling timeout");
-				if (timeouts.length > 1)
-					timeouts[i] = timeouts[$ - 1];
-				timeouts.length--;
+				if (timeout.sw.peek.msecs >= timeout.msTimeout)
+				{
+					timeout.sw.stop();
+					timeout.callback();
+					trace("Calling timeout");
+					if (timeouts.length > 1)
+						timeouts[i] = timeouts[$ - 1];
+					timeouts.length--;
+				}
 			}
-		}
 		Fiber.yield();
 	}
 }

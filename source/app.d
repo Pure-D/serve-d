@@ -1,4 +1,5 @@
 import core.thread;
+import core.sync.mutex;
 
 import io = std.stdio;
 import fs = std.file;
@@ -158,7 +159,7 @@ void printVersion()
 	io.writefln("Included features: %(%s, %)", IncludedFeatures);
 }
 
-FiberManager fibers;
+__gshared FiberManager fibers;
 void main(string[] args)
 {
 	debug globalLogLevel = LogLevel.trace;
@@ -184,24 +185,34 @@ void main(string[] args)
 		printVersion();
 		return;
 	}
+
 	if (lang.length >= 2) // ja-JP -> ja, en-GB -> en, etc
 		currentLanguage = lang[0 .. 2];
 	if (currentLanguage != "en")
 		info("Setting language to ", currentLanguage);
+
+	fibersMutex = new Mutex();
+
 	served.types.workspaceRoot = fs.getcwd();
+
 	foreach (feature; features)
 		if (!IncludedFeatures.canFind(feature.toLower.strip))
 			throw new Exception("Feature set '" ~ feature ~ "' not in this version of serve-d");
 	trace("Features fulfilled");
+
 	auto input = new FileReader(stdin);
 	input.start();
 	trace("Started reading from stdin");
+
 	rpc = new RPCProcessor(input, stdout);
 	rpc.call();
 	trace("RPC started");
+
 	fibers ~= rpc;
+
 	served.extension.spawnFiber = (&pushFiber!(void delegate())).toDelegate;
 	pushFiber(&served.extension.parallelMain);
+
 	while (rpc.state != Fiber.State.TERM)
 	{
 		while (rpc.hasData)
@@ -240,11 +251,14 @@ void main(string[] args)
 				});
 		}
 		Thread.sleep(10.msecs);
-		fibers.call();
+		synchronized (fibersMutex)
+			fibers.call();
 	}
 }
 
+__gshared Mutex fibersMutex;
 void pushFiber(T)(T callback)
 {
-	fibers ~= new Fiber(callback, 4096 * 16);
+	synchronized (fibersMutex)
+		fibers ~= new Fiber(callback, 4096 * 16);
 }
