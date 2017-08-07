@@ -89,9 +89,11 @@ struct Configuration
 	string[] stdlibPath()
 	{
 		auto p = d.stdlibPath;
-		if (p.type == JSON_TYPE.STRING)
+		if (p.type == JSON_TYPE.ARRAY)
+			return p.array.map!"a.str".array;
+		else
 		{
-			if (p.str == "auto")
+			if (p.type != JSON_TYPE.STRING || p.str == "auto")
 			{
 				version (Windows)
 					return [`C:\D\dmd2\src\druntime\import`, `C:\D\dmd2\src\phobos`];
@@ -109,8 +111,6 @@ struct Configuration
 			else
 				return [p.str];
 		}
-		else
-			return p.array.map!"a.str".array;
 	}
 
 	string[] replace(Configuration newConfig)
