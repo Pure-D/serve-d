@@ -330,21 +330,20 @@ void updateDCD()
 	string outputFolder = determineOutputFolder;
 	if (!fs.exists(outputFolder))
 		fs.mkdirRecurse(outputFolder);
-	version (Windows)
-		auto buildCmd = ["cmd.exe", "/c", "build.bat"];
-	else
-		auto buildCmd = ["make"];
-	bool success = compileDependency(outputFolder, "DCD", "https://github.com/Hackerpilot/DCD.git",
-			[[config.git.path, "submodule", "update", "--init", "--recursive"], buildCmd]);
+	bool success = compileDependency(outputFolder, "DCD", "https://github.com/Hackerpilot/DCD.git", [[config.git.path,
+			"submodule", "update", "--init", "--recursive"], ["dub", "build",
+			"--config=client"], ["dub", "build", "--config=server"]]);
 	if (success)
 	{
-		string finalDestinationClient = buildPath(outputFolder, "DCD", "bin", "dcd-client");
-		string finalDestinationServer = buildPath(outputFolder, "DCD", "bin", "dcd-server");
+		string ext = "";
 		version (Windows)
-		{
-			finalDestinationClient ~= ".exe";
-			finalDestinationServer ~= ".exe";
-		}
+			ext = ".exe";
+		string finalDestinationClient = buildPath(outputFolder, "DCD", "dcd-client" ~ ext);
+		if (!fs.exists(finalDestinationClient))
+			finalDestinationClient = buildPath(outputFolder, "DCD", "bin", "dcd-client" ~ ext);
+		string finalDestinationServer = buildPath(outputFolder, "DCD", "dcd-server" ~ ext);
+		if (!fs.exists(finalDestinationServer))
+			finalDestinationServer = buildPath(outputFolder, "DCD", "bin", "dcd-client" ~ ext);
 		config.d.dcdClientPath = finalDestinationClient;
 		config.d.dcdServerPath = finalDestinationServer;
 		rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("dcdClientPath",
