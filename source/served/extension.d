@@ -184,6 +184,9 @@ InitializeResult initialize(InitializeParams params)
 
 	result.capabilities.documentFormattingProvider = true;
 
+	trace("Starting dscanner");
+	dscanner.start(workspaceRoot);
+	hasDscanner = true;
 	trace("Starting dfmt");
 	dfmt.start();
 	trace("Starting dlangui");
@@ -218,21 +221,6 @@ void configNotify(DidChangeConfigurationParams params)
 					config.d.dcdClientPath, config.d.dcdServerPath), [action]);
 			if (res == action)
 				spawnFiber((&updateDCD).toDelegate);
-		}
-	}
-
-	startDScanner();
-	if (!hasDscanner || dscanner.isOutdated)
-	{
-		if (config.d.aggressiveUpdate)
-			spawnFiber((&updateDscanner).toDelegate);
-		else
-		{
-			auto action = translate!"d.ext.compileProgram"("dscanner");
-			auto res = rpc.window.requestMessage(MessageType.error,
-					translate!"d.served.failDscanner"(workspaceRoot, config.d.dscannerPath), [action]);
-			if (res == action)
-				spawnFiber((&updateDscanner).toDelegate);
 		}
 	}
 }
@@ -270,11 +258,6 @@ void startDCD()
 	}
 }
 
-void startDScanner()
-{
-	hasDscanner = safe!(dscanner.start)(workspaceRoot, config.d.dscannerPath);
-}
-
 string determineOutputFolder()
 {
 	import std.process : environment;
@@ -293,33 +276,6 @@ string determineOutputFolder()
 	else
 	{
 		return buildPath(environment["HOME"], ".code-d", "bin");
-	}
-}
-
-@protocolNotification("served/updateDscanner")
-void updateDscanner()
-{
-	rpc.notifyMethod("coded/logInstall", "Installing dscanner");
-	string outputFolder = determineOutputFolder;
-	if (!fs.exists(outputFolder))
-		fs.mkdirRecurse(outputFolder);
-	version (Windows)
-		auto buildCmd = ["cmd.exe", "/c", "build.bat"];
-	else
-		auto buildCmd = ["make"];
-	bool success = compileDependency(outputFolder, "Dscanner", "https://github.com/Hackerpilot/Dscanner.git",
-			[[config.git.path, "submodule", "update", "--init", "--recursive"], buildCmd]);
-	if (success)
-	{
-		version (Windows)
-			string finalDestination = buildPath(outputFolder, "Dscanner", "bin", "dscanner.exe");
-		else
-			string finalDestination = buildPath(outputFolder, "Dscanner", "bin", "dscanner");
-		config.d.dscannerPath = finalDestination;
-		rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("dscannerPath",
-				JSONValue(finalDestination), true));
-		rpc.notifyMethod("coded/logInstall", "Successfully installed Dscanner");
-		startDScanner();
 	}
 }
 
