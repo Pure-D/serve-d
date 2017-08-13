@@ -645,13 +645,108 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 	{
 		if (document.languageId != "d")
 			return CompletionList.init;
+		string line = document.lineAt(params.position);
+		string prefix = line[0 .. min($, params.position.character)];
+		CompletionItem[] completion;
+		if (prefix.strip == "///" || prefix.strip == "*")
+		{
+			foreach (compl; import("ddocs.txt").lineSplitter)
+			{
+				auto item = CompletionItem(compl, CompletionItemKind.snippet.opt);
+				item.insertText = compl ~ ": ";
+				completion ~= item;
+			}
+			return CompletionList(false, completion);
+		}
 		require!hasDCD;
 		auto byteOff = cast(int) document.positionToBytes(params.position);
 		JSONValue result;
 		joinAll({ result = syncYield!(dcd.listCompletion)(document.text, byteOff); }, {
+			if (hasDscanner && !line.strip.length)
+			{
+				auto result = syncYield!(dscanner.listDefinitions)(uriToFile(params.textDocument.uri),
+					document.text);
+				if (result.type == JSON_TYPE.NULL)
+					return;
+				import painlessjson : fromJSON;
 
+				dscanner.DefinitionElement[] defs = result.fromJSON!(dscanner.DefinitionElement[]);
+				ptrdiff_t di = -1;
+				FuncFinder: foreach (i, def; defs)
+				{
+					for (int n = 1; n < 5; n++)
+						if (def.line == params.position.line + n)
+						{
+							di = i;
+							break FuncFinder;
+						}
+				}
+				if (di == -1)
+					return;
+				auto def = defs[di];
+				auto sig = "signature" in def.attributes;
+				if (!sig)
+				{
+					CompletionItem doc = CompletionItem("///");
+					doc.kind = CompletionItemKind.snippet;
+					doc.insertTextFormat = InsertTextFormat.snippet;
+					auto eol = document.eolAt(params.position.line).toString;
+					doc.insertText = "/// ";
+					CompletionItem doc2 = doc;
+					doc2.label = "/**";
+					doc2.insertText = "/** " ~ eol ~ " * $0" ~ eol ~ " */";
+					completion ~= doc;
+					completion ~= doc2;
+					return;
+				}
+				auto funcArgs = extractFunctionParameters(*sig);
+				string[] docs;
+				if (def.name.matchFirst(ctRegex!`^[Gg]et([^a-z]|$)`))
+					docs ~= "Gets $0";
+				else if (def.name.matchFirst(ctRegex!`^[Ss]et([^a-z]|$)`))
+					docs ~= "Sets $0";
+				else if (def.name.matchFirst(ctRegex!`^[Ii]s([^a-z]|$)`))
+					docs ~= "Checks if $0";
+				else
+					docs ~= "$0";
+				int argNo = 1;
+				foreach (arg; funcArgs)
+				{
+					auto space = arg.lastIndexOf(' ');
+					if (space == -1)
+						continue;
+					string identifier = arg[space + 1 .. $];
+					if (!identifier.matchFirst(ctRegex!`[a-zA-Z_][a-zA-Z0-9_]*`))
+						continue;
+					if (argNo == 1)
+						docs ~= "Params:";
+					docs ~= "  " ~ identifier ~ " = $" ~ argNo.to!string;
+					argNo++;
+				}
+				auto retAttr = "return" in def.attributes;
+				if (retAttr && *retAttr != "void")
+				{
+					docs ~= "Returns: $" ~ argNo.to!string;
+					argNo++;
+				}
+				auto depr = "deprecation" in def.attributes;
+				if (depr)
+				{
+					docs ~= "Deprecated: $" ~ argNo.to!string ~ *depr;
+					argNo++;
+				}
+				CompletionItem doc = CompletionItem("///");
+				doc.kind = CompletionItemKind.snippet;
+				doc.insertTextFormat = InsertTextFormat.snippet;
+				auto eol = document.eolAt(params.position.line).toString;
+				doc.insertText = docs.map!(a => "/// " ~ a).join(eol);
+				CompletionItem doc2 = doc;
+				doc2.label = "/**";
+				doc2.insertText = "/** " ~ eol ~ docs.map!(a => " * " ~ a ~ eol).join() ~ " */";
+				completion ~= doc;
+				completion ~= doc2;
+			}
 		});
-		CompletionItem[] completion;
 		switch (result["type"].str)
 		{
 		case "identifiers":
