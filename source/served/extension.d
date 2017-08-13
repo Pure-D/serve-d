@@ -25,6 +25,8 @@ import served.translate;
 import workspaced.api;
 import workspaced.coms;
 
+import served.linters.dub : DubDiagnosticSource;
+
 bool hasDCD, hasDub, hasDscanner;
 
 void require(alias val)()
@@ -994,47 +996,60 @@ Command[] provideCodeActions(CodeActionParams params)
 	Command[] ret;
 	foreach (diagnostic; params.context.diagnostics)
 	{
-		auto match = diagnostic.message.matchFirst(importRegex);
-		if (diagnostic.message.canFind("import "))
+		if (diagnostic.source == DubDiagnosticSource)
 		{
-			if (!match)
-				continue;
-			return [Command("Import " ~ match[1], "code-d.addImport",
-					[JSONValue(match[1]), JSONValue(document.positionToOffset(params.range[0]))])];
-		}
-		else if (cast(bool)(match = diagnostic.message.matchFirst(undefinedIdentifier))
-				|| cast(bool)(match = diagnostic.message.matchFirst(undefinedTemplate))
-				|| cast(bool)(match = diagnostic.message.matchFirst(noProperty)))
-		{
-			string[] files;
-			joinAll({
-				if (hasDscanner)
-					files ~= syncYield!(dscanner.findSymbol)(match[1]).array.map!"a[`file`].str".array;
-			}, {
-				if (hasDCD)
-					files ~= syncYield!(dcd.searchSymbol)(match[1]).array.map!"a[`file`].str".array;
-			});
-			string[] modules;
-			foreach (file; files.sort().uniq)
+			auto match = diagnostic.message.matchFirst(importRegex);
+			if (diagnostic.message.canFind("import "))
 			{
-				if (!isAbsolute(file))
-					file = buildNormalizedPath(workspaceRoot, file);
-				int lineNo = 0;
-				foreach (line; io.File(file).byLine)
+				if (!match)
+					continue;
+				return [Command("Import " ~ match[1], "code-d.addImport",
+						[JSONValue(match[1]), JSONValue(document.positionToOffset(params.range[0]))])];
+			}
+			else if (cast(bool)(match = diagnostic.message.matchFirst(undefinedIdentifier))
+					|| cast(bool)(match = diagnostic.message.matchFirst(undefinedTemplate))
+					|| cast(bool)(match = diagnostic.message.matchFirst(noProperty)))
+			{
+				string[] files;
+				joinAll({
+					if (hasDscanner)
+						files ~= syncYield!(dscanner.findSymbol)(match[1]).array.map!"a[`file`].str".array;
+				}, {
+					if (hasDCD)
+						files ~= syncYield!(dcd.searchSymbol)(match[1]).array.map!"a[`file`].str".array;
+				});
+				string[] modules;
+				foreach (file; files.sort().uniq)
 				{
-					if (++lineNo >= 100)
-						break;
-					auto match2 = line.matchFirst(moduleRegex);
-					if (match2)
+					if (!isAbsolute(file))
+						file = buildNormalizedPath(workspaceRoot, file);
+					int lineNo = 0;
+					foreach (line; io.File(file).byLine)
 					{
-						modules ~= match2[1].replaceAll(whitespace, "").idup;
-						break;
+						if (++lineNo >= 100)
+							break;
+						auto match2 = line.matchFirst(moduleRegex);
+						if (match2)
+						{
+							modules ~= match2[1].replaceAll(whitespace, "").idup;
+							break;
+						}
 					}
 				}
+				foreach (mod; modules.sort().uniq)
+					ret ~= Command("Import " ~ mod, "code-d.addImport", [JSONValue(mod),
+							JSONValue(document.positionToOffset(params.range[0]))]);
 			}
-			foreach (mod; modules.sort().uniq)
-				ret ~= Command("Import " ~ mod, "code-d.addImport", [JSONValue(mod),
-						JSONValue(document.positionToOffset(params.range[0]))]);
+		}
+		else
+		{
+			import analysis.imports_sortedness : ImportSortednessCheck;
+
+			if (diagnostic.message == ImportSortednessCheck.MESSAGE)
+			{
+				ret ~= Command("Sort imports", "code-d.sortImports",
+						[JSONValue(document.positionToOffset(params.range[0]))]);
+			}
 		}
 	}
 	return ret;
@@ -1122,6 +1137,20 @@ auto addImport(AddImportParams params)
 {
 	auto document = documents[params.textDocument.uri];
 	return importer.add(params.name.idup, document.text, params.location, params.insertOutermost);
+}
+
+@protocolMethod("served/sortImports")
+TextEdit[] sortImports(SortImportsParams params)
+{
+	auto document = documents[params.textDocument.uri];
+	TextEdit[] ret;
+	auto sorted = importer.sortImports(document.text, params.location);
+	if (sorted == importer.ImportBlock.init)
+		return ret;
+	auto start = document.bytesToPosition(sorted.start);
+	auto end = document.bytesToPosition(sorted.end);
+	string code = sorted.imports.to!(string[]).join(document.eolAt(0).toString);
+	return [TextEdit(TextRange(start, end), code)];
 }
 
 @protocolMethod("served/restartServer")

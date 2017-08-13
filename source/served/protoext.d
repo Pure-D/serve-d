@@ -13,6 +13,12 @@ struct AddImportParams
 	bool insertOutermost = true;
 }
 
+struct SortImportsParams
+{
+	TextDocumentIdentifier textDocument;
+	int location;
+}
+
 struct UpdateSettingParams
 {
 	string section;

@@ -23,6 +23,8 @@ import workspaced.com.dub : ErrorType;
 
 enum DiagnosticSlot = 1;
 
+enum DubDiagnosticSource = "DUB";
+
 string fixPath(string path, string[] stringImportPaths)
 {
 	auto mixinIndex = path.indexOf("-mixin-");
@@ -81,7 +83,7 @@ void lint(Document document)
 			Diagnostic error;
 			error.range = TextRange(Position(issue["line"].toInt - 1, issue["column"].toInt - 1));
 			error.severity = mapDubLintType(cast(ErrorType) issue["type"].toInt);
-			error.source = "DUB";
+			error.source = DubDiagnosticSource;
 			error.message = issue["text"].str;
 			bool found;
 			foreach (ref elem; result)
