@@ -173,8 +173,8 @@ InitializeResult initialize(InitializeParams params)
 	InitializeResult result;
 	result.capabilities.textDocumentSync = documents.syncKind;
 
-	result.capabilities.completionProvider = CompletionOptions(false, [".", "("]);
-	result.capabilities.signatureHelpProvider = SignatureHelpOptions(["(", ","]);
+	result.capabilities.completionProvider = CompletionOptions(false, [".", "(", "[", "="]);
+	result.capabilities.signatureHelpProvider = SignatureHelpOptions(["(", "[", ","]);
 	result.capabilities.workspaceSymbolProvider = true;
 	result.capabilities.definitionProvider = true;
 	result.capabilities.hoverProvider = true;
@@ -577,26 +577,22 @@ string[] extractFunctionParameters(string sig, bool exact = false)
 
 unittest
 {
-	void assertEquals(A, B)(A a, B b)
-	{
-		assert(a == b,
-				"\n\"" ~ a.to!string ~ "\"\nis expected to be\n\"" ~ b.to!string ~ "\", but wasn't!");
-	}
+	import fluent.asserts;
 
-	assertEquals(extractFunctionParameters("void foo()"), []);
-	assertEquals(extractFunctionParameters(`auto bar(int foo, Button, my.Callback cb)`),
+	Assert.equal(extractFunctionParameters("void foo()"), cast(string[])[]);
+	Assert.equal(extractFunctionParameters(`auto bar(int foo, Button, my.Callback cb)`),
 			["int foo", "Button", "my.Callback cb"]);
-	assertEquals(extractFunctionParameters(`SomeType!(int, "int_") foo(T, Args...)(T a, T b, string[string] map, Other!"(" stuff1, SomeType!(double, ")double") myType, Other!"(" stuff, Other!")")`),
+	Assert.equal(extractFunctionParameters(`SomeType!(int, "int_") foo(T, Args...)(T a, T b, string[string] map, Other!"(" stuff1, SomeType!(double, ")double") myType, Other!"(" stuff, Other!")")`),
 			["T a", "T b", "string[string] map", `Other!"(" stuff1`,
 			`SomeType!(double, ")double") myType`, `Other!"(" stuff`, `Other!")"`]);
-	assertEquals(extractFunctionParameters(`SomeType!(int,"int_")foo(T,Args...)(T a,T b,string[string] map,Other!"(" stuff1,SomeType!(double,")double")myType,Other!"(" stuff,Other!")")`),
+	Assert.equal(extractFunctionParameters(`SomeType!(int,"int_")foo(T,Args...)(T a,T b,string[string] map,Other!"(" stuff1,SomeType!(double,")double")myType,Other!"(" stuff,Other!")")`),
 			["T a", "T b", "string[string] map", `Other!"(" stuff1`,
 			`SomeType!(double,")double")myType`, `Other!"(" stuff`, `Other!")"`]);
-	assertEquals(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4`,
+	Assert.equal(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4`,
 			true), [`4`]);
-	assertEquals(extractFunctionParameters(
+	Assert.equal(extractFunctionParameters(
 			`some_garbage(code); before(this); funcCall(4, f(4)`, true), [`4`, `f(4)`]);
-	assertEquals(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4, ["a"], JSONValue(["b": JSONValue("c")]), recursive(func, call!s()), "texts )\"(too"`,
+	Assert.equal(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4, ["a"], JSONValue(["b": JSONValue("c")]), recursive(func, call!s()), "texts )\"(too"`,
 			true), [`4`, `["a"]`, `JSONValue(["b": JSONValue("c")])`,
 			`recursive(func, call!s())`, `"texts )\"(too"`]);
 }
@@ -606,31 +602,72 @@ unittest
 @protocolMethod("textDocument/completion")
 CompletionList provideComplete(TextDocumentPositionParams params)
 {
-	auto document = documents[params.textDocument.uri];
-	if (document.languageId != "d")
-		return CompletionList.init;
-	require!hasDCD;
-	auto byteOff = cast(int) document.positionToBytes(params.position);
-	JSONValue result;
-	joinAll({ result = syncYield!(dcd.listCompletion)(document.text, byteOff); }, {
-
-	});
-	CompletionItem[] completion;
-	switch (result["type"].str)
+	Document document = documents[params.textDocument.uri];
+	if (document.uri.toLower.endsWith("dscanner.ini"))
 	{
-	case "identifiers":
-		foreach (identifier; result["identifiers"].array)
+		require!hasDscanner;
+		auto possibleFields = dscanner.listAllIniFields;
+		auto line = document.lineAt(params.position).strip;
+		auto defaultList = CompletionList(false, possibleFields.map!(a => CompletionItem(a.name,
+				CompletionItemKind.field.opt, Optional!string.init,
+				a.documentation.opt, Optional!string.init, Optional!string.init, (a.name ~ '=').opt)).array);
+		if (!line.length)
+			return defaultList;
+		//dfmt off
+		if (line[0] == '[')
+			return CompletionList(false, [
+				CompletionItem("analysis.config.StaticAnalysisConfig", CompletionItemKind.keyword.opt),
+				CompletionItem("analysis.config.ModuleFilters", CompletionItemKind.keyword.opt, Optional!string.init,
+					("In this optional section a comma-separated list of inclusion and exclusion"
+					~ " selectors can be specified for every check on which selective filtering"
+					~ " should be applied. These given selectors match on the module name and"
+					~ " partial matches (std. or .foo.) are possible. Moreover, every selectors"
+					~ " must begin with either + (inclusion) or - (exclusion). Exclusion selectors"
+					~ " take precedence over all inclusion operators.").opt)
+			]);
+		//dfmt on
+		auto eqIndex = line.indexOf('=');
+		auto quotIndex = line.lastIndexOf('"');
+		if (quotIndex != -1 && params.position.character >= quotIndex)
+			return CompletionList.init;
+		if (params.position.character < eqIndex)
+			return defaultList;
+		else//dfmt off
+			return CompletionList(false, [
+				CompletionItem(`"disabled"`, CompletionItemKind.value.opt, "Check is disabled".opt),
+				CompletionItem(`"enabled"`, CompletionItemKind.value.opt, "Check is enabled".opt),
+				CompletionItem(`"skip-unittest"`, CompletionItemKind.value.opt,
+					"Check is enabled but not operated in the unittests".opt)
+			]);
+		//dfmt on
+	}
+	else
+	{
+		if (document.languageId != "d")
+			return CompletionList.init;
+		require!hasDCD;
+		auto byteOff = cast(int) document.positionToBytes(params.position);
+		JSONValue result;
+		joinAll({ result = syncYield!(dcd.listCompletion)(document.text, byteOff); }, {
+
+		});
+		CompletionItem[] completion;
+		switch (result["type"].str)
 		{
-			CompletionItem item;
-			item.label = identifier["identifier"].str;
-			item.kind = identifier["type"].str.convertFromDCDType;
-			completion ~= item;
+		case "identifiers":
+			foreach (identifier; result["identifiers"].array)
+			{
+				CompletionItem item;
+				item.label = identifier["identifier"].str;
+				item.kind = identifier["type"].str.convertFromDCDType;
+				completion ~= item;
+			}
+			goto case;
+		case "calltips":
+			return CompletionList(false, completion);
+		default:
+			throw new Exception("Unexpected result from DCD");
 		}
-		goto case;
-	case "calltips":
-		return CompletionList(false, completion);
-	default:
-		throw new Exception("Unexpected result from DCD");
 	}
 }
 
@@ -1424,11 +1461,11 @@ bool removeDependency(string name)
 		if (content == replaced)
 			replaced = content.replaceFirst(regex(`\s*,\s*"` ~ name ~ `"\s*:\s*"[^"]*"`), "");
 		if (content == replaced)
-			replaced = content.replaceFirst(
-					regex(`"dependencies"\s*:\s*\{\s*"` ~ name ~ `"\s*:\s*"[^"]*"\s*\}\s*,\s*`), "");
+			replaced = content.replaceFirst(regex(
+					`"dependencies"\s*:\s*\{\s*"` ~ name ~ `"\s*:\s*"[^"]*"\s*\}\s*,\s*`), "");
 		if (content == replaced)
-			replaced = content.replaceFirst(
-					regex(`\s*,\s*"dependencies"\s*:\s*\{\s*"` ~ name ~ `"\s*:\s*"[^"]*"\s*\}`), "");
+			replaced = content.replaceFirst(regex(
+					`\s*,\s*"dependencies"\s*:\s*\{\s*"` ~ name ~ `"\s*:\s*"[^"]*"\s*\}`), "");
 		if (content == replaced)
 			return false;
 		fs.write(json, replaced);
