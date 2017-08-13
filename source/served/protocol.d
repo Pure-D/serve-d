@@ -319,6 +319,19 @@ enum EolType
 	crlf
 }
 
+string toString(EolType eol)
+{
+	final switch (eol)
+	{
+	case EolType.cr:
+		return "\r";
+	case EolType.lf:
+		return "\n";
+	case EolType.crlf:
+		return "\r\n";
+	}
+}
+
 struct Position
 {
 	uint line, character;
