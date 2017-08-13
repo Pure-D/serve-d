@@ -116,6 +116,58 @@ struct Document
 		return cur;
 	}
 
+	string lineAt(Position position)
+	{
+		size_t index = 0;
+		size_t lineStart = 0;
+		bool wasStart = true;
+		bool found = false;
+		Position cur;
+		while (index < text.length)
+		{
+			if (wasStart)
+			{
+				if (cur.line == position.line)
+				{
+					lineStart = index;
+					found = true;
+				}
+				if (cur.line == position.line + 1)
+					break;
+			}
+			wasStart = false;
+			auto c = decode(text, index);
+			cur.character++;
+			if (c == '\n')
+			{
+				wasStart = true;
+				cur.character = 0;
+				cur.line++;
+			}
+		}
+		if (!found)
+			return "";
+		return text[lineStart .. index];
+	}
+
+	unittest
+	{
+		import fluent.asserts;
+
+		Document doc;
+		doc.text = `abc
+hellö world
+how åre
+you?`;
+		Assert.equal(doc.lineAt(Position(0, 0)), "abc\n");
+		Assert.equal(doc.lineAt(Position(0, 100)), "abc\n");
+		Assert.equal(doc.lineAt(Position(1, 3)), "hellö world\n");
+		Assert.equal(doc.lineAt(Position(2, 0)), "how åre\n");
+		Assert.equal(doc.lineAt(Position(3, 0)), "you?");
+		Assert.equal(doc.lineAt(Position(3, 8)), "you?");
+		Assert.equal(doc.lineAt(Position(4, 0)), "");
+	}
+
 	EolType eolAt(int line)
 	{
 		size_t index = 0;
@@ -168,6 +220,7 @@ struct TextDocumentManager
 	bool process(RequestMessage msg)
 	{
 		import std.stdio;
+
 		if (msg.method == "textDocument/didOpen")
 		{
 			auto params = msg.params.fromJSON!DidOpenTextDocumentParams;

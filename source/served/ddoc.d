@@ -196,7 +196,7 @@ $(BODY)`,
 
 unittest
 {
-	import std.stdio;
+	import fluent.asserts;
 
 	auto md = ddocToMarkdown(`&#36;(D something, else) is *a
 ------------
@@ -208,7 +208,7 @@ Params:
 	a = $(B param)
 Returns:
 	nothing of consequence`);
-	assert(md == "$(D something, else) is *a
+	Assert.equal(md, "$(D something, else) is *a
 
 ```d
 test
@@ -222,5 +222,5 @@ a = **param**
 
 Returns:
 
-nothing of consequence", md);
+nothing of consequence");
 }

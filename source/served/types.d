@@ -166,9 +166,11 @@ string uriToFile(DocumentUri uri)
 {
 	void testUri(string a, string b)
 	{
-		assert(a.uriFromFile == b, a.uriFromFile ~ " != " ~ b);
-		assert(a == b.uriToFile, a ~ " != " ~ b.uriToFile);
-		assert(a.uriFromFile.uriToFile == a, a.uriFromFile.uriToFile ~ " != " ~ a);
+		import fluent.asserts;
+
+		Assert.equal(a.uriFromFile, b);
+		Assert.equal(a, b.uriToFile);
+		Assert.equal(a.uriFromFile.uriToFile, a);
 	}
 
 	testUri(`/home/pi/.bashrc`, `file:///home/pi/.bashrc`);
