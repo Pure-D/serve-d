@@ -341,7 +341,7 @@ bool compileDependency(string cwd, string name, string gitURI, string[][] comman
 			rpc.notifyMethod("coded/logInstall", "Deleting old installation from " ~ newCwd);
 			fs.rmdirRecurse(newCwd);
 		}
-		auto ret = run([config.git.path, "clone", "--recursive", gitURI, name], cwd);
+		auto ret = run([config.git.path, "clone", "--recursive", "--depth=1", gitURI, name], cwd);
 		if (ret != 0)
 			throw new Exception("git ended with error code " ~ ret.to!string);
 		foreach (command; commands)
