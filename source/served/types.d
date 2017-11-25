@@ -57,6 +57,7 @@ struct Configuration
 		string dubCompiler;
 		bool overrideDfmtEditorconfig = true;
 		bool aggressiveUpdate = true;
+		bool argumentSnippets = true;
 	}
 
 	struct DFmt

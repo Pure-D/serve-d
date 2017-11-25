@@ -762,7 +762,45 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 				if (identifier.documentation.length)
 					item.documentation = MarkupContent(identifier.documentation.ddocToMarked);
 				if (identifier.definition.length)
+				{
 					item.detail = identifier.definition;
+					item.sortText = identifier.definition;
+					// TODO: only add arguments when this is a function call, eg not on template arguments
+					if (identifier.type == "f" && config.d.argumentSnippets)
+					{
+						item.insertTextFormat = InsertTextFormat.snippet;
+						string args;
+						auto parts = identifier.definition.extractFunctionParameters;
+						if (parts.length)
+						{
+							bool isOptional;
+							string[] optionals;
+							int numRequired;
+							foreach (i, part; parts)
+							{
+								if (!isOptional)
+									isOptional = part.canFind('=');
+								if (isOptional)
+									optionals ~= part;
+								else
+								{
+									if (args.length)
+										args ~= ", ";
+									args ~= "${" ~ (i + 1).to!string ~ ":" ~ part ~ "}";
+									numRequired++;
+								}
+							}
+							foreach (i, part; optionals)
+							{
+								if (args.length)
+									part = ", " ~ part;
+								// Go through optionals in reverse
+								args ~= "${" ~ (numRequired + optionals.length - i).to!string ~ ":" ~ part ~ "}";
+							}
+							item.insertText = identifier.identifier ~ "(${0:" ~ args ~ "})";
+						}
+					}
+				}
 				completion ~= item;
 			}
 			goto case;
