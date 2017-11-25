@@ -759,8 +759,10 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 				dcd.DCDIdentifier identifier = identifierJson.fromJSON!(dcd.DCDIdentifier);
 				item.label = identifier.identifier;
 				item.kind = identifier.type.convertFromDCDType;
-				item.documentation = MarkupContent(identifier.documentation.ddocToMarked);
-				item.detail = identifier.definition;
+				if (identifier.documentation.length)
+					item.documentation = MarkupContent(identifier.documentation.ddocToMarked);
+				if (identifier.definition.length)
+					item.detail = identifier.definition;
 				completion ~= item;
 			}
 			goto case;
@@ -790,7 +792,9 @@ SignatureHelp provideSignatureHelp(TextDocumentPositionParams params)
 		foreach (i, calltip; result["calltips"].array)
 		{
 			auto sig = SignatureInformation(calltip.str);
-			sig.documentation = MarkupContent(result["symbols"]["documentation"].str.ddocToMarked);
+			string doc = result["symbols"]["documentation"].str;
+			if (doc.length)
+				sig.documentation = MarkupContent(doc.ddocToMarked);
 			auto funcParams = calltip.str.extractFunctionParameters;
 
 			paramsCounts ~= cast(int) funcParams.length - 1;
