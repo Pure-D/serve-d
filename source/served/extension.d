@@ -604,6 +604,8 @@ unittest
 @protocolMethod("textDocument/completion")
 CompletionList provideComplete(TextDocumentPositionParams params)
 {
+	import painlessjson : fromJSON;
+
 	Document document = documents[params.textDocument.uri];
 	if (document.uri.toLower.endsWith("dscanner.ini"))
 	{
@@ -611,8 +613,8 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 		auto possibleFields = dscanner.listAllIniFields;
 		auto line = document.lineAt(params.position).strip;
 		auto defaultList = CompletionList(false, possibleFields.map!(a => CompletionItem(a.name,
-				CompletionItemKind.field.opt, Optional!string.init,
-				a.documentation.opt, Optional!string.init, Optional!string.init, (a.name ~ '=').opt)).array);
+				CompletionItemKind.field.opt, Optional!string.init, MarkupContent(a.documentation)
+				.opt, Optional!string.init, Optional!string.init, (a.name ~ '=').opt)).array);
 		if (!line.length)
 			return defaultList;
 		//dfmt off
@@ -620,7 +622,7 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 			return CompletionList(false, [
 				CompletionItem("analysis.config.StaticAnalysisConfig", CompletionItemKind.keyword.opt),
 				CompletionItem("analysis.config.ModuleFilters", CompletionItemKind.keyword.opt, Optional!string.init,
-					("In this optional section a comma-separated list of inclusion and exclusion"
+					MarkupContent("In this optional section a comma-separated list of inclusion and exclusion"
 					~ " selectors can be specified for every check on which selective filtering"
 					~ " should be applied. These given selectors match on the module name and"
 					~ " partial matches (std. or .foo.) are possible. Moreover, every selectors"
@@ -670,8 +672,6 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 					document.text);
 				if (result.type == JSON_TYPE.NULL)
 					return;
-				import painlessjson : fromJSON;
-
 				dscanner.DefinitionElement[] defs = result.fromJSON!(dscanner.DefinitionElement[]);
 				ptrdiff_t di = -1;
 				FuncFinder: foreach (i, def; defs)
@@ -752,11 +752,15 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 		switch (result["type"].str)
 		{
 		case "identifiers":
-			foreach (identifier; result["identifiers"].array)
+			foreach (identifierJson; result["identifiers"].array)
 			{
 				CompletionItem item;
-				item.label = identifier["identifier"].str;
-				item.kind = identifier["type"].str.convertFromDCDType;
+				info(identifierJson);
+				dcd.DCDIdentifier identifier = identifierJson.fromJSON!(dcd.DCDIdentifier);
+				item.label = identifier.identifier;
+				item.kind = identifier.type.convertFromDCDType;
+				item.documentation = MarkupContent(identifier.documentation.ddocToMarked);
+				item.detail = identifier.definition;
 				completion ~= item;
 			}
 			goto case;
@@ -783,9 +787,10 @@ SignatureHelp provideSignatureHelp(TextDocumentPositionParams params)
 	switch (result["type"].str)
 	{
 	case "calltips":
-		foreach (calltip; result["calltips"].array)
+		foreach (i, calltip; result["calltips"].array)
 		{
 			auto sig = SignatureInformation(calltip.str);
+			sig.documentation = MarkupContent(result["symbols"]["documentation"].str.ddocToMarked);
 			auto funcParams = calltip.str.extractFunctionParameters;
 
 			paramsCounts ~= cast(int) funcParams.length - 1;

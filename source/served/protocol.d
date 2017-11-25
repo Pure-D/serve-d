@@ -757,7 +757,7 @@ struct CompletionItem
 	string label;
 	Optional!CompletionItemKind kind;
 	Optional!string detail;
-	Optional!string documentation;
+	Optional!MarkupContent documentation;
 	Optional!string sortText;
 	Optional!string filterText;
 	Optional!string insertText;
@@ -830,6 +830,41 @@ struct MarkedString
 	}
 }
 
+enum MarkupKind : string
+{
+	plaintext = "plaintext",
+	markdown = "markdown"
+}
+
+struct MarkupContent
+{
+	MarkupKind kind;
+	string value;
+
+	this(string text)
+	{
+		kind = MarkupKind.plaintext;
+		value = text;
+	}
+
+	this(MarkedString[] markup)
+	{
+		kind = MarkupKind.markdown;
+		foreach (block; markup)
+		{
+			if (block.language.length)
+			{
+				value ~= "```" ~ block.language ~ "\n";
+				value ~= block.value;
+				value ~= "```";
+			}
+			else
+				value ~= block.value;
+			value ~= "\n\n";
+		}
+	}
+}
+
 struct SignatureHelp
 {
 	SignatureInformation[] signatures;
@@ -852,14 +887,14 @@ struct SignatureHelp
 struct SignatureInformation
 {
 	string label;
-	Optional!string documentation;
+	Optional!MarkupContent documentation;
 	Optional!(ParameterInformation[]) parameters;
 }
 
 struct ParameterInformation
 {
 	string label;
-	Optional!string documentation;
+	Optional!MarkupContent documentation;
 }
 
 struct SignatureHelpRegistrationOptions
