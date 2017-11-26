@@ -32,6 +32,30 @@ struct Document
 		text = doc.text;
 	}
 
+	size_t offsetToBytes(size_t offset)
+	{
+		size_t bytes;
+		size_t index;
+		while (index < offset)
+		{
+			decode(text, bytes);
+			index++;
+		}
+		return bytes;
+	}
+
+	size_t bytesToOffset(size_t bytes)
+	{
+		size_t offset;
+		size_t index;
+		while (index < bytes)
+		{
+			decode(text, index);
+			offset++;
+		}
+		return offset;
+	}
+
 	size_t positionToOffset(Position position)
 	{
 		size_t index = 0;
