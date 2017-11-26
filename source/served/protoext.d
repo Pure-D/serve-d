@@ -19,6 +19,12 @@ struct SortImportsParams
 	int location;
 }
 
+struct ImplementMethodsParams
+{
+	TextDocumentIdentifier textDocument;
+	int location;
+}
+
 struct UpdateSettingParams
 {
 	string section;

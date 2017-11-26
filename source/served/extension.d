@@ -243,6 +243,8 @@ void startDCD()
 			config.d.dcdServerPath, cast(ushort) 9166, false);
 	if (hasDCD)
 	{
+		trace("Starting dcdext");
+		dcdext.start();
 		try
 		{
 			syncYield!(dcd.findAndSelectPort)(cast(ushort) 9166);
@@ -1041,6 +1043,25 @@ Command[] provideCodeActions(CodeActionParams params)
 	if (document.languageId != "d")
 		return [];
 	Command[] ret;
+	if (hasDCD) // check if extends
+	{
+		auto startIndex = document.positionToBytes(params.range.start);
+		auto idx = startIndex;
+		while (idx > 0)
+		{
+			if (document.text[idx] == ':')
+			{
+				// probably extends
+				if (syncYield!(dcdext.implement)(document.text, cast(int) startIndex).str.strip.length > 0)
+					ret ~= Command("Implement base classes/interfaces", "code-d.implementMethods",
+							[JSONValue(document.positionToOffset(params.range.start))]);
+				break;
+			}
+			if (document.text[idx] == ';' || document.text[idx] == '{' || document.text[idx] == '}')
+				break;
+			idx--;
+		}
+	}
 	foreach (diagnostic; params.context.diagnostics)
 	{
 		if (diagnostic.source == DubDiagnosticSource)
@@ -1050,8 +1071,8 @@ Command[] provideCodeActions(CodeActionParams params)
 			{
 				if (!match)
 					continue;
-				return [Command("Import " ~ match[1], "code-d.addImport",
-						[JSONValue(match[1]), JSONValue(document.positionToOffset(params.range[0]))])];
+				ret ~= Command("Import " ~ match[1], "code-d.addImport",
+						[JSONValue(match[1]), JSONValue(document.positionToOffset(params.range[0]))]);
 			}
 			else if (cast(bool)(match = diagnostic.message.matchFirst(undefinedIdentifier))
 					|| cast(bool)(match = diagnostic.message.matchFirst(undefinedTemplate))
@@ -1191,13 +1212,71 @@ TextEdit[] sortImports(SortImportsParams params)
 {
 	auto document = documents[params.textDocument.uri];
 	TextEdit[] ret;
-	auto sorted = importer.sortImports(document.text, params.location);
+	auto sorted = importer.sortImports(document.text,
+			cast(int) document.offsetToBytes(params.location));
 	if (sorted == importer.ImportBlock.init)
 		return ret;
 	auto start = document.bytesToPosition(sorted.start);
 	auto end = document.bytesToPosition(sorted.end);
 	string code = sorted.imports.to!(string[]).join(document.eolAt(0).toString);
 	return [TextEdit(TextRange(start, end), code)];
+}
+
+@protocolMethod("served/implementMethods")
+TextEdit[] implementMethods(ImplementMethodsParams params)
+{
+	import std.ascii : isWhite;
+
+	require!hasDCD;
+	auto document = documents[params.textDocument.uri];
+	TextEdit[] ret;
+	auto location = document.offsetToBytes(params.location);
+	auto code = syncYield!(dcdext.implement)(document.text, cast(int) location).str.strip;
+	if (!code.length)
+		return ret;
+	auto brace = document.text.indexOf('{', location);
+	auto fallback = brace;
+	if (brace == -1)
+		brace = document.text.length;
+	else
+	{
+		fallback = document.text.indexOf('\n', location);
+		brace = document.text.indexOfAny("}\n", brace);
+		if (brace == -1)
+			brace = document.text.length;
+	}
+	code = "\n\t" ~ code.replace("\n", document.eolAt(0).toString ~ "\t") ~ "\n";
+	bool inIdentifier = true;
+	int depth = 0;
+	foreach (i; location .. brace)
+	{
+		if (document.text[i].isWhite)
+			inIdentifier = false;
+		else if (document.text[i] == '{')
+			break;
+		else if (document.text[i] == ',' || document.text[i] == '!')
+			inIdentifier = true;
+		else if (document.text[i] == '(')
+			depth++;
+		else
+		{
+			if (depth > 0)
+			{
+				inIdentifier = true;
+				if (document.text[i] == ')')
+					depth--;
+			}
+			else if (!inIdentifier)
+			{
+				if (fallback != -1)
+					brace = fallback;
+				code = "\n{" ~ code ~ "}";
+				break;
+			}
+		}
+	}
+	auto pos = document.bytesToPosition(brace);
+	return [TextEdit(TextRange(pos, pos), code)];
 }
 
 @protocolMethod("served/restartServer")
