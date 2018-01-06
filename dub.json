@@ -7,7 +7,7 @@
 		"eventsystem": "~>1.2.0",
 		"painlessjson": "~>1.3.8",
 		"libddoc": "~>0.2.0",
-		"fluent-asserts": "~>0.7.0"
+		"fluent-asserts": "~>0.8.5"
 	},
 	"stringImportPaths": [
 		"views"
