@@ -7,7 +7,8 @@ import core.sync.mutex;
 import std.algorithm;
 import std.array;
 import std.conv;
-import std.datetime;
+import std.datetime.systime;
+import std.datetime.stopwatch;
 import fs = std.file;
 import std.experimental.logger;
 import std.functional;
@@ -1726,22 +1727,14 @@ bool removeDependency(string name)
 struct Timeout
 {
 	StopWatch sw;
-	int msTimeout;
+	Duration timeout;
 	void delegate() callback;
 	int id;
 }
 
 int setTimeout(void delegate() callback, int ms)
 {
-	trace("Setting timeout for ", ms, " ms");
-	Timeout to;
-	to.msTimeout = ms;
-	to.callback = callback;
-	to.sw.start();
-	to.id = ++timeoutID;
-	synchronized (timeoutsMutex)
-		timeouts ~= to;
-	return to.id;
+	return setTimeout(callback, ms.msecs);
 }
 
 void setImmediate(void delegate() callback)
@@ -1751,7 +1744,15 @@ void setImmediate(void delegate() callback)
 
 int setTimeout(void delegate() callback, Duration timeout)
 {
-	return setTimeout(callback, cast(int) timeout.total!"msecs");
+	trace("Setting timeout for ", timeout);
+	Timeout to;
+	to.timeout = timeout;
+	to.callback = callback;
+	to.sw.start();
+	to.id = ++timeoutID;
+	synchronized (timeoutsMutex)
+		timeouts ~= to;
+	return to.id;
 }
 
 void clearTimeout(int id)
@@ -1790,7 +1791,7 @@ void parallelMain()
 		synchronized (timeoutsMutex)
 			foreach_reverse (i, ref timeout; timeouts)
 			{
-				if (timeout.sw.peek.msecs >= timeout.msTimeout)
+				if (timeout.sw.peek >= timeout.timeout)
 				{
 					timeout.sw.stop();
 					timeout.callback();
