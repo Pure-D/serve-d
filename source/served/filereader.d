@@ -53,6 +53,11 @@ class FileReader : Thread
 		}
 	}
 
+	void stop()
+	{
+		file.close();
+	}
+
 private:
 	void run()
 	{
@@ -64,4 +69,5 @@ private:
 	ubyte[] data;
 	File file;
 	Mutex mutex;
+	bool running;
 }

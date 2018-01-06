@@ -29,6 +29,8 @@ import workspaced.coms;
 import served.linters.dub : DubDiagnosticSource;
 
 bool hasDCD, hasDub, hasDscanner;
+/// Set to true when shutdown is called
+__gshared bool shutdownRequested;
 
 void require(alias val)()
 {
@@ -362,6 +364,7 @@ bool compileDependency(string cwd, string name, string gitURI, string[][] comman
 @protocolMethod("shutdown")
 JSONValue shutdown()
 {
+	shutdownRequested = true;
 	if (hasDub)
 		dub.stop();
 	if (hasDCD)
@@ -372,6 +375,9 @@ JSONValue shutdown()
 	dlangui.stop();
 	importer.stop();
 	moduleman.stop();
+	served.extension.setTimeout({
+		throw new Error("RPC still running 1s after shutdown");
+	}, 1.seconds);
 	return JSONValue(null);
 }
 

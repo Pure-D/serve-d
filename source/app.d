@@ -101,7 +101,9 @@ ResponseMessage processRequest(RequestMessage msg)
 
 void processNotify(RequestMessage msg)
 {
-	if (msg.method == "exit")
+	// even though the spec says the process should not stop before exit, vscode-languageserver doesn't call exit after shutdown so we just shutdown on the next request.
+	// this also makes sure we don't operate on invalid states and segfault.
+	if (msg.method == "exit" || served.extension.shutdownRequested)
 	{
 		rpc.stop();
 		return;
@@ -160,7 +162,7 @@ void printVersion()
 }
 
 __gshared FiberManager fibers;
-void main(string[] args)
+int main(string[] args)
 {
 	debug globalLogLevel = LogLevel.trace;
 
@@ -178,12 +180,12 @@ void main(string[] args)
 		if (printVer)
 			printVersion();
 		defaultGetoptPrinter("workspace-d / vscode-language-server bridge", argInfo.options);
-		return;
+		return 0;
 	}
 	if (printVer)
 	{
 		printVersion();
-		return;
+		return 0;
 	}
 
 	if (lang.length >= 2) // ja-JP -> ja, en-GB -> en, etc
@@ -202,6 +204,8 @@ void main(string[] args)
 
 	auto input = new FileReader(stdin);
 	input.start();
+	scope (exit)
+		input.stop();
 	trace("Started reading from stdin");
 
 	rpc = new RPCProcessor(input, stdout);
@@ -254,6 +258,8 @@ void main(string[] args)
 		synchronized (fibersMutex)
 			fibers.call();
 	}
+
+	return served.extension.shutdownRequested ? 0 : 1;
 }
 
 __gshared Mutex fibersMutex;
