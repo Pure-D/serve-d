@@ -293,9 +293,12 @@ void updateDCD()
 	string outputFolder = determineOutputFolder;
 	if (!fs.exists(outputFolder))
 		fs.mkdirRecurse(outputFolder);
+	string[] platformOptions;
+	version (Windows)
+		platformOptions = ["--arch=x86_mscoff"];
 	bool success = compileDependency(outputFolder, "DCD", "https://github.com/Hackerpilot/DCD.git", [[config.git.path,
 			"submodule", "update", "--init", "--recursive"], ["dub", "build",
-			"--config=client"], ["dub", "build", "--config=server"]]);
+			"--config=client"] ~ platformOptions, ["dub", "build", "--config=server"] ~ platformOptions]);
 	if (success)
 	{
 		string ext = "";
