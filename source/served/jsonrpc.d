@@ -189,14 +189,15 @@ private:
 		{
 			bool inHeader = true;
 			size_t contentLength = 0;
-			while (inHeader)
+			do // dmd -O has an issue on mscoff where it forgets to emit a cmp here so this would break with while (inHeader)
 			{
 				string line = reader.yieldLine;
-				if (line == "")
+				if (!line.length && contentLength > 0)
 					inHeader = false;
 				else if (line.startsWith("Content-Length:"))
 					contentLength = line["Content-Length:".length .. $].strip.to!size_t;
-			}
+			} while (inHeader);
+			assert(contentLength > 0);
 			auto content = cast(string) reader.yieldData(contentLength);
 			assert(content.length == contentLength);
 			RequestMessage request;
