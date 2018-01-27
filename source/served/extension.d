@@ -1053,7 +1053,7 @@ Command[] provideCodeActions(CodeActionParams params)
 	if (hasDCD) // check if extends
 	{
 		auto startIndex = document.positionToBytes(params.range.start);
-		auto idx = min(cast(long) startIndex, cast(long) document.text.length - 1);
+		ptrdiff_t idx = min(cast(ptrdiff_t) startIndex, cast(ptrdiff_t) document.text.length - 1);
 		while (idx > 0)
 		{
 			if (document.text[idx] == ':')
