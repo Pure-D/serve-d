@@ -844,12 +844,18 @@ SignatureHelp provideSignatureHelp(TextDocumentPositionParams params)
 	switch (result["type"].str)
 	{
 	case "calltips":
+		// calltips:[string], symbols:[{file:string, location:number, documentation:string}]
 		foreach (i, calltip; result["calltips"].array)
 		{
 			auto sig = SignatureInformation(calltip.str);
-			string doc = result["symbols"]["documentation"].str;
-			if (doc.length)
-				sig.documentation = MarkupContent(doc.ddocToMarked);
+			auto symbols = "symbols" in result;
+			if (symbols && symbols.type == JSON_TYPE.ARRAY && i < symbols.array.length)
+			{
+				auto symbol = symbols.array[i];
+				auto doc = "documentation" in symbol;
+				if (doc && doc.str.length)
+					sig.documentation = MarkupContent(doc.str.ddocToMarked);
+			}
 			auto funcParams = calltip.str.extractFunctionParameters;
 
 			paramsCounts ~= cast(int) funcParams.length - 1;
