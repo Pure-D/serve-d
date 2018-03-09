@@ -196,7 +196,12 @@ $(BODY)`,
 
 unittest
 {
-	import fluent.asserts;
+	void assertEqual(A, B)(A a, B b)
+	{
+		import std.conv : to;
+
+		assert(a == b, a.to!string ~ " is not equal to " ~ b.to!string);
+	}
 
 	auto md = ddocToMarkdown(`&#36;(D something, else) is *a
 ------------
@@ -208,7 +213,7 @@ Params:
 	a = $(B param)
 Returns:
 	nothing of consequence`);
-	Assert.equal(md, "$(D something, else) is *a
+	assertEqual(md, "$(D something, else) is *a
 
 ```d
 test

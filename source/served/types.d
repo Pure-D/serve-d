@@ -167,11 +167,16 @@ string uriToFile(DocumentUri uri)
 {
 	void testUri(string a, string b)
 	{
-		import fluent.asserts;
+		void assertEqual(A, B)(A a, B b)
+		{
+			import std.conv : to;
 
-		Assert.equal(a.uriFromFile, b);
-		Assert.equal(a, b.uriToFile);
-		Assert.equal(a.uriFromFile.uriToFile, a);
+			assert(a == b, a.to!string ~ " is not equal to " ~ b.to!string);
+		}
+
+		assertEqual(a.uriFromFile, b);
+		assertEqual(a, b.uriToFile);
+		assertEqual(a.uriFromFile.uriToFile, a);
 	}
 
 	testUri(`/home/pi/.bashrc`, `file:///home/pi/.bashrc`);

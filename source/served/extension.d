@@ -591,22 +591,27 @@ string[] extractFunctionParameters(string sig, bool exact = false)
 
 unittest
 {
-	import fluent.asserts;
+	void assertEqual(A, B)(A a, B b)
+	{
+		import std.conv : to;
 
-	Assert.equal(extractFunctionParameters("void foo()"), cast(string[])[]);
-	Assert.equal(extractFunctionParameters(`auto bar(int foo, Button, my.Callback cb)`),
+		assert(a == b, a.to!string ~ " is not equal to " ~ b.to!string);
+	}
+
+	assertEqual(extractFunctionParameters("void foo()"), cast(string[])[]);
+	assertEqual(extractFunctionParameters(`auto bar(int foo, Button, my.Callback cb)`),
 			["int foo", "Button", "my.Callback cb"]);
-	Assert.equal(extractFunctionParameters(`SomeType!(int, "int_") foo(T, Args...)(T a, T b, string[string] map, Other!"(" stuff1, SomeType!(double, ")double") myType, Other!"(" stuff, Other!")")`),
+	assertEqual(extractFunctionParameters(`SomeType!(int, "int_") foo(T, Args...)(T a, T b, string[string] map, Other!"(" stuff1, SomeType!(double, ")double") myType, Other!"(" stuff, Other!")")`),
 			["T a", "T b", "string[string] map", `Other!"(" stuff1`,
 			`SomeType!(double, ")double") myType`, `Other!"(" stuff`, `Other!")"`]);
-	Assert.equal(extractFunctionParameters(`SomeType!(int,"int_")foo(T,Args...)(T a,T b,string[string] map,Other!"(" stuff1,SomeType!(double,")double")myType,Other!"(" stuff,Other!")")`),
+	assertEqual(extractFunctionParameters(`SomeType!(int,"int_")foo(T,Args...)(T a,T b,string[string] map,Other!"(" stuff1,SomeType!(double,")double")myType,Other!"(" stuff,Other!")")`),
 			["T a", "T b", "string[string] map", `Other!"(" stuff1`,
 			`SomeType!(double,")double")myType`, `Other!"(" stuff`, `Other!")"`]);
-	Assert.equal(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4`,
+	assertEqual(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4`,
 			true), [`4`]);
-	Assert.equal(extractFunctionParameters(
+	assertEqual(extractFunctionParameters(
 			`some_garbage(code); before(this); funcCall(4, f(4)`, true), [`4`, `f(4)`]);
-	Assert.equal(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4, ["a"], JSONValue(["b": JSONValue("c")]), recursive(func, call!s()), "texts )\"(too"`,
+	assertEqual(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4, ["a"], JSONValue(["b": JSONValue("c")]), recursive(func, call!s()), "texts )\"(too"`,
 			true), [`4`, `["a"]`, `JSONValue(["b": JSONValue("c")])`,
 			`recursive(func, call!s())`, `"texts )\"(too"`]);
 }

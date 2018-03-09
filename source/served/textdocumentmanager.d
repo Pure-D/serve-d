@@ -176,20 +176,25 @@ struct Document
 
 	unittest
 	{
-		import fluent.asserts;
+		void assertEqual(A, B)(A a, B b)
+		{
+			import std.conv : to;
+
+			assert(a == b, a.to!string ~ " is not equal to " ~ b.to!string);
+		}
 
 		Document doc;
 		doc.text = `abc
 hellö world
 how åre
 you?`;
-		Assert.equal(doc.lineAt(Position(0, 0)), "abc\n");
-		Assert.equal(doc.lineAt(Position(0, 100)), "abc\n");
-		Assert.equal(doc.lineAt(Position(1, 3)), "hellö world\n");
-		Assert.equal(doc.lineAt(Position(2, 0)), "how åre\n");
-		Assert.equal(doc.lineAt(Position(3, 0)), "you?");
-		Assert.equal(doc.lineAt(Position(3, 8)), "you?");
-		Assert.equal(doc.lineAt(Position(4, 0)), "");
+		assertEqual(doc.lineAt(Position(0, 0)), "abc\n");
+		assertEqual(doc.lineAt(Position(0, 100)), "abc\n");
+		assertEqual(doc.lineAt(Position(1, 3)), "hellö world\n");
+		assertEqual(doc.lineAt(Position(2, 0)), "how åre\n");
+		assertEqual(doc.lineAt(Position(3, 0)), "you?");
+		assertEqual(doc.lineAt(Position(3, 8)), "you?");
+		assertEqual(doc.lineAt(Position(4, 0)), "");
 	}
 
 	EolType eolAt(int line)
