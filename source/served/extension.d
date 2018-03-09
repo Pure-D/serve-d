@@ -96,13 +96,13 @@ void changedConfig(string[] paths)
 			break;
 		case "d.dubArchType":
 			if (hasDub && config.d.dubArchType.length
-					&& !dub.setArchType(JSONValue(config.d.dubArchType)))
+					&& !dub.setArchType(JSONValue(["arch-type" : JSONValue(config.d.dubArchType)])))
 				rpc.window.showErrorMessage(
 						translate!"d.ext.config.invalid.archType"(config.d.dubArchType));
 			break;
 		case "d.dubBuildType":
 			if (hasDub && config.d.dubBuildType.length
-					&& !dub.setBuildType(JSONValue(config.d.dubBuildType)))
+					&& !dub.setBuildType(JSONValue(["build-type" : JSONValue(config.d.dubBuildType)])))
 				rpc.window.showErrorMessage(
 						translate!"d.ext.config.invalid.buildType"(config.d.dubBuildType));
 			break;
