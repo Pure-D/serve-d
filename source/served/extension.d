@@ -1089,11 +1089,22 @@ Command[] provideCodeActions(CodeActionParams params)
 				ret ~= Command("Import " ~ match[1], "code-d.addImport",
 						[JSONValue(match[1]), JSONValue(document.positionToOffset(params.range[0]))]);
 			}
-			else if (cast(bool)(match = diagnostic.message.matchFirst(undefinedIdentifier))
+			else /*if (cast(bool)(match = diagnostic.message.matchFirst(undefinedIdentifier))
 					|| cast(bool)(match = diagnostic.message.matchFirst(undefinedTemplate))
-					|| cast(bool)(match = diagnostic.message.matchFirst(noProperty)))
+					|| cast(bool)(match = diagnostic.message.matchFirst(noProperty)))*/
 			{
+				// temporary fix for https://issues.dlang.org/show_bug.cgi?id=18565
 				string[] files;
+				string[] modules;
+				int lineNo;
+				match = diagnostic.message.matchFirst(undefinedIdentifier);
+				if (match) goto start;
+				match = diagnostic.message.matchFirst(undefinedTemplate);
+				if (match) goto start;
+				match = diagnostic.message.matchFirst(noProperty);
+				if (match) goto start;
+				goto noMatch;
+			start:
 				joinAll({
 					if (hasDscanner)
 						files ~= syncYield!(dscanner.findSymbol)(match[1]).array.map!"a[`file`].str".array;
@@ -1101,12 +1112,11 @@ Command[] provideCodeActions(CodeActionParams params)
 					if (hasDCD)
 						files ~= syncYield!(dcd.searchSymbol)(match[1]).array.map!"a[`file`].str".array;
 				});
-				string[] modules;
 				foreach (file; files.sort().uniq)
 				{
 					if (!isAbsolute(file))
 						file = buildNormalizedPath(workspaceRoot, file);
-					int lineNo = 0;
+					lineNo = 0;
 					foreach (line; io.File(file).byLine)
 					{
 						if (++lineNo >= 100)
@@ -1122,6 +1132,7 @@ Command[] provideCodeActions(CodeActionParams params)
 				foreach (mod; modules.sort().uniq)
 					ret ~= Command("Import " ~ mod, "code-d.addImport", [JSONValue(mod),
 							JSONValue(document.positionToOffset(params.range[0]))]);
+			noMatch:
 			}
 		}
 		else
