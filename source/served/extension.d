@@ -1053,8 +1053,7 @@ Hover provideHover(TextDocumentPositionParams params)
 	return ret;
 }
 
-private auto importRegex = regex(
-		`import ([a-zA-Z_]\w*(?:\.\w*[a-zA-Z_]\w*)*)?(\s*\:\s*(?:[a-zA-Z_,\s=]*(?://.*?[\r\n]|/\*.*?\*/|/\+.*?\+/)?)+)?;`);
+private auto importRegex = regex(`import\s+(?:[a-zA-Z_]+\s*=\s*)?([a-zA-Z_]\w*(?:\.\w*[a-zA-Z_]\w*)*)?(\s*\:\s*(?:[a-zA-Z_,\s=]*(?://.*?[\r\n]|/\*.*?\*/|/\+.*?\+/)?)+)?;?`);
 private auto undefinedIdentifier = regex(
 		`^undefined identifier '(\w+)'(?:, did you mean .*? '(\w+)'\?)?$`);
 private auto undefinedTemplate = regex(`template '(\w+)' is not defined`);
