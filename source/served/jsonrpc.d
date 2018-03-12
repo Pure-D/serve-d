@@ -196,7 +196,8 @@ private:
 					inHeader = false;
 				else if (line.startsWith("Content-Length:"))
 					contentLength = line["Content-Length:".length .. $].strip.to!size_t;
-			} while (inHeader);
+			}
+			while (inHeader);
 			assert(contentLength > 0);
 			auto content = cast(string) reader.yieldData(contentLength);
 			assert(content.length == contentLength);

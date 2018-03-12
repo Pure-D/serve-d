@@ -26,7 +26,7 @@ class FileReader : Thread
 				index = data.countUntil([cast(ubyte) '\r', cast(ubyte) '\n']);
 				if (index != -1)
 				{
-					ret = cast(string)data[0 .. index].dup;
+					ret = cast(string) data[0 .. index].dup;
 					data = data[index + 2 .. $];
 					break;
 				}

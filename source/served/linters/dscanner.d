@@ -30,7 +30,8 @@ void lint(Document document)
 			auto s = issue["description"].str;
 			if (s.startsWith("Line is longer than ") && s.endsWith(" characters"))
 				d.range = TextRange(Position(cast(uint) issue["line"].integer - 1,
-						s["Line is longer than ".length .. $ - " characters".length].to!uint), Position(cast(uint) issue["line"].integer - 1, 1000));
+						s["Line is longer than ".length .. $ - " characters".length].to!uint),
+						Position(cast(uint) issue["line"].integer - 1, 1000));
 			else
 				d.range = TextRange(Position(cast(uint) issue["line"].integer - 1,
 						cast(uint) issue["column"].integer - 1));
@@ -52,4 +53,3 @@ void lint(Document document)
 	diagnostics[DiagnosticSlot] ~= PublishDiagnosticsParams(document.uri, result);
 	updateDiagnostics(document.uri);
 }
- 
