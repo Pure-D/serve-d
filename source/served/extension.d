@@ -1226,7 +1226,8 @@ int getImportCompilationTime(string code, string module_)
 	{
 		if (exist.code != code)
 			continue;
-		if (now - exist.at < (exist.ret >= 30 ? 60.seconds : 20.seconds) || module_.startsWith("std."))
+		if (now - exist.at < (exist.ret >= 500 ? 10.minutes : exist.ret >= 30
+				? 60.seconds : 20.seconds) || module_.startsWith("std."))
 			return exist.ret;
 		else
 		{
