@@ -184,11 +184,14 @@ InitializeResult initialize(InitializeParams params)
 	result.capabilities.definitionProvider = true;
 	result.capabilities.hoverProvider = true;
 	result.capabilities.codeActionProvider = true;
+	result.capabilities.codeLensProvider = CodeLensOptions(true);
 
 	result.capabilities.documentSymbolProvider = true;
 
 	result.capabilities.documentFormattingProvider = true;
 
+	trace("Starting dmd");
+	dmd.start(workspaceRoot, config.d.dmdPath);
 	trace("Starting dscanner");
 	dscanner.start(workspaceRoot);
 	hasDscanner = true;
@@ -374,6 +377,7 @@ JSONValue shutdown()
 		dcd.stop();
 	if (hasDscanner)
 		dscanner.stop();
+	dmd.stop();
 	dfmt.stop();
 	dlangui.stop();
 	importer.stop();
@@ -609,8 +613,8 @@ unittest
 			`SomeType!(double,")double")myType`, `Other!"(" stuff`, `Other!")"`]);
 	assertEqual(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4`,
 			true), [`4`]);
-	assertEqual(extractFunctionParameters(
-			`some_garbage(code); before(this); funcCall(4, f(4)`, true), [`4`, `f(4)`]);
+	assertEqual(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4, f(4)`,
+			true), [`4`, `f(4)`]);
 	assertEqual(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4, ["a"], JSONValue(["b": JSONValue("c")]), recursive(func, call!s()), "texts )\"(too"`,
 			true), [`4`, `["a"]`, `JSONValue(["b": JSONValue("c")])`,
 			`recursive(func, call!s())`, `"texts )\"(too"`]);
@@ -1049,7 +1053,8 @@ Hover provideHover(TextDocumentPositionParams params)
 	return ret;
 }
 
-private auto importRegex = regex(`import ([a-zA-Z_]\w*(?:\.[a-zA-Z_]\w*)*)?`);
+private auto importRegex = regex(
+		`import ([a-zA-Z_]\w*(?:\.\w*[a-zA-Z_]\w*)*)?(\s*\:\s*(?:[a-zA-Z_,\s=]*(?://.*?[\r\n]|/\*.*?\*/|/\+.*?\+/)?)+)?;`);
 private auto undefinedIdentifier = regex(
 		`^undefined identifier '(\w+)'(?:, did you mean .*? '(\w+)'\?)?$`);
 private auto undefinedTemplate = regex(`template '(\w+)' is not defined`);
@@ -1104,11 +1109,14 @@ Command[] provideCodeActions(CodeActionParams params)
 				string[] modules;
 				int lineNo;
 				match = diagnostic.message.matchFirst(undefinedIdentifier);
-				if (match) goto start;
+				if (match)
+					goto start;
 				match = diagnostic.message.matchFirst(undefinedTemplate);
-				if (match) goto start;
+				if (match)
+					goto start;
 				match = diagnostic.message.matchFirst(noProperty);
-				if (match) goto start;
+				if (match)
+					goto start;
 				goto noMatch;
 			start:
 				joinAll({
@@ -1153,6 +1161,88 @@ Command[] provideCodeActions(CodeActionParams params)
 		}
 	}
 	return ret;
+}
+
+@protocolMethod("textDocument/codeLens")
+CodeLens[] provideCodeLens(CodeLensParams params)
+{
+	auto document = documents[params.textDocument.uri];
+	if (document.languageId != "d")
+		return [];
+	CodeLens[] ret;
+	if (config.d.enableDMDImportTiming)
+		foreach (match; document.text.matchAll(importRegex))
+		{
+			size_t index = match.pre.length;
+			auto pos = document.bytesToPosition(index);
+			ret ~= CodeLens(TextRange(pos), Optional!Command.init, JSONValue(["type"
+					: JSONValue("importcompilecheck"), "code" : JSONValue(match.hit),
+					"module" : JSONValue(match[1])]));
+		}
+	return ret;
+}
+
+@protocolMethod("codeLens/resolve")
+CodeLens resolveCodeLens(CodeLens lens)
+{
+	if (lens.data.type != JSON_TYPE.OBJECT)
+		throw new Exception("Invalid Lens Object");
+	auto type = "type" in lens.data;
+	if (!type)
+		throw new Exception("No type in Lens Object");
+	switch (type.str)
+	{
+	case "importcompilecheck":
+		auto code = "code" in lens.data;
+		if (!code || code.type != JSON_TYPE.STRING || !code.str.length)
+			throw new Exception("No valid code provided");
+		auto module_ = "module" in lens.data;
+		if (!module_ || module_.type != JSON_TYPE.STRING || !module_.str.length)
+			throw new Exception("No valid module provided");
+		int decMs = getImportCompilationTime(code.str, module_.str);
+		lens.command = Command((decMs < 10 ? "no noticable effect"
+				: "~" ~ decMs.to!string ~ "ms") ~ " for importing this");
+		return lens;
+	default:
+		throw new Exception("Unknown lens type");
+	}
+}
+
+int getImportCompilationTime(string code, string module_)
+{
+	import std.math : round;
+
+	static struct CompileCache
+	{
+		SysTime at;
+		string code;
+		int ret;
+	}
+
+	static CompileCache[] cache;
+
+	auto now = Clock.currTime;
+
+	foreach_reverse (i, exist; cache)
+	{
+		if (exist.code != code)
+			continue;
+		if (now - exist.at < (exist.ret >= 30 ? 60.seconds : 20.seconds) || module_.startsWith("std."))
+			return exist.ret;
+		else
+		{
+			cache[i] = cache[$ - 1];
+			cache.length--;
+		}
+	}
+
+	// run blocking so we don't compute multiple in parallel
+	auto ret = dmd.measureSync(code, null, 20, 500);
+	if (!ret.success)
+		throw new Exception("Compilation failed");
+	auto msecs = cast(int) round(ret.duration.total!"msecs" / 5.0) * 5;
+	cache ~= CompileCache(now, code, msecs);
+	return msecs;
 }
 
 @protocolMethod("served/listConfigurations")
