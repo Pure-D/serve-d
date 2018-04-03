@@ -350,7 +350,14 @@ bool compileDependency(string cwd, string name, string gitURI, string[][] comman
 		if (fs.exists(newCwd))
 		{
 			rpc.notifyMethod("coded/logInstall", "Deleting old installation from " ~ newCwd);
-			fs.rmdirRecurse(newCwd);
+			try
+			{
+				fs.rmdirRecurse(newCwd);
+			}
+			catch (Exception)
+			{
+				rpc.notifyMethod("coded/logInstall", "WARNING: Failed to delete " ~ newCmd);
+			}
 		}
 		auto ret = run([config.git.path, "clone", "--recursive", "--depth=1", gitURI, name], cwd);
 		if (ret != 0)
