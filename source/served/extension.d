@@ -245,6 +245,8 @@ void handleBroadcast(JSONValue data)
 
 void startDCD()
 {
+	if (shutdownRequested)
+		return;
 	hasDCD = safe!(dcd.start)(workspaceRoot, config.d.dcdClientPath,
 			config.d.dcdServerPath, cast(ushort) 9166, false);
 	if (hasDCD)

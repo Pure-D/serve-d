@@ -106,6 +106,8 @@ void processNotify(RequestMessage msg)
 	if (msg.method == "exit" || served.extension.shutdownRequested)
 	{
 		rpc.stop();
+		if (!served.extension.shutdownRequested)
+			served.extension.shutdown();
 		return;
 	}
 	if (msg.method == "workspace/didChangeConfiguration")
