@@ -330,16 +330,31 @@ bool compileDependency(string cwd, string name, string gitURI, string[][] comman
 
 	int run(string[] cmd, string cwd)
 	{
+		import core.thread;
+
 		rpc.notifyMethod("coded/logInstall", "> " ~ cmd.join(" "));
 		auto stdin = pipe();
 		auto stdout = pipe();
 		auto pid = spawnProcess(cmd, stdin.readEnd, stdout.writeEnd,
 				stdout.writeEnd, null, Config.none, cwd);
 		stdin.writeEnd.close();
-		while (!pid.tryWait().terminated)
+		size_t i;
+		string[] lines;
+		bool done;
+		new Thread({
+			scope (exit)
+				done = true;
+			foreach (line; stdout.readEnd.byLine)
+				lines ~= line.idup;
+		}).start();
+		while (!pid.tryWait().terminated || !done || i < lines.length)
+		{
+			if (i < lines.length)
+			{
+				rpc.notifyMethod("coded/logInstall", lines[i++]);
+			}
 			Fiber.yield();
-		foreach (line; stdout.readEnd.byLine)
-			rpc.notifyMethod("coded/logInstall", line.idup);
+		}
 		return pid.wait;
 	}
 
