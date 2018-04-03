@@ -312,7 +312,7 @@ void updateDCD()
 			finalDestinationClient = buildPath(outputFolder, "DCD", "bin", "dcd-client" ~ ext);
 		string finalDestinationServer = buildPath(outputFolder, "DCD", "dcd-server" ~ ext);
 		if (!fs.exists(finalDestinationServer))
-			finalDestinationServer = buildPath(outputFolder, "DCD", "bin", "dcd-client" ~ ext);
+			finalDestinationServer = buildPath(outputFolder, "DCD", "bin", "dcd-server" ~ ext);
 		config.d.dcdClientPath = finalDestinationClient;
 		config.d.dcdServerPath = finalDestinationServer;
 		rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("dcdClientPath",
