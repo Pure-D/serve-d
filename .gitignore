@@ -8,3 +8,5 @@ dub.selections.json
 /serve-d
 *.dll
 *.exe
+*.tar.xz
+*.zip
