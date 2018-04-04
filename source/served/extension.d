@@ -296,6 +296,8 @@ void updateDCD()
 {
 	rpc.notifyMethod("coded/logInstall", "Installing DCD");
 	string outputFolder = determineOutputFolder;
+	if (fs.exists(outputFolder))
+		rmdirRecurseForce(outputFolder);
 	if (!fs.exists(outputFolder))
 		fs.mkdirRecurse(outputFolder);
 	string[] platformOptions;
@@ -369,7 +371,7 @@ bool compileDependency(string cwd, string name, string gitURI, string[][] comman
 			rpc.notifyMethod("coded/logInstall", "Deleting old installation from " ~ newCwd);
 			try
 			{
-				fs.rmdirRecurse(newCwd);
+				rmdirRecurseForce(newCwd);
 			}
 			catch (Exception)
 			{
