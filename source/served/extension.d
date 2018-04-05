@@ -17,6 +17,7 @@ import std.path;
 import std.regex;
 import io = std.stdio;
 import std.string;
+import rm.rf;
 
 import served.ddoc;
 import served.fibermanager;
