@@ -1,3 +1,3 @@
 module source.served.info;
 
-static immutable Version = [0, 1, 2];
+static immutable Version = [0, 1, 3];
