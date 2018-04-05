@@ -161,6 +161,8 @@ void printVersion()
 
 	io.writefln("serve-d v%(%s.%) with workspace-d v%(%s.%)", Version, WorkspacedVersion);
 	io.writefln("Included features: %(%s, %)", IncludedFeatures);
+	// There will always be a line which starts with `Built: ` forever, it is considered stable. If there is no line, assume version 0.1.2
+	io.writefln("Built: %s", __TIMESTAMP__);
 }
 
 __gshared FiberManager fibers;
