@@ -48,7 +48,7 @@ d.config.enableSDLLinting: If code-d should report errors in your dub.sdl file.
 d.config.enableDubLinting: If code-d should build on save to check for compile errors.
 d.config.enableAutoComplete: Start dcd-server at startup and complete using dcd-client.
 d.config.neverUseDub: If this is true then a custom workspace where you manually provide the import paths will always be used instead of dub. See d.projectImportPaths for setting import paths then. This is discouraged as it will remove most features like packages, building & compiler linting. If this is a standalone project with no external dependencies with a custom build system then this should be true.
-d.config.projectImportPaths: Setting for import paths in your workspace if not using dub. This will replace other paths. Its recommended to set this in your workspace settings instead of your user settings to keep it separate for each project.
+d.config.projectImportPaths: Setting for import paths in your workspace if not using dub. This will replace other paths. It's recommended to set this in your workspace settings instead of your user settings to keep it separate for each project.
 d.config.dubConfiguration: Sets the default configuration to use when starting up
 d.config.dubArchType: Sets the default arch type to use when starting up
 d.config.dubBuildType: Sets the default build type to use when starting up
@@ -77,7 +77,7 @@ d.ext.noConfigurations.project: No configurations available for this project. Au
 d.ext.compilerFail: Could not switch compiler
 d.ext.archFail: Could not switch arch type
 d.ext.ultimateArchFail: Failed to switch arch type. See console for details.
-d.ext.dcdUpdateFail: Could not update DCD. Please restart DCD if its not working properly
+d.ext.dcdUpdateFail: Could not update DCD. Please restart DCD if it's not working properly
 d.ext.workspacedUnresponsive: workspace-d is unresponsive. Auto completion could be broken!
 d.ext.workspacedUnkillable: Could not kill workspace-d. Please manually kill it! PID: {0}
 d.ext.workspacedOutdated.major: workspace-d is outdated! Please update to continue using this plugin. (target={0}, workspaced={1})

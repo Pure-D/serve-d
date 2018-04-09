@@ -13,6 +13,7 @@ shared static this()
 	translations = [
 		"en" : parseTranslation!(import("en.txt")),
 		"de" : parseTranslation!(import("de.txt")),
+		"fr" : parseTranslation!(import("fr.txt")),
 		"ja" : parseTranslation!(import("ja.txt"))
 	];
 	//dfmt on
