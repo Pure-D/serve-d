@@ -135,17 +135,52 @@ string[] getPossibleSourceRoots()
 	return [workspaceRoot];
 }
 
-__gshared bool initialStart = true;
+__gshared bool syncedConfiguration = false;
+__gshared bool skippedStart = false;
 InitializeResult initialize(InitializeParams params)
 {
-	import std.file;
+	import std.file : chdir;
 
-	trace("Initializing serve-d for " ~ params.rootPath);
-
-	initialStart = true;
-	crossThreadBroadcastCallback = &handleBroadcast;
 	workspaceRoot = params.rootPath;
 	chdir(workspaceRoot);
+
+	if (syncedConfiguration)
+		doStartup();
+	else
+	skippedStart = true;
+
+	InitializeResult result;
+	result.capabilities.textDocumentSync = documents.syncKind;
+	result.capabilities.completionProvider = CompletionOptions(false, [".", "(", "[", "="]);
+	result.capabilities.signatureHelpProvider = SignatureHelpOptions(["(", "[", ","]);
+	result.capabilities.workspaceSymbolProvider = true;
+	result.capabilities.definitionProvider = true;
+	result.capabilities.hoverProvider = true;
+	result.capabilities.codeActionProvider = true;
+	result.capabilities.codeLensProvider = CodeLensOptions(true);
+	result.capabilities.documentSymbolProvider = true;
+	result.capabilities.documentFormattingProvider = true;
+	result.capabilities.codeActionProvider = true;
+
+	return result;
+}
+
+@protocolNotification("workspace/didChangeConfiguration")
+void configNotify(DidChangeConfigurationParams params)
+{
+	if (!syncedConfiguration && skippedStart)
+	{
+		skippedStart = false;
+		doStartup();
+	}
+	syncedConfiguration = true;
+}
+
+void doStartup()
+{
+	trace("Initializing serve-d for " ~ workspaceRoot);
+
+	crossThreadBroadcastCallback = &handleBroadcast;
 	bool disableDub = config.d.neverUseDub;
 	if (!fs.exists(buildPath(workspaceRoot, "dub.json"))
 			&& !fs.exists(buildPath(workspaceRoot, "dub.sdl"))
@@ -176,21 +211,6 @@ InitializeResult initialize(InitializeParams params)
 	else
 		setTimeout({ rpc.notifyMethod("coded/initDubTree"); }, 50);
 
-	InitializeResult result;
-	result.capabilities.textDocumentSync = documents.syncKind;
-
-	result.capabilities.completionProvider = CompletionOptions(false, [".", "(", "[", "="]);
-	result.capabilities.signatureHelpProvider = SignatureHelpOptions(["(", "[", ","]);
-	result.capabilities.workspaceSymbolProvider = true;
-	result.capabilities.definitionProvider = true;
-	result.capabilities.hoverProvider = true;
-	result.capabilities.codeActionProvider = true;
-	result.capabilities.codeLensProvider = CodeLensOptions(true);
-
-	result.capabilities.documentSymbolProvider = true;
-
-	result.capabilities.documentFormattingProvider = true;
-
 	trace("Starting dmd");
 	dmd.start(workspaceRoot, config.d.dmdPath);
 	trace("Starting dscanner");
@@ -205,19 +225,6 @@ InitializeResult initialize(InitializeParams params)
 	trace("Starting moduleman");
 	moduleman.start(workspaceRoot);
 
-	result.capabilities.codeActionProvider = true;
-
-	return result;
-}
-
-@protocolNotification("workspace/didChangeConfiguration")
-void configNotify(DidChangeConfigurationParams params)
-{
-	if (!initialStart)
-		return;
-	initialStart = false;
-
-	trace("Received configuration");
 	startDCD();
 	if (!hasDCD || dcd.isOutdated)
 	{
