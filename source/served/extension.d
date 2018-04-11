@@ -889,10 +889,13 @@ SignatureHelp provideSignatureHelp(TextDocumentPositionParams params)
 			auto symbols = "symbols" in result;
 			if (symbols && symbols.type == JSON_TYPE.ARRAY && i < symbols.array.length)
 			{
-				auto symbol = symbols.array[i];
-				auto doc = "documentation" in symbol;
-				if (doc && doc.str.length)
-					sig.documentation = MarkupContent(doc.str.ddocToMarked);
+				immutable auto symbol = symbols.array[i];
+				if (symbol.type == JSON_TYPE.OBJECT)
+				{
+					auto doc = "documentation" in symbol;
+					if (doc && doc.str.length)
+						sig.documentation = MarkupContent(doc.str.ddocToMarked);
+				}
 			}
 			auto funcParams = calltip.str.extractFunctionParameters;
 
