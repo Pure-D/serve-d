@@ -66,7 +66,7 @@ struct Optional(T)
 			return value.toJSON;
 	}
 
-	static Optional!T fromJSON(JSONValue val)
+	static Optional!T _fromJSON(JSONValue val)
 	{
 		Optional!T ret;
 		ret.isNull = false;
