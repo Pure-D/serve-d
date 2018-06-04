@@ -25,20 +25,14 @@ import served.types;
 import served.translate;
 
 import workspaced.api;
+import workspaced.com.dcd;
+import workspaced.com.importer;
 import workspaced.coms;
 
 import served.linters.dub : DubDiagnosticSource;
 
-bool hasDCD, hasDub, hasDscanner;
 /// Set to true when shutdown is called
 __gshared bool shutdownRequested;
-
-void require(alias val)()
-{
-	if (!val)
-		throw new MethodException(ResponseError(ErrorCode.serverNotInitialized,
-				val.stringof[3 .. $] ~ " isn't initialized yet"));
-}
 
 bool safe(alias fn, Args...)(Args args)
 {
@@ -59,56 +53,74 @@ bool safe(alias fn, Args...)(Args args)
 	}
 }
 
-void changedConfig(string[] paths)
+void changedConfig(string workspaceUri, string[] paths, served.types.Configuration config)
 {
+	StopWatch sw;
+	sw.start();
+
+	if (!syncedConfiguration)
+	{
+		syncedConfiguration = true;
+		doGlobalStartup();
+	}
+	Workspace* proj = &workspace(workspaceUri);
+	if (proj is &fallbackWorkspace)
+	{
+		error("Did not find workspace ", workspaceUri, " when updating config?");
+		return;
+	}
+	if (!proj.initialized)
+	{
+		doStartup(proj.folder.uri);
+		proj.initialized = true;
+	}
+
+	auto workspaceFs = workspaceUri.uriToFile;
+
 	foreach (path; paths)
 	{
 		switch (path)
 		{
 		case "d.stdlibPath":
-			if (hasDCD)
-				dcd.addImports(config.stdlibPath);
+			backend.get!DCDComponent(workspaceFs).addImports(config.stdlibPath);
 			break;
 		case "d.projectImportPaths":
-			if (hasDCD)
-				dcd.addImports(config.d.projectImportPaths);
+			backend.get!DCDComponent(workspaceFs).addImports(config.d.projectImportPaths);
 			break;
 		case "d.dubConfiguration":
-			if (hasDub)
+			auto configs = backend.get!DubComponent(workspaceFs).configurations;
+			if (configs.length == 0)
+				rpc.window.showInformationMessage(translate!"d.ext.noConfigurations.project");
+			else
 			{
-				auto configs = dub.configurations;
-				if (configs.length == 0)
-					rpc.window.showInformationMessage(translate!"d.ext.noConfigurations.project");
-				else
+				auto defaultConfig = config.d.dubConfiguration;
+				if (defaultConfig.length)
 				{
-					auto defaultConfig = config.d.dubConfiguration;
-					if (defaultConfig.length)
-					{
-						if (!configs.canFind(defaultConfig))
-							rpc.window.showErrorMessage(
-									translate!"d.ext.config.invalid.configuration"(defaultConfig));
-						else
-							dub.setConfiguration(defaultConfig);
-					}
+					if (!configs.canFind(defaultConfig))
+						rpc.window.showErrorMessage(
+								translate!"d.ext.config.invalid.configuration"(defaultConfig));
 					else
-						dub.setConfiguration(configs[0]);
+						backend.get!DubComponent(workspaceFs).setConfiguration(defaultConfig);
 				}
+				else
+					backend.get!DubComponent(workspaceFs).setConfiguration(configs[0]);
 			}
 			break;
 		case "d.dubArchType":
-			if (hasDub && config.d.dubArchType.length
-					&& !dub.setArchType(JSONValue(["arch-type" : JSONValue(config.d.dubArchType)])))
+			if (config.d.dubArchType.length && !backend.get!DubComponent(workspaceFs)
+					.setArchType(JSONValue(["arch-type" : JSONValue(config.d.dubArchType)])))
 				rpc.window.showErrorMessage(
 						translate!"d.ext.config.invalid.archType"(config.d.dubArchType));
 			break;
 		case "d.dubBuildType":
-			if (hasDub && config.d.dubBuildType.length
-					&& !dub.setBuildType(JSONValue(["build-type" : JSONValue(config.d.dubBuildType)])))
+			if (config.d.dubBuildType.length && !backend.get!DubComponent(workspaceFs)
+					.setBuildType(JSONValue(["build-type" : JSONValue(config.d.dubBuildType)])))
 				rpc.window.showErrorMessage(
 						translate!"d.ext.config.invalid.buildType"(config.d.dubBuildType));
 			break;
 		case "d.dubCompiler":
-			if (hasDub && config.d.dubCompiler.length && !dub.setCompiler(config.d.dubCompiler))
+			if (config.d.dubCompiler.length && !backend.get!DubComponent(workspaceFs)
+					.setCompiler(config.d.dubCompiler))
 				rpc.window.showErrorMessage(
 						translate!"d.ext.config.invalid.compiler"(config.d.dubCompiler));
 			break;
@@ -116,38 +128,122 @@ void changedConfig(string[] paths)
 			break;
 		}
 	}
+
+	trace("Finished config change of ", workspaceUri, " with ", paths.length,
+			" changes in ", sw.peek, ".");
 }
 
-string[] getPossibleSourceRoots()
+void processConfigChange(served.types.Configuration configuration)
+{
+	import painlessjson : fromJSON;
+
+	if (capabilities.workspace.configuration && workspaces.length >= 2)
+	{
+		ConfigurationItem[] items;
+		foreach (workspace; workspaces)
+			foreach (section; configurationSections)
+				items ~= ConfigurationItem(opt(workspace.folder.uri), opt(section));
+		auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
+		if (res.result.type == JSON_TYPE.ARRAY)
+		{
+			JSONValue[] settings = res.result.array;
+			if (settings.length % configurationSections.length != 0)
+			{
+				error("Got invalid configuration response from language client.");
+				trace("Response: ", res);
+				return;
+			}
+			for (size_t i = 0; i < settings.length; i += configurationSections.length)
+			{
+				string[] changed;
+				static foreach (n, section; configurationSections)
+					changed ~= workspaces[i / configurationSections.length].config.replaceSection!section(
+							settings[i + n].fromJSON!(configurationTypes[n]));
+				changedConfig(workspaces[i / configurationSections.length].folder.uri,
+						changed, workspaces[i / configurationSections.length].config);
+			}
+		}
+	}
+	else if (workspaces.length)
+	{
+		if (workspaces.length > 1)
+			error(
+					"Client does not support configuration request, only applying config for first workspace.");
+		served.extension.changedConfig(workspaces[0].folder.uri,
+				workspaces[0].config.replace(configuration), workspaces[0].config);
+	}
+}
+
+bool syncConfiguration(string workspaceUri)
+{
+	import painlessjson : fromJSON;
+
+	if (capabilities.workspace.configuration)
+	{
+		Workspace* proj = &workspace(workspaceUri);
+		if (proj is &fallbackWorkspace)
+		{
+			error("Did not find workspace ", workspaceUri, " when syncing config?");
+			return false;
+		}
+		ConfigurationItem[] items;
+		foreach (section; configurationSections)
+			items ~= ConfigurationItem(opt(proj.folder.uri), opt(section));
+		auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
+		if (res.result.type == JSON_TYPE.ARRAY)
+		{
+			JSONValue[] settings = res.result.array;
+			if (settings.length % configurationSections.length != 0)
+			{
+				error("Got invalid configuration response from language client.");
+				trace("Response: ", res);
+				return false;
+			}
+			string[] changed;
+			static foreach (n, section; configurationSections)
+				changed ~= proj.config.replaceSection!section(
+						settings[n].fromJSON!(configurationTypes[n]));
+			changedConfig(proj.folder.uri, changed, proj.config);
+			return true;
+		}
+		else
+			return false;
+	}
+	else
+		return false;
+}
+
+string[] getPossibleSourceRoots(string workspaceFolder)
 {
 	import std.file;
 
-	auto confPaths = config.d.projectImportPaths.map!(a => a.isAbsolute ? a
-			: buildNormalizedPath(workspaceRoot, a));
+	auto confPaths = config(workspaceFolder.uriFromFile).d.projectImportPaths.map!(
+			a => a.isAbsolute ? a : buildNormalizedPath(workspaceRoot, a));
 	if (!confPaths.empty)
 		return confPaths.array;
-	auto a = buildNormalizedPath(workspaceRoot, "source");
-	auto b = buildNormalizedPath(workspaceRoot, "src");
+	auto a = buildNormalizedPath(workspaceFolder, "source");
+	auto b = buildNormalizedPath(workspaceFolder, "src");
 	if (exists(a))
 		return [a];
 	if (exists(b))
 		return [b];
-	return [workspaceRoot];
+	return [workspaceFolder];
 }
 
 __gshared bool syncedConfiguration = false;
-__gshared bool skippedStart = false;
 InitializeResult initialize(InitializeParams params)
 {
 	import std.file : chdir;
 
-	workspaceRoot = params.rootPath;
-	chdir(workspaceRoot);
+	capabilities = params.capabilities;
+	trace("Set capabilities to ", params);
 
-	if (syncedConfiguration)
-		doStartup();
-	else
-	skippedStart = true;
+	if (params.workspaceFolders.length)
+		workspaces = params.workspaceFolders.map!(a => Workspace(a,
+				served.types.Configuration.init)).array;
+	else if (params.rootPath.length)
+		workspaces = [Workspace(WorkspaceFolder(params.rootPath.uriFromFile,
+				"Root"), served.types.Configuration.init)];
 
 	InitializeResult result;
 	result.capabilities.textDocumentSync = documents.syncKind;
@@ -161,37 +257,123 @@ InitializeResult initialize(InitializeParams params)
 	result.capabilities.documentSymbolProvider = true;
 	result.capabilities.documentFormattingProvider = true;
 	result.capabilities.codeActionProvider = true;
+	result.capabilities.workspace = opt(ServerWorkspaceCapabilities(
+			opt(ServerWorkspaceCapabilities.WorkspaceFolders(opt(true), opt(true)))));
+
+	setTimeout({
+		if (!syncedConfiguration && capabilities.workspace.configuration)
+			foreach (ref workspace; workspaces)
+				syncConfiguration(workspace.folder.uri);
+	}, 1000);
 
 	return result;
 }
 
-@protocolNotification("workspace/didChangeConfiguration")
-void configNotify(DidChangeConfigurationParams params)
+void doGlobalStartup()
 {
-	if (!syncedConfiguration && skippedStart)
+	try
 	{
-		skippedStart = false;
-		doStartup();
+		trace("Initializing serve-d for global access");
+
+		backend.globalConfiguration.base = JSONValue(["dcd" : JSONValue(["clientPath"
+				: JSONValue(firstConfig.d.dcdClientPath), "serverPath"
+				: JSONValue(firstConfig.d.dcdServerPath), "port" : JSONValue(9166)]),
+				"dmd" : JSONValue(["path" : JSONValue(firstConfig.d.dmdPath)])]);
+
+		trace("Setup global configuration as " ~ backend.globalConfiguration.base.toString);
+
+		trace("Registering dub");
+		backend.register!DubComponent(false);
+		trace("Registering fsworkspace");
+		backend.register!FSWorkspaceComponent(false);
+		trace("Registering dcd");
+		backend.register!DCDComponent(false);
+		trace("Registering dcdext");
+		backend.register!DCDExtComponent(false);
+		trace("Registering dmd");
+		backend.register!DMDComponent(false);
+		trace("Starting dscanner");
+		backend.register!DscannerComponent;
+		trace("Starting dfmt");
+		backend.register!DfmtComponent;
+		trace("Starting dlangui");
+		backend.register!DlanguiComponent;
+		trace("Starting importer");
+		backend.register!ImporterComponent;
+		trace("Starting moduleman");
+		backend.register!ModulemanComponent;
+
+		if (backend.get!DCDComponent.isOutdated)
+		{
+			if (firstConfig.d.aggressiveUpdate)
+				spawnFiber((&updateDCD).toDelegate);
+			else
+			{
+				spawnFiber({
+					auto action = translate!"d.ext.compileProgram"("DCD");
+					auto res = rpc.window.requestMessage(MessageType.error, translate!"d.served.failDCD"(firstWorkspaceRootUri,
+						firstConfig.d.dcdClientPath, firstConfig.d.dcdServerPath), [action]);
+					if (res == action)
+						spawnFiber((&updateDCD).toDelegate);
+				});
+			}
+		}
 	}
-	syncedConfiguration = true;
+	catch (Exception e)
+	{
+		error("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+		error("Failed to fully globally initialize:");
+		error(e);
+		error("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+	}
 }
 
-void doStartup()
+void doStartup(string workspaceUri)
 {
+	string workspaceRoot = workspaceUri.uriToFile;
+	Workspace* proj = &workspace(workspaceUri);
+	if (proj is &fallbackWorkspace)
+	{
+		error("Trying to do startup on unknown workspace ", workspaceUri, "?");
+		return;
+	}
 	trace("Initializing serve-d for " ~ workspaceRoot);
 
-	crossThreadBroadcastCallback = &handleBroadcast;
-	bool disableDub = config.d.neverUseDub;
+	workspaced.api.Configuration config;
+	//hasDCD = safe!(dcd.start)(workspaceRoot, proj.config.d.dcdClientPath,
+	//		proj.config.d.dcdServerPath, cast(ushort) 9166, false);
+	//dmd.start(workspaceRoot, proj.config.d.dmdPath);
+	config.base = JSONValue(["dcd" : JSONValue(["clientPath"
+			: JSONValue(proj.config.d.dcdClientPath), "serverPath"
+			: JSONValue(proj.config.d.dcdServerPath), "port" : JSONValue(9166)]),
+			"dmd" : JSONValue(["path" : JSONValue(proj.config.d.dmdPath)])]);
+	auto instance = backend.addInstance(workspaceRoot, config);
+
+	backend.onBroadcast = (&handleBroadcast).toDelegate;
+	backend.onBindFail = (WorkspaceD.Instance instance, ComponentFactory factory) {
+		rpc.window.showErrorMessage(
+				"Failed to load component " ~ factory.info.name ~ " for workspace " ~ instance.cwd);
+	};
+	bool disableDub = proj.config.d.neverUseDub;
 	if (!fs.exists(buildPath(workspaceRoot, "dub.json"))
 			&& !fs.exists(buildPath(workspaceRoot, "dub.sdl"))
 			&& !fs.exists(buildPath(workspaceRoot, "package.json")))
 		disableDub = true;
+	bool loadedDub;
 	if (!disableDub)
 	{
 		trace("Starting dub...");
-		hasDub = safe!(dub.startup)(workspaceRoot);
+		try
+		{
+			if (backend.attach(instance, "dub"))
+				loadedDub = true;
+		}
+		catch (Exception e)
+		{
+			error("Exception starting dub: ", e);
+		}
 	}
-	if (!hasDub)
+	if (!loadedDub)
 	{
 		if (!disableDub)
 		{
@@ -200,7 +382,9 @@ void doStartup()
 		}
 		try
 		{
-			fsworkspace.start(workspaceRoot, getPossibleSourceRoots);
+			instance.config.set("fsworkspace", "additionalPaths", getPossibleSourceRoots(workspaceRoot));
+			if (backend.attach(instance, "fsworkspace"))
+				throw new Exception("Attach returned failure");
 		}
 		catch (Exception e)
 		{
@@ -211,70 +395,70 @@ void doStartup()
 	else
 		setTimeout({ rpc.notifyMethod("coded/initDubTree"); }, 50);
 
-	trace("Starting dmd");
-	dmd.start(workspaceRoot, config.d.dmdPath);
-	trace("Starting dscanner");
-	dscanner.start(workspaceRoot);
-	hasDscanner = true;
-	trace("Starting dfmt");
-	dfmt.start();
-	trace("Starting dlangui");
-	dlangui.start();
-	trace("Starting importer");
-	importer.start();
-	trace("Starting moduleman");
-	moduleman.start(workspaceRoot);
+	if (!backend.attach(instance, "dmd"))
+		error("Failed to attach DMD component to ", workspaceUri);
+	startDCD(instance, workspaceUri);
 
-	startDCD();
-	if (!hasDCD || dcd.isOutdated)
-	{
-		if (config.d.aggressiveUpdate)
-			spawnFiber((&updateDCD).toDelegate);
-		else
-		{
-			auto action = translate!"d.ext.compileProgram"("DCD");
-			auto res = rpc.window.requestMessage(MessageType.error, translate!"d.served.failDCD"(workspaceRoot,
-					config.d.dcdClientPath, config.d.dcdServerPath), [action]);
-			if (res == action)
-				spawnFiber((&updateDCD).toDelegate);
-		}
-	}
+	trace("Loaded Components for ", instance.cwd, ": ",
+			instance.instanceComponents.map!"a.info.name");
 }
 
-void handleBroadcast(JSONValue data)
+void handleBroadcast(WorkspaceD workspaced, WorkspaceD.Instance instance, JSONValue data)
 {
+	if (!instance)
+		return;
 	auto type = "type" in data;
 	if (type && type.type == JSON_TYPE.STRING && type.str == "crash")
 	{
 		if (data["component"].str == "dcd")
-			spawnFiber((&startDCD).toDelegate);
+			spawnFiber(() => startDCD(instance, instance.cwd.uriFromFile));
 	}
 }
 
-void startDCD()
+void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 {
 	if (shutdownRequested)
 		return;
-	hasDCD = safe!(dcd.start)(workspaceRoot, config.d.dcdClientPath,
-			config.d.dcdServerPath, cast(ushort) 9166, false);
-	if (hasDCD)
+	Workspace* proj = &workspace(workspaceUri);
+	if (proj is &fallbackWorkspace)
 	{
-		trace("Starting dcdext");
-		dcdext.start();
-		try
-		{
-			syncYield!(dcd.findAndSelectPort)(cast(ushort) 9166);
-			dcd.startServer(config.stdlibPath);
-			dcd.refreshImports();
-		}
-		catch (Exception e)
-		{
-			rpc.window.showErrorMessage(translate!"d.ext.dcdFail");
-			error(e);
-			hasDCD = false;
-			return;
-		}
-		info("Imports: ", importPathProvider());
+		error("Trying to start DCD on unknown workspace ", workspaceUri, "?");
+		return;
+	}
+	trace("Starting dcd");
+	if (!backend.attach(instance, "dcd"))
+		error("Failed to attach DCD component to ", workspaceUri);
+	trace("Starting dcdext");
+	if (!backend.attach(instance, "dcdext"))
+		error("Failed to attach DCD component to ", workspaceUri);
+	trace("Running DCD setup");
+	try
+	{
+		trace("findAndSelectPort 9166");
+		auto port = backend.get!DCDComponent(instance.cwd)
+			.findAndSelectPort(cast(ushort) 9166).getYield;
+		trace("Setting port to ", port);
+		instance.config.set("dcd", "port", cast(int) port);
+		trace("startServer ", proj.config.stdlibPath);
+		backend.get!DCDComponent(instance.cwd).startServer(proj.config.stdlibPath);
+		trace("refreshImports");
+		backend.get!DCDComponent(instance.cwd).refreshImports();
+	}
+	catch (Exception e)
+	{
+		rpc.window.showErrorMessage(translate!"d.ext.dcdFail");
+		error(e);
+		trace("Instance Config: ", instance.config);
+		return;
+	}
+	info("Imports for ", workspaceUri, ": ", backend.getInstance(instance.cwd).importPaths);
+
+	auto globalDCD = backend.get!DCDComponent;
+	if (!globalDCD.isActive)
+	{
+		globalDCD.fromRunning(globalDCD.getSupportsFullOutput, globalDCD.isUsingUnixDomainSockets
+				? globalDCD.getSocketFile : "", globalDCD.isUsingUnixDomainSockets ? 0
+				: globalDCD.getRunningPort);
 	}
 }
 
@@ -311,7 +495,8 @@ void updateDCD()
 	string[] platformOptions;
 	version (Windows)
 		platformOptions = ["--arch=x86_mscoff"];
-	bool success = compileDependency(outputFolder, "DCD", "https://github.com/Hackerpilot/DCD.git", [[config.git.path,
+	bool success = compileDependency(outputFolder, "DCD",
+			"https://github.com/Hackerpilot/DCD.git", [[firstConfig.git.path,
 			"submodule", "update", "--init", "--recursive"], ["dub", "build",
 			"--config=client"] ~ platformOptions, ["dub", "build", "--config=server"] ~ platformOptions]);
 	if (success)
@@ -325,14 +510,25 @@ void updateDCD()
 		string finalDestinationServer = buildPath(outputFolder, "DCD", "dcd-server" ~ ext);
 		if (!fs.exists(finalDestinationServer))
 			finalDestinationServer = buildPath(outputFolder, "DCD", "bin", "dcd-server" ~ ext);
-		config.d.dcdClientPath = finalDestinationClient;
-		config.d.dcdServerPath = finalDestinationServer;
+		foreach (ref workspace; workspaces)
+		{
+			workspace.config.d.dcdClientPath = finalDestinationClient;
+			workspace.config.d.dcdServerPath = finalDestinationServer;
+		}
 		rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("dcdClientPath",
 				JSONValue(finalDestinationClient), true));
 		rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("dcdServerPath",
 				JSONValue(finalDestinationServer), true));
 		rpc.notifyMethod("coded/logInstall", "Successfully installed DCD");
-		startDCD();
+		foreach (ref workspace; workspaces)
+		{
+			auto instance = backend.getInstance(workspace.folder.uri.uriToFile);
+			if (instance is null)
+				rpc.notifyMethod("coded/logInstall",
+						"Failed to find workspace to start DCD for " ~ workspace.folder.uri);
+			else
+				startDCD(instance, workspace.folder.uri);
+		}
 	}
 }
 
@@ -386,7 +582,7 @@ bool compileDependency(string cwd, string name, string gitURI, string[][] comman
 				rpc.notifyMethod("coded/logInstall", "WARNING: Failed to delete " ~ newCwd);
 			}
 		}
-		auto ret = run([config.git.path, "clone", "--recursive", "--depth=1", gitURI, name], cwd);
+		auto ret = run([firstConfig.git.path, "clone", "--recursive", "--depth=1", gitURI, name], cwd);
 		if (ret != 0)
 			throw new Exception("git ended with error code " ~ ret.to!string);
 		foreach (command; commands)
@@ -405,17 +601,7 @@ bool compileDependency(string cwd, string name, string gitURI, string[][] comman
 JSONValue shutdown()
 {
 	shutdownRequested = true;
-	if (hasDub)
-		dub.stop();
-	if (hasDCD)
-		dcd.stop();
-	if (hasDscanner)
-		dscanner.stop();
-	dmd.stop();
-	dfmt.stop();
-	dlangui.stop();
-	importer.stop();
-	moduleman.stop();
+	backend.destroy();
 	served.extension.setTimeout({
 		throw new Error("RPC still running 1s after shutdown");
 	}, 1.seconds);
@@ -661,11 +847,11 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 {
 	import painlessjson : fromJSON;
 
+	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	Document document = documents[params.textDocument.uri];
 	if (document.uri.toLower.endsWith("dscanner.ini"))
 	{
-		require!hasDscanner;
-		auto possibleFields = dscanner.listAllIniFields;
+		auto possibleFields = backend.get!DscannerComponent.listAllIniFields;
 		auto line = document.lineAt(params.position).strip;
 		auto defaultList = CompletionList(false, possibleFields.map!(a => CompletionItem(a.name,
 				CompletionItemKind.field.opt, Optional!string.init, MarkupContent(a.documentation)
@@ -717,17 +903,17 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 			}
 			return CompletionList(false, completion);
 		}
-		require!hasDCD;
 		auto byteOff = cast(int) document.positionToBytes(params.position);
-		JSONValue result;
-		joinAll({ result = syncYield!(dcd.listCompletion)(document.text, byteOff); }, {
-			if (hasDscanner && !line.strip.length)
+		DCDCompletions result = DCDCompletions.empty;
+		joinAll({
+			if (backend.has!DCDComponent(workspaceRoot))
+				result = backend.get!DCDComponent(workspaceRoot)
+					.listCompletion(document.text, byteOff).getYield;
+		}, {
+			if (!line.strip.length)
 			{
-				auto result = syncYield!(dscanner.listDefinitions)(uriToFile(params.textDocument.uri),
-					document.text);
-				if (result.type == JSON_TYPE.NULL)
-					return;
-				dscanner.DefinitionElement[] defs = result.fromJSON!(dscanner.DefinitionElement[]);
+				auto defs = backend.get!DscannerComponent(workspaceRoot)
+					.listDefinitions(uriToFile(params.textDocument.uri), document.text).getYield;
 				ptrdiff_t di = -1;
 				FuncFinder: foreach (i, def; defs)
 				{
@@ -804,14 +990,12 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 				completion ~= doc2;
 			}
 		});
-		switch (result["type"].str)
+		switch (result.type)
 		{
-		case "identifiers":
-			foreach (identifierJson; result["identifiers"].array)
+		case DCDCompletions.Type.identifiers:
+			foreach (identifier; result.identifiers)
 			{
 				CompletionItem item;
-				info(identifierJson);
-				dcd.DCDIdentifier identifier = identifierJson.fromJSON!(dcd.DCDIdentifier);
 				item.label = identifier.identifier;
 				item.kind = identifier.type.convertFromDCDType;
 				if (identifier.documentation.length)
@@ -821,7 +1005,8 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 					item.detail = identifier.definition;
 					item.sortText = identifier.definition;
 					// TODO: only add arguments when this is a function call, eg not on template arguments
-					if (identifier.type == "f" && config.d.argumentSnippets)
+					if (identifier.type == "f" && workspace(params.textDocument.uri)
+							.config.d.argumentSnippets)
 					{
 						item.insertTextFormat = InsertTextFormat.snippet;
 						string args;
@@ -859,10 +1044,10 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 				completion ~= item;
 			}
 			goto case;
-		case "calltips":
+		case DCDCompletions.Type.calltips:
 			return CompletionList(false, completion);
 		default:
-			throw new Exception("Unexpected result from DCD");
+			throw new Exception("Unexpected result from DCD:\n\t" ~ result.raw.join("\n\t"));
 		}
 	}
 }
@@ -870,34 +1055,26 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 @protocolMethod("textDocument/signatureHelp")
 SignatureHelp provideSignatureHelp(TextDocumentPositionParams params)
 {
+	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	auto document = documents[params.textDocument.uri];
 	if (document.languageId != "d")
 		return SignatureHelp.init;
-	require!hasDCD;
 	auto pos = cast(int) document.positionToBytes(params.position);
-	auto result = syncYield!(dcd.listCompletion)(document.text, pos);
+	DCDCompletions result = backend.get!DCDComponent(workspaceRoot)
+		.listCompletion(document.text, pos).getYield;
 	SignatureInformation[] signatures;
 	int[] paramsCounts;
 	SignatureHelp help;
-	switch (result["type"].str)
+	switch (result.type)
 	{
-	case "calltips":
-		// calltips:[string], symbols:[{file:string, location:number, documentation:string}]
-		foreach (i, calltip; result["calltips"].array)
+	case DCDCompletions.Type.calltips:
+		foreach (i, calltip; result.calltips)
 		{
-			auto sig = SignatureInformation(calltip.str);
-			auto symbols = "symbols" in result;
-			if (symbols && symbols.type == JSON_TYPE.ARRAY && i < symbols.array.length)
-			{
-				immutable auto symbol = symbols.array[i];
-				if (symbol.type == JSON_TYPE.OBJECT)
-				{
-					auto doc = "documentation" in symbol;
-					if (doc && doc.str.length)
-						sig.documentation = MarkupContent(doc.str.ddocToMarked);
-				}
-			}
-			auto funcParams = calltip.str.extractFunctionParameters;
+			auto sig = SignatureInformation(calltip);
+			immutable DCDCompletions.Symbol symbol = result.symbols[i];
+			if (symbol.documentation.length)
+				sig.documentation = MarkupContent(symbol.documentation.ddocToMarked);
+			auto funcParams = calltip.extractFunctionParameters;
 
 			paramsCounts ~= cast(int) funcParams.length - 1;
 			foreach (param; funcParams)
@@ -913,7 +1090,7 @@ SignatureHelp provideSignatureHelp(TextDocumentPositionParams params)
 				possibleFunctions ~= i;
 		help.activeSignature = possibleFunctions.length ? cast(int) possibleFunctions[0] : 0;
 		goto case;
-	case "identifiers":
+	case DCDCompletions.Type.identifiers:
 		return help;
 	default:
 		throw new Exception("Unexpected result from DCD");
@@ -925,13 +1102,13 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 {
 	import std.file;
 
-	require!hasDCD;
-	auto result = syncYield!(dcd.searchSymbol)(params.query);
+	// TODO: combine all workspaces
+	auto result = backend.get!DCDComponent(workspaceRoot).searchSymbol(params.query).getYield;
 	SymbolInformation[] infos;
 	TextDocumentManager extraCache;
 	foreach (symbol; result.array)
 	{
-		auto uri = uriFromFile(symbol["file"].str);
+		auto uri = uriFromFile(symbol.file);
 		auto doc = documents.tryGet(uri);
 		Location location;
 		if (!doc.uri)
@@ -941,7 +1118,7 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 			doc = Document(uri);
 			try
 			{
-				doc.text = readText(symbol["file"].str);
+				doc.text = readText(symbol.file);
 			}
 			catch (Exception e)
 			{
@@ -950,10 +1127,8 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 		}
 		if (doc.text)
 		{
-			location = Location(doc.uri,
-					TextRange(doc.bytesToPosition(cast(size_t) symbol["position"].integer)));
-			infos ~= SymbolInformation(params.query,
-					convertFromDCDSearchType(symbol["type"].str), location);
+			location = Location(doc.uri, TextRange(doc.bytesToPosition(cast(size_t) symbol.position)));
+			infos ~= SymbolInformation(params.query, convertFromDCDSearchType(symbol.type), location);
 		}
 	}
 	return infos;
@@ -962,27 +1137,25 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 @protocolMethod("textDocument/documentSymbol")
 SymbolInformation[] provideDocumentSymbols(DocumentSymbolParams params)
 {
+	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	auto document = documents[params.textDocument.uri];
-	require!hasDscanner;
-	auto result = syncYield!(dscanner.listDefinitions)(uriToFile(params.textDocument.uri),
-			document.text);
-	if (result.type == JSON_TYPE.NULL)
-		return [];
+	auto result = backend.get!DscannerComponent(workspaceRoot)
+		.listDefinitions(uriToFile(params.textDocument.uri), document.text).getYield;
 	SymbolInformation[] ret;
-	foreach (def; result.array)
+	foreach (def; result)
 	{
 		SymbolInformation info;
-		info.name = def["name"].str;
+		info.name = def.name;
 		info.location.uri = params.textDocument.uri;
-		info.location.range = TextRange(Position(cast(uint) def["line"].integer - 1, 0));
-		info.kind = convertFromDscannerType(def["type"].str);
-		if (def["type"].str == "f" && def["name"].str == "this")
+		info.location.range = TextRange(Position(cast(uint) def.line - 1, 0));
+		info.kind = convertFromDscannerType(def.type);
+		if (def.type == "f" && def.name == "this")
 			info.kind = SymbolKind.constructor;
-		const(JSONValue)* ptr;
-		auto attribs = def["attributes"];
-		if (null !is(ptr = "struct" in attribs) || null !is(ptr = "class" in attribs)
-				|| null !is(ptr = "enum" in attribs) || null !is(ptr = "union" in attribs))
-			info.containerName = (*ptr).str;
+		string* ptr;
+		auto attribs = def.attributes;
+		if ((ptr = "struct" in attribs) !is null || (ptr = "class" in attribs) !is null
+				|| (ptr = "enum" in attribs) !is null || (ptr = "union" in attribs) !is null)
+			info.containerName = *ptr;
 		ret ~= info;
 	}
 	return ret;
@@ -991,25 +1164,30 @@ SymbolInformation[] provideDocumentSymbols(DocumentSymbolParams params)
 @protocolMethod("textDocument/definition")
 ArrayOrSingle!Location provideDefinition(TextDocumentPositionParams params)
 {
+	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	auto document = documents[params.textDocument.uri];
 	if (document.languageId != "d")
 		return ArrayOrSingle!Location.init;
-	require!hasDCD;
-	auto result = syncYield!(dcd.findDeclaration)(document.text,
-			cast(int) document.positionToBytes(params.position));
-	if (result.type == JSON_TYPE.NULL)
+	auto result = backend.get!DCDComponent(workspaceRoot).findDeclaration(document.text,
+			cast(int) document.positionToBytes(params.position)).getYield;
+	if (result == DCDDeclaration.init)
 		return ArrayOrSingle!Location.init;
 	auto uri = document.uri;
-	if (result[0].str != "stdin")
-		uri = uriFromFile(result[0].str);
-	size_t byteOffset = cast(size_t) result[1].integer;
+	if (result.file != "stdin")
+	{
+		if (isAbsolute(result.file))
+			uri = uriFromFile(result.file);
+		else
+			uri = null;
+	}
+	size_t byteOffset = cast(size_t) result.position;
 	Position pos;
 	auto found = documents.tryGet(uri);
 	if (found.uri)
 		pos = found.bytesToPosition(byteOffset);
 	else
 	{
-		string abs = result[0].str;
+		string abs = result.file;
 		if (!abs.isAbsolute)
 			abs = buildPath(workspaceRoot, abs);
 		pos = Position.init;
@@ -1029,6 +1207,7 @@ ArrayOrSingle!Location provideDefinition(TextDocumentPositionParams params)
 @protocolMethod("textDocument/formatting")
 TextEdit[] provideFormatting(DocumentFormattingParams params)
 {
+	auto config = workspace(params.textDocument.uri).config;
 	if (!config.d.enableFormatting)
 		return [];
 	auto document = documents[params.textDocument.uri];
@@ -1068,25 +1247,22 @@ TextEdit[] provideFormatting(DocumentFormattingParams params)
 			];
 			//dfmt on
 	}
-	auto result = syncYield!(dfmt.format)(document.text, args);
+	auto result = backend.get!DfmtComponent.format(document.text, args).getYield;
 	return [TextEdit(TextRange(Position(0, 0),
-			document.offsetToPosition(document.text.length)), result.str)];
+			document.offsetToPosition(document.text.length)), result)];
 }
 
 @protocolMethod("textDocument/hover")
 Hover provideHover(TextDocumentPositionParams params)
 {
+	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	auto document = documents[params.textDocument.uri];
 	if (document.languageId != "d")
 		return Hover.init;
-	require!hasDCD;
-	auto docs = syncYield!(dcd.getDocumentation)(document.text,
-			cast(int) document.positionToBytes(params.position));
+	auto docs = backend.get!DCDComponent(workspaceRoot).getDocumentation(document.text,
+			cast(int) document.positionToBytes(params.position)).getYield;
 	Hover ret;
-	if (docs.type == JSON_TYPE.ARRAY && docs.array.length)
-		ret.contents = docs.array.map!(a => a.str.ddocToMarked).join();
-	else if (docs.type == JSON_TYPE.STRING && docs.str.length)
-		ret.contents = docs.str.ddocToMarked;
+	ret.contents = docs.ddocToMarked;
 	return ret;
 }
 
@@ -1101,11 +1277,12 @@ private auto whitespace = regex(`\s*`);
 @protocolMethod("textDocument/codeAction")
 Command[] provideCodeActions(CodeActionParams params)
 {
+	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	auto document = documents[params.textDocument.uri];
 	if (document.languageId != "d")
 		return [];
 	Command[] ret;
-	if (hasDCD) // check if extends
+	if (backend.has!DCDExtComponent(workspaceRoot)) // check if extends
 	{
 		auto startIndex = document.positionToBytes(params.range.start);
 		ptrdiff_t idx = min(cast(ptrdiff_t) startIndex, cast(ptrdiff_t) document.text.length - 1);
@@ -1114,7 +1291,8 @@ Command[] provideCodeActions(CodeActionParams params)
 			if (document.text[idx] == ':')
 			{
 				// probably extends
-				if (syncYield!(dcdext.implement)(document.text, cast(int) startIndex).str.strip.length > 0)
+				if (backend.get!DCDExtComponent(workspaceRoot)
+						.implement(document.text, cast(int) startIndex).getYield.strip.length > 0)
 					ret ~= Command("Implement base classes/interfaces", "code-d.implementMethods",
 							[JSONValue(document.positionToOffset(params.range.start))]);
 				break;
@@ -1156,11 +1334,11 @@ Command[] provideCodeActions(CodeActionParams params)
 				goto noMatch;
 			start:
 				joinAll({
-					if (hasDscanner)
-						files ~= syncYield!(dscanner.findSymbol)(match[1]).array.map!"a[`file`].str".array;
+					files ~= backend.get!DscannerComponent(workspaceRoot)
+						.findSymbol(match[1]).getYield.map!"a.file".array;
 				}, {
-					if (hasDCD)
-						files ~= syncYield!(dcd.searchSymbol)(match[1]).array.map!"a[`file`].str".array;
+					if (backend.has!DCDComponent)
+						files ~= backend.get!DCDComponent.searchSymbol(match[1]).getYield.map!"a.file".array;
 				});
 				foreach (file; files.sort().uniq)
 				{
@@ -1202,18 +1380,19 @@ Command[] provideCodeActions(CodeActionParams params)
 @protocolMethod("textDocument/codeLens")
 CodeLens[] provideCodeLens(CodeLensParams params)
 {
+	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	auto document = documents[params.textDocument.uri];
 	if (document.languageId != "d")
 		return [];
 	CodeLens[] ret;
-	if (config.d.enableDMDImportTiming)
+	if (workspace(params.textDocument.uri).config.d.enableDMDImportTiming)
 		foreach (match; document.text.matchAll(importRegex))
 		{
 			size_t index = match.pre.length;
 			auto pos = document.bytesToPosition(index);
 			ret ~= CodeLens(TextRange(pos), Optional!Command.init, JSONValue(["type"
 					: JSONValue("importcompilecheck"), "code" : JSONValue(match.hit),
-					"module" : JSONValue(match[1])]));
+					"module" : JSONValue(match[1]), "workspace" : JSONValue(workspaceRoot)]));
 		}
 	return ret;
 }
@@ -1235,7 +1414,10 @@ CodeLens resolveCodeLens(CodeLens lens)
 		auto module_ = "module" in lens.data;
 		if (!module_ || module_.type != JSON_TYPE.STRING || !module_.str.length)
 			throw new Exception("No valid module provided");
-		int decMs = getImportCompilationTime(code.str, module_.str);
+		auto workspace = "workspace" in lens.data;
+		if (!workspace || workspace.type != JSON_TYPE.STRING || !workspace.str.length)
+			throw new Exception("No valid workspace provided");
+		int decMs = getImportCompilationTime(code.str, module_.str, workspace.str);
 		lens.command = Command((decMs < 10 ? "no noticable effect"
 				: "~" ~ decMs.to!string ~ "ms") ~ " for importing this");
 		return lens;
@@ -1244,7 +1426,7 @@ CodeLens resolveCodeLens(CodeLens lens)
 	}
 }
 
-int getImportCompilationTime(string code, string module_)
+int getImportCompilationTime(string code, string module_, string workspaceRoot)
 {
 	import std.math : round;
 
@@ -1274,7 +1456,7 @@ int getImportCompilationTime(string code, string module_)
 	}
 
 	// run blocking so we don't compute multiple in parallel
-	auto ret = dmd.measureSync(code, null, 20, 500);
+	auto ret = backend.get!DMDComponent(workspaceRoot).measureSync(code, null, 20, 500);
 	if (!ret.success)
 		throw new Exception("Compilation failed");
 	auto msecs = cast(int) round(ret.duration.total!"msecs" / 5.0) * 5;
@@ -1285,85 +1467,77 @@ int getImportCompilationTime(string code, string module_)
 @protocolMethod("served/listConfigurations")
 string[] listConfigurations()
 {
-	require!hasDub;
-	return dub.configurations;
+	return backend.get!DubComponent(workspaceRoot).configurations;
 }
 
 @protocolMethod("served/switchConfig")
 bool switchConfig(string value)
 {
-	require!hasDub;
-	return dub.setConfiguration(value);
+	return backend.get!DubComponent(workspaceRoot).setConfiguration(value);
 }
 
 @protocolMethod("served/getConfig")
 string getConfig(string value)
 {
-	require!hasDub;
-	return dub.configuration;
+	return backend.get!DubComponent(workspaceRoot).configuration;
 }
 
 @protocolMethod("served/listArchTypes")
 string[] listArchTypes()
 {
-	require!hasDub;
-	return dub.archTypes;
+	return backend.get!DubComponent(workspaceRoot).archTypes;
 }
 
 @protocolMethod("served/switchArchType")
 bool switchArchType(string value)
 {
-	require!hasDub;
-	return dub.setArchType(JSONValue(["arch-type" : JSONValue(value)]));
+	return backend.get!DubComponent(workspaceRoot)
+		.setArchType(JSONValue(["arch-type" : JSONValue(value)]));
 }
 
 @protocolMethod("served/getArchType")
 string getArchType(string value)
 {
-	require!hasDub;
-	return dub.archType;
+	return backend.get!DubComponent(workspaceRoot).archType;
 }
 
 @protocolMethod("served/listBuildTypes")
 string[] listBuildTypes()
 {
-	require!hasDub;
-	return dub.buildTypes;
+	return backend.get!DubComponent(workspaceRoot).buildTypes;
 }
 
 @protocolMethod("served/switchBuildType")
 bool switchBuildType(string value)
 {
-	require!hasDub;
-	return dub.setBuildType(JSONValue(["build-type" : JSONValue(value)]));
+	return backend.get!DubComponent(workspaceRoot)
+		.setBuildType(JSONValue(["build-type" : JSONValue(value)]));
 }
 
 @protocolMethod("served/getBuildType")
 string getBuildType()
 {
-	require!hasDub;
-	return dub.buildType;
+	return backend.get!DubComponent(workspaceRoot).buildType;
 }
 
 @protocolMethod("served/getCompiler")
 string getCompiler()
 {
-	require!hasDub;
-	return dub.compiler;
+	return backend.get!DubComponent(workspaceRoot).compiler;
 }
 
 @protocolMethod("served/switchCompiler")
 bool switchCompiler(string value)
 {
-	require!hasDub;
-	return dub.setCompiler(value);
+	return backend.get!DubComponent(workspaceRoot).setCompiler(value);
 }
 
 @protocolMethod("served/addImport")
 auto addImport(AddImportParams params)
 {
 	auto document = documents[params.textDocument.uri];
-	return importer.add(params.name.idup, document.text, params.location, params.insertOutermost);
+	return backend.get!ImporterComponent.add(params.name.idup, document.text,
+			params.location, params.insertOutermost);
 }
 
 @protocolMethod("served/sortImports")
@@ -1371,9 +1545,9 @@ TextEdit[] sortImports(SortImportsParams params)
 {
 	auto document = documents[params.textDocument.uri];
 	TextEdit[] ret;
-	auto sorted = importer.sortImports(document.text,
+	auto sorted = backend.get!ImporterComponent.sortImports(document.text,
 			cast(int) document.offsetToBytes(params.location));
-	if (sorted == importer.ImportBlock.init)
+	if (sorted == ImportBlock.init)
 		return ret;
 	auto start = document.bytesToPosition(sorted.start);
 	auto end = document.bytesToPosition(sorted.end);
@@ -1386,11 +1560,12 @@ TextEdit[] implementMethods(ImplementMethodsParams params)
 {
 	import std.ascii : isWhite;
 
-	require!hasDCD;
+	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	auto document = documents[params.textDocument.uri];
 	TextEdit[] ret;
 	auto location = document.offsetToBytes(params.location);
-	auto code = syncYield!(dcdext.implement)(document.text, cast(int) location).str.strip;
+	auto code = backend.get!DCDExtComponent(workspaceRoot)
+		.implement(document.text, cast(int) location).getYield.strip;
 	if (!code.length)
 		return ret;
 	auto brace = document.text.indexOf('{', location);
@@ -1441,8 +1616,7 @@ TextEdit[] implementMethods(ImplementMethodsParams params)
 @protocolMethod("served/restartServer")
 bool restartServer()
 {
-	require!hasDCD;
-	syncYield!(dcd.restartServer);
+	backend.get!DCDComponent.restartServer().getYield;
 	return true;
 }
 
@@ -1450,26 +1624,26 @@ bool restartServer()
 bool updateImports()
 {
 	bool success;
-	if (hasDub)
+	if (backend.has!DubComponent)
 	{
-		success = syncYield!(dub.update).type == JSON_TYPE.TRUE;
+		success = backend.get!DubComponent.update.getYield;
 		if (success)
 			rpc.notifyMethod("coded/updateDubTree");
 	}
-	require!hasDCD;
-	dcd.refreshImports();
+	// TODO: do this for all
+	backend.get!DCDComponent(workspaceRoot).refreshImports();
 	return success;
 }
 
 @protocolMethod("served/listDependencies")
 DubDependency[] listDependencies(string packageName)
 {
-	require!hasDub;
+	// TODO: add workspaceRoot argument
 	DubDependency[] ret;
-	auto allDeps = dub.dependencies;
+	auto allDeps = backend.get!DubComponent(workspaceRoot).dependencies;
 	if (!packageName.length)
 	{
-		auto deps = dub.rootDependencies;
+		auto deps = backend.get!DubComponent(workspaceRoot).rootDependencies;
 		foreach (dep; deps)
 		{
 			DubDependency r;
@@ -1537,8 +1711,6 @@ __gshared FileOpenInfo[string] freshlyOpened;
 @protocolNotification("workspace/didChangeWatchedFiles")
 void onChangeFiles(DidChangeWatchedFilesParams params)
 {
-	info(params);
-
 	foreach (change; params.changes)
 	{
 		string file = change.uri;
@@ -1557,7 +1729,8 @@ void onChangeFiles(DidChangeWatchedFilesParams params)
 					continue;
 				}
 				// Sending applyEdit so it is undoable
-				auto patches = moduleman.normalizeModules(file.uriToFile, document.text);
+				auto patches = backend.get!ModulemanComponent.normalizeModules(file.uriToFile,
+						document.text);
 				if (patches.length)
 				{
 					WorkspaceEdit edit;
@@ -1574,8 +1747,6 @@ void onChangeFiles(DidChangeWatchedFilesParams params)
 void onDidOpenDocument(DidOpenTextDocumentParams params)
 {
 	freshlyOpened[params.textDocument.uri] = FileOpenInfo(Clock.currTime);
-
-	info(freshlyOpened);
 }
 
 int changeTimeout;
@@ -1586,21 +1757,20 @@ void onDidChangeDocument(DocumentLinkParams params)
 	if (document.languageId != "d")
 		return;
 	int delay = document.text.length > 50 * 1024 ? 1000 : 200; // be slower after 50KiB
-	if (hasDscanner)
-	{
-		clearTimeout(changeTimeout);
-		changeTimeout = setTimeout({
-			import served.linters.dscanner;
+	clearTimeout(changeTimeout);
+	changeTimeout = setTimeout({
+		import served.linters.dscanner;
 
-			lint(document);
-			// Delay to avoid too many requests
-		}, delay);
-	}
+		lint(document);
+		// Delay to avoid too many requests
+	}, delay);
 }
 
 @protocolNotification("textDocument/didSave")
 void onDidSaveDocument(DidSaveTextDocumentParams params)
 {
+	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
+	auto config = workspace(params.textDocument.uri).config;
 	auto document = documents[params.textDocument.uri];
 	auto fileName = params.textDocument.uri.uriToFile.baseName;
 
@@ -1609,7 +1779,7 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 		if (!config.d.enableLinting)
 			return;
 		joinAll({
-			if (hasDscanner && config.d.enableStaticLinting)
+			if (config.d.enableStaticLinting)
 			{
 				if (document.languageId == "diet")
 					return;
@@ -1618,7 +1788,7 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 				lint(document);
 			}
 		}, {
-			if (hasDub && config.d.enableDubLinting)
+			if (backend.has!DubComponent && config.d.enableDubLinting)
 			{
 				import served.linters.dub;
 
@@ -1629,9 +1799,10 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 	else if (fileName == "dub.json" || fileName == "dub.sdl")
 	{
 		info("Updating dependencies");
-		rpc.window.runOrMessage(dub.upgrade(), MessageType.warning, translate!"d.ext.dubUpgradeFail");
-		rpc.window.runOrMessage(dub.updateImportPaths(true), MessageType.warning,
-				translate!"d.ext.dubImportFail");
+		rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot).upgrade(),
+				MessageType.warning, translate!"d.ext.dubUpgradeFail");
+		rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
+				.updateImportPaths(true), MessageType.warning, translate!"d.ext.dubImportFail");
 		rpc.notifyMethod("coded/updateDubTree");
 	}
 }
@@ -1639,17 +1810,19 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 @protocolNotification("served/killServer")
 void killServer()
 {
-	dcd.killServer();
+	// TODO: do this for all workspaces
+	backend.get!DCDComponent(workspaceRoot).killServer();
 }
 
 @protocolNotification("served/installDependency")
 void installDependency(InstallRequest req)
 {
+	// TODO: add workspace argument
 	injectDependency(req);
-	if (hasDub)
+	if (backend.has!DubComponent)
 	{
-		dub.upgrade();
-		dub.updateImportPaths(true);
+		backend.get!DubComponent(workspaceRoot).upgrade();
+		backend.get!DubComponent(workspaceRoot).updateImportPaths(true);
 	}
 	updateImports();
 }
@@ -1657,12 +1830,13 @@ void installDependency(InstallRequest req)
 @protocolNotification("served/updateDependency")
 void updateDependency(UpdateRequest req)
 {
+	// TODO: add workspace argument
 	if (changeDependency(req))
 	{
-		if (hasDub)
+		if (backend.has!DubComponent)
 		{
-			dub.upgrade();
-			dub.updateImportPaths(true);
+			backend.get!DubComponent(workspaceRoot).upgrade();
+			backend.get!DubComponent(workspaceRoot).updateImportPaths(true);
 		}
 		updateImports();
 	}
@@ -1671,17 +1845,19 @@ void updateDependency(UpdateRequest req)
 @protocolNotification("served/uninstallDependency")
 void uninstallDependency(UninstallRequest req)
 {
+	// TODO: add workspace argument
 	removeDependency(req.name);
-	if (hasDub)
+	if (backend.has!DubComponent)
 	{
-		dub.upgrade();
-		dub.updateImportPaths(true);
+		backend.get!DubComponent(workspaceRoot).upgrade();
+		backend.get!DubComponent(workspaceRoot).updateImportPaths(true);
 	}
 	updateImports();
 }
 
 void injectDependency(InstallRequest req)
 {
+	// TODO: add file argument
 	auto sdl = buildPath(workspaceRoot, "dub.sdl");
 	if (fs.exists(sdl))
 	{
@@ -1786,6 +1962,7 @@ void injectDependency(InstallRequest req)
 
 bool changeDependency(UpdateRequest req)
 {
+	// TODO: add file argument
 	auto sdl = buildPath(workspaceRoot, "dub.sdl");
 	if (fs.exists(sdl))
 	{
@@ -1837,6 +2014,7 @@ bool changeDependency(UpdateRequest req)
 
 bool removeDependency(string name)
 {
+	// TODO: add file argument
 	auto sdl = buildPath(workspaceRoot, "dub.sdl");
 	if (fs.exists(sdl))
 	{
@@ -1934,6 +2112,7 @@ __gshared void delegate(void delegate()) spawnFiber;
 shared static this()
 {
 	spawnFiber = (&setImmediate).toDelegate;
+	backend = new WorkspaceD();
 }
 
 __gshared int timeoutID;

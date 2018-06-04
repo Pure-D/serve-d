@@ -4,6 +4,7 @@ import core.thread;
 
 import painlessjson;
 
+import served.extension;
 import served.linters.diagnosticmanager;
 import served.types;
 
@@ -72,29 +73,26 @@ DiagnosticSeverity mapDubLintType(ErrorType type)
 void lint(Document document)
 {
 	stderr.writeln("Running dub build");
-	auto imports = dub.stringImports;
-	JSONValue issues = syncYield!(dub.build)();
+	auto imports = backend.get!DubComponent(workspaceRoot).stringImports;
+	auto issues = backend.get!DubComponent(workspaceRoot).build.getYield;
 	PublishDiagnosticsParams[] result;
-	if (issues.type == JSON_TYPE.ARRAY)
+	foreach (issue; issues)
 	{
-		foreach (issue; issues.array)
-		{
-			auto uri = uriFromFile(fixPath(issue["file"].str, imports));
-			Diagnostic error;
-			error.range = TextRange(Position(issue["line"].toInt - 1, issue["column"].toInt - 1));
-			error.severity = mapDubLintType(cast(ErrorType) issue["type"].toInt);
-			error.source = DubDiagnosticSource;
-			error.message = issue["text"].str;
-			bool found;
-			foreach (ref elem; result)
-				if (elem.uri == uri)
-				{
-					found = true;
-					elem.diagnostics ~= error;
-				}
-			if (!found)
-				result ~= PublishDiagnosticsParams(uri, [error]);
-		}
+		auto uri = uriFromFile(fixPath(issue.file, imports));
+		Diagnostic error;
+		error.range = TextRange(Position(issue.line - 1, issue.column - 1));
+		error.severity = mapDubLintType(issue.type);
+		error.source = DubDiagnosticSource;
+		error.message = issue.text;
+		bool found;
+		foreach (ref elem; result)
+			if (elem.uri == uri)
+			{
+				found = true;
+				elem.diagnostics ~= error;
+			}
+		if (!found)
+			result ~= PublishDiagnosticsParams(uri, [error]);
 	}
 
 	diagnostics[DiagnosticSlot] = result;

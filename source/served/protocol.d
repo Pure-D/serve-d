@@ -461,6 +461,7 @@ struct InitializeParams
 	JSONValue initializationOptions;
 	ClientCapabilities capabilities;
 	string trace = "off";
+	WorkspaceFolder[] workspaceFolders;
 }
 
 struct DynamicRegistration
@@ -475,6 +476,8 @@ struct WorkspaceClientCapabilities
 	Optional!DynamicRegistration didChangeWatchedFiles;
 	Optional!DynamicRegistration symbol;
 	Optional!DynamicRegistration executeCommand;
+	Optional!bool workspaceFolders;
+	Optional!bool configuration;
 }
 
 struct TextDocumentClientCapabilities
@@ -497,6 +500,11 @@ struct TextDocumentClientCapabilities
 		CompletionItem completionItem;
 	}
 
+	struct PublishDiagnosticsCap
+	{
+		Optional!bool relatedInformation;
+	}
+
 	Optional!SyncInfo synchronization;
 	Optional!CompletionInfo completion;
 	Optional!DynamicRegistration hover;
@@ -508,9 +516,14 @@ struct TextDocumentClientCapabilities
 	Optional!DynamicRegistration rangeFormatting;
 	Optional!DynamicRegistration onTypeFormatting;
 	Optional!DynamicRegistration definition;
+	Optional!DynamicRegistration typeDefinition;
+	Optional!DynamicRegistration implementation;
+	Optional!DynamicRegistration codeAction;
 	Optional!DynamicRegistration codeLens;
 	Optional!DynamicRegistration documentLink;
+	Optional!DynamicRegistration colorProvider;
 	Optional!DynamicRegistration rename;
+	Optional!PublishDiagnosticsCap publishDiagnostics;
 }
 
 struct ClientCapabilities
@@ -518,6 +531,17 @@ struct ClientCapabilities
 	Optional!WorkspaceClientCapabilities workspace;
 	Optional!TextDocumentClientCapabilities textDocument;
 	JSONValue experimental;
+}
+
+unittest
+{
+	string json = q{{
+		"workspace": {
+			"configuration": true
+		}
+	}};
+	auto caps = json.parseJSON.fromJSON!ClientCapabilities;
+	assert(caps.workspace.configuration);
 }
 
 struct InitializeResult
@@ -564,6 +588,10 @@ struct DocumentLinkOptions
 	bool resolveProvider;
 }
 
+struct ColorProviderOptions
+{
+}
+
 struct ExecuteCommandOptions
 {
 	string[] commands;
@@ -590,6 +618,8 @@ struct ServerCapabilities
 	Optional!CompletionOptions completionProvider;
 	Optional!SignatureHelpOptions signatureHelpProvider;
 	bool definitionProvider;
+	Optional!bool typeDefinitionProvider;
+	Optional!bool implementationProvider;
 	bool referencesProvider;
 	bool documentHighlightProvider;
 	bool documentSymbolProvider;
@@ -601,8 +631,21 @@ struct ServerCapabilities
 	Optional!DocumentOnTypeFormattingOptions documentOnTypeFormattingProvider;
 	bool renameProvider;
 	Optional!DocumentLinkOptions documentLinkProvider;
+	Optional!ColorProviderOptions colorProvider;
 	Optional!ExecuteCommandOptions executeCommandProvider;
+	Optional!ServerWorkspaceCapabilities workspace;
 	JSONValue experimental;
+}
+
+struct ServerWorkspaceCapabilities
+{
+	struct WorkspaceFolders
+	{
+		Optional!bool supported;
+		Optional!bool changeNotifications;
+	}
+
+	Optional!WorkspaceFolders workspaceFolders;
 }
 
 struct ShowMessageParams
@@ -660,6 +703,17 @@ struct UnregistrationParams
 struct DidChangeConfigurationParams
 {
 	JSONValue settings;
+}
+
+struct ConfigurationParams
+{
+	ConfigurationItem[] items;
+}
+
+struct ConfigurationItem
+{
+	Optional!string scopeUri;
+	Optional!string section;
 }
 
 struct DidOpenTextDocumentParams
@@ -1076,4 +1130,21 @@ struct ApplyWorkspaceEditParams
 struct ApplyWorkspaceEditResponse
 {
 	bool applied;
+}
+
+struct WorkspaceFolder
+{
+	string uri;
+	string name;
+}
+
+struct DidChangeWorkspaceFoldersParams
+{
+	WorkspaceFoldersChangeEvent event;
+}
+
+struct WorkspaceFoldersChangeEvent
+{
+	WorkspaceFolder[] added;
+	WorkspaceFolder[] removed;
 }

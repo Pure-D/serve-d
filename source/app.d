@@ -110,11 +110,13 @@ void processNotify(RequestMessage msg)
 			served.extension.shutdown();
 		return;
 	}
-	if (msg.method == "workspace/didChangeConfiguration")
+	if (!initialized)
 	{
-		auto newConfig = msg.params["settings"].fromJSON!Configuration;
-		served.extension.changedConfig(served.types.config.replace(newConfig));
+		trace("Tried to call notification without initializing");
+		return;
 	}
+	if (msg.method == "workspace/didChangeConfiguration")
+		served.extension.processConfigChange(msg.params["settings"].fromJSON!Configuration);
 	documents.process(msg);
 	foreach (name; __traits(derivedMembers, served.extension))
 	{
@@ -173,12 +175,16 @@ int main(string[] args)
 	bool printVer;
 	string[] features;
 	string lang = "en";
+	bool wait;
 	//dfmt off
 	auto argInfo = args.getopt(
 		"r|require", "Adds a feature set that is required. Unknown feature sets will intentionally crash on startup", &features,
 		"v|version", "Print version of program", &printVer,
-		"lang", "Change the language of GUI messages", &lang);
+		"lang", "Change the language of GUI messages", &lang,
+		"wait", "Wait for a second before starting (for debugging)", &wait);
 	//dfmt on
+	if (wait)
+		Thread.sleep(2.seconds);
 	if (argInfo.helpWanted)
 	{
 		if (printVer)
@@ -198,8 +204,6 @@ int main(string[] args)
 		info("Setting language to ", currentLanguage);
 
 	fibersMutex = new Mutex();
-
-	served.types.workspaceRoot = fs.getcwd();
 
 	foreach (feature; features)
 		if (!IncludedFeatures.canFind(feature.toLower.strip))
@@ -225,17 +229,15 @@ int main(string[] args)
 	{
 		while (rpc.hasData)
 		{
-			trace("Has Message");
 			auto msg = rpc.poll;
-			trace("Message: ", msg);
+			// Log on client side instead! (vscode setting: "serve-d.trace.server": "verbose")
+			//trace("Message: ", msg);
 			if (msg.id.hasData)
 				pushFiber({
 					ResponseMessage res;
 					try
 					{
-						trace("Processing as request");
 						res = processRequest(msg);
-						trace("Responding with: ", res);
 					}
 					catch (Throwable e)
 					{
@@ -249,7 +251,6 @@ int main(string[] args)
 				pushFiber({
 					try
 					{
-						trace("Processing as notification");
 						processNotify(msg);
 					}
 					catch (Throwable e)

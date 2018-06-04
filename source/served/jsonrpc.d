@@ -63,7 +63,8 @@ class RPCProcessor : Fiber
 			throw new Exception("Sent objects must have a jsonrpc");
 		}
 		const content = raw.toString().replace("\\/", "/");
-		trace(content);
+		// Log on client side instead! (vscode setting: "serve-d.trace.server": "verbose")
+		//trace(content);
 		string data = "Content-Length: " ~ content.length.to!string ~ "\r\n\r\n" ~ content;
 		writer.rawWrite(data);
 		writer.flush();
