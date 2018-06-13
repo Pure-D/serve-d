@@ -68,6 +68,7 @@ struct Configuration
 		bool overrideDfmtEditorconfig = true;
 		bool aggressiveUpdate = true;
 		bool argumentSnippets = false;
+		bool scanAllFolders = true;
 	}
 
 	struct DFmt

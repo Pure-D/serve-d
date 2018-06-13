@@ -328,79 +328,102 @@ void doGlobalStartup()
 	}
 }
 
+struct RootSuggestion
+{
+	string dir;
+	bool useDub;
+}
+
+RootSuggestion[] rootsForProject(string root, bool recursive)
+{
+	RootSuggestion[] ret;
+	bool rootDub = fs.exists(buildPath(root, "dub.json")) || fs.exists(buildPath(root,
+			"dub.sdl")) || fs.exists(buildPath(root, "package.json"));
+	ret ~= RootSuggestion(root, rootDub);
+	if (recursive)
+		foreach (pkg; fs.dirEntries(root, "dub.{json,sdl}", fs.SpanMode.depth))
+		{
+			auto dir = dirName(pkg);
+			if (dir.canFind(".dub"))
+				continue;
+			if (dir == root)
+				continue;
+			ret ~= RootSuggestion(dir, true);
+		}
+	info("Root Suggestions: ", ret);
+	return ret;
+}
+
 void doStartup(string workspaceUri)
 {
-	string workspaceRoot = workspaceUri.uriToFile;
 	Workspace* proj = &workspace(workspaceUri);
 	if (proj is &fallbackWorkspace)
 	{
 		error("Trying to do startup on unknown workspace ", workspaceUri, "?");
 		return;
 	}
-	trace("Initializing serve-d for " ~ workspaceRoot);
+	trace("Initializing serve-d for " ~ workspaceUri);
 
-	workspaced.api.Configuration config;
-	//hasDCD = safe!(dcd.start)(workspaceRoot, proj.config.d.dcdClientPath,
-	//		proj.config.d.dcdServerPath, cast(ushort) 9166, false);
-	//dmd.start(workspaceRoot, proj.config.d.dmdPath);
-	config.base = JSONValue(["dcd" : JSONValue(["clientPath"
-			: JSONValue(proj.config.d.dcdClientPath), "serverPath"
-			: JSONValue(proj.config.d.dcdServerPath), "port" : JSONValue(9166)]),
-			"dmd" : JSONValue(["path" : JSONValue(proj.config.d.dmdPath)])]);
-	auto instance = backend.addInstance(workspaceRoot, config);
+	foreach (root; rootsForProject(workspaceUri.uriToFile, proj.config.d.scanAllFolders))
+	{
+		auto workspaceRoot = root.dir;
+		workspaced.api.Configuration config;
+		config.base = JSONValue(["dcd" : JSONValue(["clientPath"
+				: JSONValue(proj.config.d.dcdClientPath), "serverPath"
+				: JSONValue(proj.config.d.dcdServerPath), "port" : JSONValue(9166)]),
+				"dmd" : JSONValue(["path" : JSONValue(proj.config.d.dmdPath)])]);
+		auto instance = backend.addInstance(workspaceRoot, config);
 
-	backend.onBroadcast = (&handleBroadcast).toDelegate;
-	backend.onBindFail = (WorkspaceD.Instance instance, ComponentFactory factory) {
-		rpc.window.showErrorMessage(
-				"Failed to load component " ~ factory.info.name ~ " for workspace " ~ instance.cwd);
-	};
-	bool disableDub = proj.config.d.neverUseDub;
-	if (!fs.exists(buildPath(workspaceRoot, "dub.json"))
-			&& !fs.exists(buildPath(workspaceRoot, "dub.sdl"))
-			&& !fs.exists(buildPath(workspaceRoot, "package.json")))
-		disableDub = true;
-	bool loadedDub;
-	if (!disableDub)
-	{
-		trace("Starting dub...");
-		try
-		{
-			if (backend.attach(instance, "dub"))
-				loadedDub = true;
-		}
-		catch (Exception e)
-		{
-			error("Exception starting dub: ", e);
-		}
-	}
-	if (!loadedDub)
-	{
+		backend.onBroadcast = (&handleBroadcast).toDelegate;
+		backend.onBindFail = (WorkspaceD.Instance instance, ComponentFactory factory) {
+			rpc.window.showErrorMessage(
+					"Failed to load component " ~ factory.info.name ~ " for workspace " ~ instance.cwd);
+		};
+		bool disableDub = proj.config.d.neverUseDub || !root.useDub;
+		bool loadedDub;
 		if (!disableDub)
 		{
-			error("Failed starting dub - falling back to fsworkspace");
-			rpc.window.showErrorMessage(translate!"d.ext.dubFail");
+			trace("Starting dub...");
+			try
+			{
+				if (backend.attach(instance, "dub"))
+					loadedDub = true;
+			}
+			catch (Exception e)
+			{
+				error("Exception starting dub: ", e);
+			}
 		}
-		try
+		if (!loadedDub)
 		{
-			instance.config.set("fsworkspace", "additionalPaths", getPossibleSourceRoots(workspaceRoot));
-			if (backend.attach(instance, "fsworkspace"))
-				throw new Exception("Attach returned failure");
+			if (!disableDub)
+			{
+				error("Failed starting dub - falling back to fsworkspace");
+				rpc.window.showErrorMessage(translate!"d.ext.dubFail");
+			}
+			try
+			{
+				instance.config.set("fsworkspace", "additionalPaths",
+						getPossibleSourceRoots(workspaceRoot));
+				if (backend.attach(instance, "fsworkspace"))
+					throw new Exception("Attach returned failure");
+			}
+			catch (Exception e)
+			{
+				error(e);
+				rpc.window.showErrorMessage(translate!"d.ext.fsworkspaceFail");
+			}
 		}
-		catch (Exception e)
-		{
-			error(e);
-			rpc.window.showErrorMessage(translate!"d.ext.fsworkspaceFail");
-		}
+		else
+			setTimeout({ rpc.notifyMethod("coded/initDubTree"); }, 50);
+
+		if (!backend.attach(instance, "dmd"))
+			error("Failed to attach DMD component to ", workspaceUri);
+		startDCD(instance, workspaceUri);
+
+		trace("Loaded Components for ", instance.cwd, ": ",
+				instance.instanceComponents.map!"a.info.name");
 	}
-	else
-		setTimeout({ rpc.notifyMethod("coded/initDubTree"); }, 50);
-
-	if (!backend.attach(instance, "dmd"))
-		error("Failed to attach DMD component to ", workspaceUri);
-	startDCD(instance, workspaceUri);
-
-	trace("Loaded Components for ", instance.cwd, ": ",
-			instance.instanceComponents.map!"a.info.name");
 }
 
 void handleBroadcast(WorkspaceD workspaced, WorkspaceD.Instance instance, JSONValue data)
@@ -427,10 +450,10 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 	}
 	trace("Starting dcd");
 	if (!backend.attach(instance, "dcd"))
-		error("Failed to attach DCD component to ", workspaceUri);
+		error("Failed to attach DCD component to ", instance.cwd);
 	trace("Starting dcdext");
 	if (!backend.attach(instance, "dcdext"))
-		error("Failed to attach DCD component to ", workspaceUri);
+		error("Failed to attach DCD component to ", instance.cwd);
 	trace("Running DCD setup");
 	try
 	{
@@ -451,7 +474,7 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 		trace("Instance Config: ", instance.config);
 		return;
 	}
-	info("Imports for ", workspaceUri, ": ", backend.getInstance(instance.cwd).importPaths);
+	info("Imports for ", instance.cwd, ": ", backend.getInstance(instance.cwd).importPaths);
 
 	auto globalDCD = backend.get!DCDComponent;
 	if (!globalDCD.isActive)
