@@ -1426,6 +1426,7 @@ CodeLens resolveCodeLens(CodeLens lens)
 	}
 }
 
+bool importCompilationTimeRunning;
 int getImportCompilationTime(string code, string module_, string workspaceRoot)
 {
 	import std.math : round;
@@ -1445,8 +1446,8 @@ int getImportCompilationTime(string code, string module_, string workspaceRoot)
 	{
 		if (exist.code != code)
 			continue;
-		if (now - exist.at < (exist.ret >= 500 ? 10.minutes : exist.ret >= 30
-				? 60.seconds : 20.seconds) || module_.startsWith("std."))
+		if (now - exist.at < (exist.ret >= 500 ? 20.minutes : exist.ret >= 30 ? 5.minutes
+				: 2.minutes) || module_.startsWith("std."))
 			return exist.ret;
 		else
 		{
@@ -1455,12 +1456,21 @@ int getImportCompilationTime(string code, string module_, string workspaceRoot)
 		}
 	}
 
+	while (importCompilationTimeRunning)
+		Fiber.yield();
+	importCompilationTimeRunning = true;
+	scope (exit)
+		importCompilationTimeRunning = false;
 	// run blocking so we don't compute multiple in parallel
 	auto ret = backend.get!DMDComponent(workspaceRoot).measureSync(code, null, 20, 500);
 	if (!ret.success)
 		throw new Exception("Compilation failed");
 	auto msecs = cast(int) round(ret.duration.total!"msecs" / 5.0) * 5;
 	cache ~= CompileCache(now, code, msecs);
+	StopWatch sw;
+	sw.start();
+	while (sw.peek < 100.msecs) // pass through requests for 100ms
+		Fiber.yield();
 	return msecs;
 }
 
