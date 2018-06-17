@@ -169,7 +169,7 @@ struct Workspace
 {
 	WorkspaceFolder folder;
 	Configuration config;
-	bool initialized;
+	bool initialized, disabled;
 }
 
 deprecated string workspaceRoot() @property
@@ -187,7 +187,7 @@ Workspace[] workspaces;
 ClientCapabilities capabilities;
 RPCProcessor rpc;
 
-ref Workspace workspace(string uri)
+size_t workspaceIndex(string uri)
 {
 	if (!uri.startsWith("file://"))
 		throw new Exception("Passed a non file:// uri to workspace(uri): '" ~ uri ~ "'");
@@ -195,14 +195,20 @@ ref Workspace workspace(string uri)
 	size_t bestLength = 0;
 	foreach (i, ref workspace; workspaces)
 	{
-		if (workspace.folder.uri.length > bestLength && uri.startsWith(workspace.folder.uri))
+		if (workspace.folder.uri.length > bestLength && uri.startsWith(workspace.folder.uri) && !workspace.disabled)
 		{
 			best = i;
 			bestLength = workspace.folder.uri.length;
 			if (uri.length == workspace.folder.uri.length) // startsWith + same length => same string
-				return workspace;
+				return i;
 		}
 	}
+	return best;
+}
+
+ref Workspace workspace(string uri)
+{
+	auto best = workspaceIndex(uri);
 	if (best == size_t.max)
 		return bestWorkspaceByDependency(uri);
 	return workspaces[best];

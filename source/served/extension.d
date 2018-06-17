@@ -399,7 +399,7 @@ void doStartup(string workspaceUri)
 			if (!disableDub)
 			{
 				error("Failed starting dub - falling back to fsworkspace");
-				rpc.window.showErrorMessage(translate!"d.ext.dubFail");
+				rpc.window.showErrorMessage(translate!"d.ext.dubFail"(instance.cwd));
 			}
 			try
 			{
@@ -411,7 +411,7 @@ void doStartup(string workspaceUri)
 			catch (Exception e)
 			{
 				error(e);
-				rpc.window.showErrorMessage(translate!"d.ext.fsworkspaceFail");
+				rpc.window.showErrorMessage(translate!"d.ext.fsworkspaceFail"(instance.cwd));
 			}
 		}
 		else
@@ -424,6 +424,15 @@ void doStartup(string workspaceUri)
 		trace("Loaded Components for ", instance.cwd, ": ",
 				instance.instanceComponents.map!"a.info.name");
 	}
+}
+
+void removeWorkspace(string workspaceUri)
+{
+	auto workspaceRoot = workspaceRootFor(workspaceUri);
+	if (!workspaceRoot.length)
+		return;
+	backend.removeInstance(workspaceRoot);
+	workspace(workspaceUri).disabled = true;
 }
 
 void handleBroadcast(WorkspaceD workspaced, WorkspaceD.Instance instance, JSONValue data)
@@ -469,7 +478,7 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 	}
 	catch (Exception e)
 	{
-		rpc.window.showErrorMessage(translate!"d.ext.dcdFail");
+		rpc.window.showErrorMessage(translate!"d.ext.dcdFail"(instance.cwd));
 		error(e);
 		trace("Instance Config: ", instance.config);
 		return;
@@ -1773,6 +1782,19 @@ void onChangeFiles(DidChangeWatchedFilesParams params)
 				}
 			}
 		}
+	}
+}
+
+@protocolNotification("workspace/didChangeWorkspaceFolders")
+void didChangeWorkspaceFolders(DidChangeWorkspaceFoldersParams params)
+{
+	foreach (toRemove; params.event.removed)
+		removeWorkspace(toRemove.uri);
+	foreach (toAdd; params.event.added)
+	{
+		workspaces ~= Workspace(toAdd);
+		syncConfiguration(toAdd.uri);
+		doStartup(toAdd.uri);
 	}
 }
 
