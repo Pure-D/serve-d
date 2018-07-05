@@ -1153,38 +1153,24 @@ SignatureHelp provideSignatureHelp(TextDocumentPositionParams params)
 	}
 }
 
+PerDocumentCache!(SymbolInformation[]) documentSymbolsCache;
+
 @protocolMethod("workspace/symbol")
 SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 {
-	import std.file;
-
-	// TODO: combine all workspaces
-	auto result = backend.get!DCDComponent(workspaceRoot).searchSymbol(params.query).getYield;
 	SymbolInformation[] infos;
-	TextDocumentManager extraCache;
-	foreach (symbol; result.array)
+	foreach (workspace; workspaces)
 	{
-		auto uri = uriFromFile(symbol.file);
-		auto doc = documents.tryGet(uri);
-		Location location;
-		if (!doc.uri)
-			doc = extraCache.tryGet(uri);
-		if (!doc.uri)
+		string workspaceRoot = workspace.folder.uri.uriToFile;
+		foreach (file; fs.dirEntries(workspaceRoot, fs.SpanMode.depth, false))
 		{
-			doc = Document(uri);
-			try
-			{
-				doc.text = readText(symbol.file);
-			}
-			catch (Exception e)
-			{
-				error(e);
-			}
-		}
-		if (doc.text)
-		{
-			location = Location(doc.uri, TextRange(doc.bytesToPosition(cast(size_t) symbol.position)));
-			infos ~= SymbolInformation(params.query, convertFromDCDSearchType(symbol.type), location);
+			if (!file.isFile || file.extension != ".d")
+				continue;
+			auto defs = provideDocumentSymbols(
+					DocumentSymbolParams(TextDocumentIdentifier(file.uriFromFile)));
+			foreach (def; defs)
+				if (def.name.toLower.startsWith(params.query.toLower))
+					infos ~= def;
 		}
 	}
 	return infos;
@@ -1193,8 +1179,11 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 @protocolMethod("textDocument/documentSymbol")
 SymbolInformation[] provideDocumentSymbols(DocumentSymbolParams params)
 {
+	auto cached = documentSymbolsCache.cached(documents, params.textDocument.uri);
+	if (cached.length)
+		return cached;
+	auto document = documents.tryGet(params.textDocument.uri);
 	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
-	auto document = documents[params.textDocument.uri];
 	auto result = backend.get!DscannerComponent(workspaceRoot)
 		.listDefinitions(uriToFile(params.textDocument.uri), document.text).getYield;
 	SymbolInformation[] ret;
@@ -1214,6 +1203,7 @@ SymbolInformation[] provideDocumentSymbols(DocumentSymbolParams params)
 			info.containerName = *ptr;
 		ret ~= info;
 	}
+	documentSymbolsCache.store(document, ret);
 	return ret;
 }
 
