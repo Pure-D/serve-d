@@ -6,6 +6,7 @@ public import served.textdocumentmanager;
 
 import std.algorithm;
 import std.array;
+import std.conv;
 import std.json;
 import std.meta;
 import std.path;
@@ -69,6 +70,8 @@ struct Configuration
 		bool aggressiveUpdate = true;
 		bool argumentSnippets = false;
 		bool scanAllFolders = true;
+		string[] disabledRootGlobs;
+		string[] extraRoots;
 	}
 
 	struct DFmt
@@ -170,6 +173,25 @@ struct Workspace
 	WorkspaceFolder folder;
 	Configuration config;
 	bool initialized, disabled;
+	string[string] startupErrorNotifications;
+
+	void startupError(string folder, string error)
+	{
+		if (folder !in startupErrorNotifications)
+			startupErrorNotifications[folder] = "";
+		string errors = startupErrorNotifications[folder];
+		if (errors.length)
+		{
+			if (errors.endsWith(".", "\n\n"))
+				startupErrorNotifications[folder] ~= " " ~ error;
+			else if (errors.endsWith(". "))
+				startupErrorNotifications[folder] ~= error;
+			else
+				startupErrorNotifications[folder] ~= "\n\n" ~ error;
+		}
+		else
+			startupErrorNotifications[folder] = error;
+	}
 }
 
 deprecated string workspaceRoot() @property
@@ -195,7 +217,8 @@ size_t workspaceIndex(string uri)
 	size_t bestLength = 0;
 	foreach (i, ref workspace; workspaces)
 	{
-		if (workspace.folder.uri.length > bestLength && uri.startsWith(workspace.folder.uri) && !workspace.disabled)
+		if (workspace.folder.uri.length > bestLength
+				&& uri.startsWith(workspace.folder.uri) && !workspace.disabled)
 		{
 			best = i;
 			bestLength = workspace.folder.uri.length;
@@ -206,12 +229,37 @@ size_t workspaceIndex(string uri)
 	return best;
 }
 
-ref Workspace workspace(string uri)
+ref Workspace handleThings(ref Workspace workspace, string uri, bool triggerErrors,
+		string file = __FILE__, size_t line = __LINE__)
+{
+	if (triggerErrors)
+	{
+		string f = uri.uriToFile;
+		foreach (key, error; workspace.startupErrorNotifications)
+		{
+			if (f.startsWith(key))
+			{
+				//dfmt off
+				debug
+					rpc.window.showErrorMessage(
+							error ~ "\n\nFile: " ~ file ~ ":" ~ line.to!string);
+				else
+					rpc.window.showErrorMessage(error);
+				//dfmt on
+				workspace.startupErrorNotifications.remove(key);
+			}
+		}
+	}
+	return workspace;
+}
+
+ref Workspace workspace(string uri, bool triggerErrors = true,
+		string file = __FILE__, size_t line = __LINE__)
 {
 	auto best = workspaceIndex(uri);
 	if (best == size_t.max)
-		return bestWorkspaceByDependency(uri);
-	return workspaces[best];
+		return bestWorkspaceByDependency(uri).handleThings(uri, triggerErrors, file, line);
+	return workspaces[best].handleThings(uri, triggerErrors, file, line);
 }
 
 ref Workspace bestWorkspaceByDependency(string uri)
@@ -253,9 +301,10 @@ bool hasWorkspace(string uri)
 	return false;
 }
 
-ref Configuration config(string uri)
+ref Configuration config(string uri, bool triggerErrors = true,
+		string file = __FILE__, size_t line = __LINE__)
 {
-	return workspace(uri).config;
+	return workspace(uri, triggerErrors, file, line).config;
 }
 
 ref Configuration firstConfig()
@@ -339,3 +388,15 @@ int toInt(JSONValue value)
 }
 
 WorkspaceD backend;
+
+/// Quick function to check if a package.json can not not be a dub package file.
+/// Returns: false if fields are used which aren't usually used in dub but in nodejs.
+bool seemsLikeDubJson(JSONValue packageJson)
+{
+	if ("main" in packageJson || "engines" in packageJson || "publisher" in packageJson
+			|| "private" in packageJson || "devDependencies" in packageJson)
+		return false;
+	if ("name" !in packageJson)
+		return false;
+	return true;
+}

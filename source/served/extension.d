@@ -217,7 +217,7 @@ string[] getPossibleSourceRoots(string workspaceFolder)
 {
 	import std.file;
 
-	auto confPaths = config(workspaceFolder.uriFromFile).d.projectImportPaths.map!(
+	auto confPaths = config(workspaceFolder.uriFromFile, false).d.projectImportPaths.map!(
 			a => a.isAbsolute ? a : buildNormalizedPath(workspaceRoot, a));
 	if (!confPaths.empty)
 		return confPaths.array;
@@ -244,6 +244,11 @@ InitializeResult initialize(InitializeParams params)
 	else if (params.rootPath.length)
 		workspaces = [Workspace(WorkspaceFolder(params.rootPath.uriFromFile,
 				"Root"), served.types.Configuration.init)];
+	if (workspaces.length)
+	{
+		fallbackWorkspace.folder = workspaces[0].folder;
+		fallbackWorkspace.initialized = true;
+	}
 
 	InitializeResult result;
 	result.capabilities.textDocumentSync = documents.syncKind;
@@ -334,11 +339,23 @@ struct RootSuggestion
 	bool useDub;
 }
 
-RootSuggestion[] rootsForProject(string root, bool recursive)
+RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked)
 {
 	RootSuggestion[] ret;
-	bool rootDub = fs.exists(buildPath(root, "dub.json")) || fs.exists(buildPath(root,
-			"dub.sdl")) || fs.exists(buildPath(root, "package.json"));
+	bool rootDub = fs.exists(chainPath(root, "dub.json")) || fs.exists(chainPath(root, "dub.sdl"));
+	if (!rootDub && fs.exists(chainPath(root, "package.json")))
+	{
+		auto packageJson = fs.readText(chainPath(root, "package.json"));
+		try
+		{
+			auto json = parseJSON(packageJson);
+			if (seemsLikeDubJson(json))
+				rootDub = true;
+		}
+		catch (Exception)
+		{
+		}
+	}
 	ret ~= RootSuggestion(root, rootDub);
 	if (recursive)
 		foreach (pkg; fs.dirEntries(root, "dub.{json,sdl}", fs.SpanMode.depth))
@@ -347,6 +364,10 @@ RootSuggestion[] rootsForProject(string root, bool recursive)
 			if (dir.canFind(".dub"))
 				continue;
 			if (dir == root)
+				continue;
+			if (blocked.any!(a => globMatch(dir.relativePath(root), a)
+					|| globMatch(pkg.relativePath(root), a)
+					|| globMatch((dir ~ "/").relativePath, a)))
 				continue;
 			ret ~= RootSuggestion(dir, true);
 		}
@@ -364,7 +385,8 @@ void doStartup(string workspaceUri)
 	}
 	trace("Initializing serve-d for " ~ workspaceUri);
 
-	foreach (root; rootsForProject(workspaceUri.uriToFile, proj.config.d.scanAllFolders))
+	foreach (root; rootsForProject(workspaceUri.uriToFile,
+			proj.config.d.scanAllFolders, proj.config.d.disabledRootGlobs))
 	{
 		auto workspaceRoot = root.dir;
 		workspaced.api.Configuration config;
@@ -374,11 +396,6 @@ void doStartup(string workspaceUri)
 				"dmd" : JSONValue(["path" : JSONValue(proj.config.d.dmdPath)])]);
 		auto instance = backend.addInstance(workspaceRoot, config);
 
-		backend.onBroadcast = (&handleBroadcast).toDelegate;
-		backend.onBindFail = (WorkspaceD.Instance instance, ComponentFactory factory) {
-			rpc.window.showErrorMessage(
-					"Failed to load component " ~ factory.info.name ~ " for workspace " ~ instance.cwd);
-		};
 		bool disableDub = proj.config.d.neverUseDub || !root.useDub;
 		bool loadedDub;
 		if (!disableDub)
@@ -398,8 +415,8 @@ void doStartup(string workspaceUri)
 		{
 			if (!disableDub)
 			{
-				error("Failed starting dub - falling back to fsworkspace");
-				rpc.window.showErrorMessage(translate!"d.ext.dubFail"(instance.cwd));
+				error("Failed starting dub in ", root, " - falling back to fsworkspace");
+				proj.startupError(workspaceRoot, translate!"d.ext.dubFail"(instance.cwd));
 			}
 			try
 			{
@@ -411,7 +428,7 @@ void doStartup(string workspaceUri)
 			catch (Exception e)
 			{
 				error(e);
-				rpc.window.showErrorMessage(translate!"d.ext.fsworkspaceFail"(instance.cwd));
+				proj.startupError(workspaceRoot, translate!"d.ext.fsworkspaceFail"(instance.cwd));
 			}
 		}
 		else
@@ -451,7 +468,7 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 {
 	if (shutdownRequested)
 		return;
-	Workspace* proj = &workspace(workspaceUri);
+	Workspace* proj = &workspace(workspaceUri, false);
 	if (proj is &fallbackWorkspace)
 	{
 		error("Trying to start DCD on unknown workspace ", workspaceUri, "?");
@@ -633,6 +650,7 @@ bool compileDependency(string cwd, string name, string gitURI, string[][] comman
 JSONValue shutdown()
 {
 	shutdownRequested = true;
+	backend.shutdown();
 	backend.destroy();
 	served.extension.setTimeout({
 		throw new Error("RPC still running 1s after shutdown");
@@ -2168,6 +2186,12 @@ shared static this()
 {
 	spawnFiber = (&setImmediate).toDelegate;
 	backend = new WorkspaceD();
+
+	backend.onBroadcast = (&handleBroadcast).toDelegate;
+	backend.onBindFail = (WorkspaceD.Instance instance, ComponentFactory factory) {
+		rpc.window.showErrorMessage(
+				"Failed to load component " ~ factory.info.name ~ " for workspace " ~ instance.cwd);
+	};
 }
 
 __gshared int timeoutID;
