@@ -37,7 +37,6 @@ MarkedString[] ddocToMarked(string ddoc)
 string prepareDDoc(string str)
 {
 	import ddoc.lexer;
-	import ddoc.macros : tokOffset;
 
 	auto lex = Lexer(str, true);
 	string output;

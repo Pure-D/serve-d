@@ -6,8 +6,13 @@ public import served.textdocumentmanager;
 
 import std.algorithm;
 import std.array;
+import std.conv;
 import std.json;
+import std.meta;
 import std.path;
+import std.range;
+
+import workspaced.api;
 
 import served.jsonrpc;
 
@@ -21,7 +26,7 @@ struct protocolNotification
 	string method;
 }
 
-enum IncludedFeatures = ["d"];
+enum IncludedFeatures = ["d", "workspaces"];
 
 TextDocumentManager documents;
 
@@ -33,6 +38,10 @@ string[] compare(string prefix, T)(ref T a, ref T b)
 			changed ~= prefix ~ member;
 	return changed;
 }
+
+alias configurationTypes = AliasSeq!(Configuration.D, Configuration.DFmt,
+		Configuration.Editor, Configuration.Git);
+static immutable string[] configurationSections = ["d", "dfmt", "editor", "git"];
 
 struct Configuration
 {
@@ -50,7 +59,7 @@ struct Configuration
 		bool enableDubLinting = true;
 		bool enableAutoComplete = true;
 		bool enableFormatting = true;
-		bool enableDMDImportTiming = true;
+		bool enableDMDImportTiming = false;
 		bool neverUseDub = false;
 		string[] projectImportPaths;
 		string dubConfiguration;
@@ -59,7 +68,10 @@ struct Configuration
 		string dubCompiler;
 		bool overrideDfmtEditorconfig = true;
 		bool aggressiveUpdate = true;
-		bool argumentSnippets = true;
+		bool argumentSnippets = false;
+		bool scanAllFolders = true;
+		string[] disabledRootGlobs;
+		string[] extraRoots;
 	}
 
 	struct DFmt
@@ -107,7 +119,8 @@ struct Configuration
 				else
 				{
 					pragma(msg,
-							"source/served/types.d(83): Unknown target OS. Please add default D stdlib path");
+							__FILE__ ~ "(" ~ __LINE__
+							~ "): Note: Unknown target OS. Please add default D stdlib path");
 					return [];
 				}
 			}
@@ -118,25 +131,219 @@ struct Configuration
 
 	string[] replace(Configuration newConfig)
 	{
-		auto ret = compare!"d."(d, newConfig.d) ~ compare!"dfmt."(dfmt,
-				newConfig.dfmt) ~ compare!"editor."(editor, newConfig.editor);
-		d = newConfig.d;
-		dfmt = newConfig.dfmt;
-		editor = newConfig.editor;
+		string[] ret;
+		ret ~= replaceSection!"d"(newConfig.d);
+		ret ~= replaceSection!"dfmt"(newConfig.dfmt);
+		ret ~= replaceSection!"editor"(newConfig.editor);
+		ret ~= replaceSection!"git"(newConfig.git);
+		return ret;
+	}
+
+	string[] replaceSection(string section : "d")(D newD)
+	{
+		auto ret = compare!"d."(d, newD);
+		d = newD;
+		return ret;
+	}
+
+	string[] replaceSection(string section : "dfmt")(DFmt newDfmt)
+	{
+		auto ret = compare!"dfmt."(dfmt, newDfmt);
+		dfmt = newDfmt;
+		return ret;
+	}
+
+	string[] replaceSection(string section : "editor")(Editor newEditor)
+	{
+		auto ret = compare!"editor."(editor, newEditor);
+		editor = newEditor;
+		return ret;
+	}
+
+	string[] replaceSection(string section : "git")(Git newGit)
+	{
+		auto ret = compare!"git."(git, newGit);
+		git = newGit;
 		return ret;
 	}
 }
 
-Configuration config;
-string workspaceRoot;
+struct Workspace
+{
+	WorkspaceFolder folder;
+	Configuration config;
+	bool initialized, disabled;
+	string[string] startupErrorNotifications;
+	bool selected;
+
+	void startupError(string folder, string error)
+	{
+		if (folder !in startupErrorNotifications)
+			startupErrorNotifications[folder] = "";
+		string errors = startupErrorNotifications[folder];
+		if (errors.length)
+		{
+			if (errors.endsWith(".", "\n\n"))
+				startupErrorNotifications[folder] ~= " " ~ error;
+			else if (errors.endsWith(". "))
+				startupErrorNotifications[folder] ~= error;
+			else
+				startupErrorNotifications[folder] ~= "\n\n" ~ error;
+		}
+		else
+			startupErrorNotifications[folder] = error;
+	}
+}
+
+deprecated string workspaceRoot() @property
+{
+	return firstWorkspaceRootUri.uriToFile;
+}
+
+string selectedWorkspaceRoot() @property
+{
+	foreach (ref workspace; workspaces)
+		if (workspace.selected)
+			return workspace.folder.uri.uriToFile;
+	return firstWorkspaceRootUri.uriToFile;
+}
+
+string firstWorkspaceRootUri() @property
+{
+	return workspaces.length ? workspaces[0].folder.uri : "";
+}
+
+Workspace fallbackWorkspace;
+Workspace[] workspaces;
+ClientCapabilities capabilities;
 RPCProcessor rpc;
+
+size_t workspaceIndex(string uri)
+{
+	if (!uri.startsWith("file://"))
+		throw new Exception("Passed a non file:// uri to workspace(uri): '" ~ uri ~ "'");
+	size_t best = size_t.max;
+	size_t bestLength = 0;
+	foreach (i, ref workspace; workspaces)
+	{
+		if (workspace.folder.uri.length > bestLength
+				&& uri.startsWith(workspace.folder.uri) && !workspace.disabled)
+		{
+			best = i;
+			bestLength = workspace.folder.uri.length;
+			if (uri.length == workspace.folder.uri.length) // startsWith + same length => same string
+				return i;
+		}
+	}
+	return best;
+}
+
+ref Workspace handleThings(ref Workspace workspace, string uri, bool userExecuted,
+		string file = __FILE__, size_t line = __LINE__)
+{
+	if (userExecuted)
+	{
+		string f = uri.uriToFile;
+		foreach (key, error; workspace.startupErrorNotifications)
+		{
+			if (f.startsWith(key))
+			{
+				//dfmt off
+				debug
+					rpc.window.showErrorMessage(
+							error ~ "\n\nFile: " ~ file ~ ":" ~ line.to!string);
+				else
+					rpc.window.showErrorMessage(error);
+				//dfmt on
+				workspace.startupErrorNotifications.remove(key);
+			}
+		}
+
+		bool notifyChange, changedOne;
+		foreach (ref w; workspaces)
+		{
+			if (w.selected)
+			{
+				if (w.folder.uri != workspace.folder.uri)
+					notifyChange = true;
+				changedOne = true;
+				w.selected = false;
+			}
+		}
+		workspace.selected = true;
+		if (notifyChange || !changedOne)
+			rpc.notifyMethod("coded/changedSelectedWorkspace", workspace.folder);
+	}
+	return workspace;
+}
+
+ref Workspace workspace(string uri, bool userExecuted = true,
+		string file = __FILE__, size_t line = __LINE__)
+{
+	auto best = workspaceIndex(uri);
+	if (best == size_t.max)
+		return bestWorkspaceByDependency(uri).handleThings(uri, userExecuted, file, line);
+	return workspaces[best].handleThings(uri, userExecuted, file, line);
+}
+
+ref Workspace bestWorkspaceByDependency(string uri)
+{
+	size_t best = size_t.max;
+	size_t bestLength;
+	foreach (i, ref workspace; workspaces)
+	{
+		auto inst = backend.getInstance(workspace.folder.uri.uriToFile);
+		if (!inst)
+			continue;
+		foreach (folder; chain(inst.importPaths, inst.importFiles, inst.stringImportPaths))
+		{
+			string folderUri = folder.uriFromFile;
+			if (folderUri.length > bestLength && uri.startsWith(folderUri))
+			{
+				best = i;
+				bestLength = folderUri.length;
+				if (uri.length == folderUri.length) // startsWith + same length => same string
+					return workspace;
+			}
+		}
+	}
+	if (best == size_t.max)
+		return fallbackWorkspace;
+	return workspaces[best];
+}
+
+string workspaceRootFor(string uri)
+{
+	return workspace(uri).folder.uri.uriToFile;
+}
+
+bool hasWorkspace(string uri)
+{
+	foreach (i, ref workspace; workspaces)
+		if (uri.startsWith(workspace.folder.uri))
+			return true;
+	return false;
+}
+
+ref Configuration config(string uri, bool userExecuted = true,
+		string file = __FILE__, size_t line = __LINE__)
+{
+	return workspace(uri, userExecuted, file, line).config;
+}
+
+ref Configuration firstConfig()
+{
+	if (!workspaces.length)
+		throw new Exception("No config available");
+	return workspaces[0].config;
+}
 
 DocumentUri uriFromFile(string file)
 {
 	import std.uri : encodeComponent;
 
 	if (!isAbsolute(file))
-		file = buildNormalizedPath(workspaceRoot, file);
+		throw new Exception("Tried to pass relative path '" ~ file ~ "' to uriFromFile");
 	file = file.buildNormalizedPath.replace("\\", "/");
 	if (file.length == 0)
 		return "";
@@ -202,4 +409,18 @@ int toInt(JSONValue value)
 		return cast(int) value.uinteger;
 	else
 		return cast(int) value.integer;
+}
+
+WorkspaceD backend;
+
+/// Quick function to check if a package.json can not not be a dub package file.
+/// Returns: false if fields are used which aren't usually used in dub but in nodejs.
+bool seemsLikeDubJson(JSONValue packageJson)
+{
+	if ("main" in packageJson || "engines" in packageJson || "publisher" in packageJson
+			|| "private" in packageJson || "devDependencies" in packageJson)
+		return false;
+	if ("name" !in packageJson)
+		return false;
+	return true;
 }

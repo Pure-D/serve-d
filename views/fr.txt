@@ -76,7 +76,7 @@ d.ext.noImportPaths.buildType: Aucun chemin d'import disponible pour ce type de 
 d.ext.noConfigurations.project: Aucune configuration disponible pour ce projet. L'autocomplétion peut ne pas fonctionner !
 d.ext.compilerFail: Le compilateur n'a pas pu être changé
 d.ext.archFail: L'architecture n'a pas pu être changée
-d.ext.ultimateArchFail: Échec du changement d'architecture. Voir la console pour plus de details.
+d.ext.ultimateArchFail: Échec du changement d'architecture. Voir la console pour plus de détails.
 d.ext.dcdUpdateFail: DCD n'a pas pu être mis à jour. Veuillez redémarrer DCD s'il ne fonctionne pas correctement
 d.ext.workspacedUnresponsive: workspace-d ne répond pas. L'autocomplétion peut ne pas fonctionner !
 d.ext.workspacedUnkillable: workspace-d n'a pas pu être tué. Veuillez le tuer manuellement ! PID: {0}
@@ -89,9 +89,9 @@ d.ext.config.invalid.configuration: La configuration '{0}' spécifiée dans la c
 d.ext.config.invalid.archType: L'architecture '{0}' spécifiée dans la configuration n'est pas disponible !
 d.ext.config.invalid.buildType: Le type de construction '{0}' spécifié dans la configuration n'est pas disponible !
 d.ext.config.invalid.compiler: Le compilateur '{0}' spécifié dans la configuration n'est pas disponible !
-d.ext.dubFail: Dub n'a pas pu être initialisé. Les fonctionnalités seront limitées !
-d.ext.fsworkspaceFail: fsworkspace n'a pas pu être initialisé. Voir la console pour plus de details !
-d.ext.dcdFail: DCD n'a pas pu être initialisé. Voir la console pour plus de details !
+d.ext.dubFail : Dub n'a pas pu être initialisé pour {0}. Vous n'aurez pas accès à toutes les fonctionnalités.
+d.ext.fsworkspaceFail:  Dub n'a pas pu être initialisé fsworkspace pour {0}. Regardez votre console pour plus de détails
+d.ext.dcdFail: DCD n'a pas pu être initialisé pour l'espace de travail {0}. Voir la console pour plus de détails !
 d.ext.gcLens: {0} octets alloués / {1} allocations
 d.ext.stdlibNoPhobosNoDRuntime: Le d.stdlibPath configuré ne contient pas de chemin vers phobos ou druntime. L'autocomplétion pourra manquer certains symboles !
 d.ext.stdlibNoPhobos: Le d.stdlibPath configuré ne contient pas de chemin vers phobos. L'autocomplétion pourra manquer certains symboles !
@@ -103,13 +103,13 @@ d.ext.compileProgram: Compiler {0}
 d.ext.downloadProgram: Télécharcher {0}
 d.ext.dubUpgradeFail: Le projet dub n'a pas pu être mis à jour
 d.ext.dubImportFail: Les chemins d'imports n'ont pas pu être mis à jour. Veuillez vérifier les paramètres de construction dans la barre de status.
-d.ext.configSwitchFail: Échec du changement de configuration. Voir la console pour plus de details.
-d.ext.archSwitchFail: Échec du changement d'architecture. Voir la console pour plus de details.
-d.ext.buildTypeSwitchFail: Échec du changement de type de construction. Voir la console pour plus de details.
+d.ext.configSwitchFail: Échec du changement de configuration. Voir la console pour plus de détails.
+d.ext.archSwitchFail: Échec du changement d'architecture. Voir la console pour plus de détails.
+d.ext.buildTypeSwitchFail: Échec du changement de type de construction. Voir la console pour plus de détails.
 d.ext.compilerPrompt: Entrez l'identifiant du compilateur. (dmd, ldc2, gdc...)
-d.ext.compilerSwitchFail: Échec du changement de compilateur. Voir la console pour plus de details.
+d.ext.compilerSwitchFail: Échec du changement de compilateur. Voir la console pour plus de détails.
 d.ext.dcd.restart: Redémarrer
-d.ext.dcdKillFail: Échec de la tentative pour tuer DCD-Server. Voir la console pour plus de details.
+d.ext.dcdKillFail: Échec de la tentative pour tuer DCD-Server. Voir la console pour plus de détails.
 d.ext.dcdRestarted: DCD-Server redémarré
 d.ext.importsReloaded: Chemins d'imports rechargés avec succès
 d.ext.importsEmpty: Les chemins d'imports sont vides !
@@ -119,7 +119,7 @@ d.ext.importAddFail: L'import n'a pas pu être ajouté
 d.ext.rdmdTitle: Sortie de rdmd
 d.ext.uploader.noCode: Pas de code sélectionné
 d.ext.uploader.success: Code copié sur {0}
-d.ext.uploader.fail: Échec de téléversement de la sélection. Voir la console pour plus de details.
+d.ext.uploader.fail: Échec de téléversement de la sélection. Voir la console pour plus de détails.
 
 d.projects.readFail: Échec de la lecture de la liste de modèles
 d.projects.selectFolderInstruction: Sélectionner un répertoire vide dans lequel créer le projet

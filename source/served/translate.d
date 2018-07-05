@@ -23,7 +23,7 @@ private Translation parseTranslation(string s)()
 {
 	Translation tr;
 	foreach (line; s.splitLines)
-		if (line.length)
+		if (line.length && line[0] != '#')
 		{
 			auto colon = line.indexOf(':');
 			if (colon == -1)
