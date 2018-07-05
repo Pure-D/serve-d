@@ -339,7 +339,7 @@ struct RootSuggestion
 	bool useDub;
 }
 
-RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked)
+RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked, string[] extra)
 {
 	RootSuggestion[] ret;
 	bool rootDub = fs.exists(chainPath(root, "dub.json")) || fs.exists(chainPath(root, "dub.sdl"));
@@ -370,6 +370,13 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked)
 				continue;
 			ret ~= RootSuggestion(dir, true);
 		}
+	foreach (dir; extra)
+	{
+		string p = buildNormalizedPath(root, dir);
+		if (!ret.canFind!(a => a.dir == p))
+			ret ~= RootSuggestion(p, fs.exists(chainPath(p, "dub.json"))
+					|| fs.exists(chainPath(p, "dub.sdl")));
+	}
 	info("Root Suggestions: ", ret);
 	return ret;
 }
@@ -384,8 +391,8 @@ void doStartup(string workspaceUri)
 	}
 	trace("Initializing serve-d for " ~ workspaceUri);
 
-	foreach (root; rootsForProject(workspaceUri.uriToFile,
-			proj.config.d.scanAllFolders, proj.config.d.disabledRootGlobs))
+	foreach (root; rootsForProject(workspaceUri.uriToFile, proj.config.d.scanAllFolders,
+			proj.config.d.disabledRootGlobs, proj.config.d.extraRoots))
 	{
 		auto workspaceRoot = root.dir;
 		workspaced.api.Configuration config;
@@ -421,7 +428,7 @@ void doStartup(string workspaceUri)
 			{
 				instance.config.set("fsworkspace", "additionalPaths",
 						getPossibleSourceRoots(workspaceRoot));
-				if (backend.attach(instance, "fsworkspace"))
+				if (!backend.attach(instance, "fsworkspace"))
 					throw new Exception("Attach returned failure");
 			}
 			catch (Exception e)
