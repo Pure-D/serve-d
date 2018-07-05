@@ -299,3 +299,45 @@ struct TextDocumentManager
 		return false;
 	}
 }
+
+struct PerDocumentCache(T)
+{
+	struct Entry
+	{
+		Document document;
+		T data;
+	}
+
+	Entry[] entries;
+
+	T cached(ref TextDocumentManager source, string uri)
+	{
+		auto newest = source.tryGet(uri);
+		foreach (entry; entries)
+			if (entry.document.uri == uri)
+			{
+				if (entry.document.version_ >= newest.version_)
+					return entry.data;
+				else
+					return T.init;
+			}
+		return T.init;
+	}
+
+	void store(Document document, T data)
+	{
+		foreach (ref entry; entries)
+		{
+			if (entry.document.uri == document.uri)
+			{
+				if (document.version_ >= entry.document.version_)
+				{
+					entry.document = document;
+					entry.data = data;
+				}
+				return;
+			}
+		}
+		entries ~= Entry(document, data);
+	}
+}
