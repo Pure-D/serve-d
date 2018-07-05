@@ -366,8 +366,7 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked)
 			if (dir == root)
 				continue;
 			if (blocked.any!(a => globMatch(dir.relativePath(root), a)
-					|| globMatch(pkg.relativePath(root), a)
-					|| globMatch((dir ~ "/").relativePath, a)))
+					|| globMatch(pkg.relativePath(root), a) || globMatch((dir ~ "/").relativePath, a)))
 				continue;
 			ret ~= RootSuggestion(dir, true);
 		}
@@ -1415,7 +1414,7 @@ Command[] provideCodeActions(CodeActionParams params)
 		}
 		else
 		{
-			import analysis.imports_sortedness : ImportSortednessCheck;
+			import dscanner.analysis.imports_sortedness : ImportSortednessCheck;
 
 			if (diagnostic.message == ImportSortednessCheck.MESSAGE)
 			{
@@ -1527,69 +1526,69 @@ int getImportCompilationTime(string code, string module_, string workspaceRoot)
 @protocolMethod("served/listConfigurations")
 string[] listConfigurations()
 {
-	return backend.get!DubComponent(workspaceRoot).configurations;
+	return backend.get!DubComponent(selectedWorkspaceRoot).configurations;
 }
 
 @protocolMethod("served/switchConfig")
 bool switchConfig(string value)
 {
-	return backend.get!DubComponent(workspaceRoot).setConfiguration(value);
+	return backend.get!DubComponent(selectedWorkspaceRoot).setConfiguration(value);
 }
 
 @protocolMethod("served/getConfig")
 string getConfig(string value)
 {
-	return backend.get!DubComponent(workspaceRoot).configuration;
+	return backend.get!DubComponent(selectedWorkspaceRoot).configuration;
 }
 
 @protocolMethod("served/listArchTypes")
 string[] listArchTypes()
 {
-	return backend.get!DubComponent(workspaceRoot).archTypes;
+	return backend.get!DubComponent(selectedWorkspaceRoot).archTypes;
 }
 
 @protocolMethod("served/switchArchType")
 bool switchArchType(string value)
 {
-	return backend.get!DubComponent(workspaceRoot)
+	return backend.get!DubComponent(selectedWorkspaceRoot)
 		.setArchType(JSONValue(["arch-type" : JSONValue(value)]));
 }
 
 @protocolMethod("served/getArchType")
 string getArchType(string value)
 {
-	return backend.get!DubComponent(workspaceRoot).archType;
+	return backend.get!DubComponent(selectedWorkspaceRoot).archType;
 }
 
 @protocolMethod("served/listBuildTypes")
 string[] listBuildTypes()
 {
-	return backend.get!DubComponent(workspaceRoot).buildTypes;
+	return backend.get!DubComponent(selectedWorkspaceRoot).buildTypes;
 }
 
 @protocolMethod("served/switchBuildType")
 bool switchBuildType(string value)
 {
-	return backend.get!DubComponent(workspaceRoot)
+	return backend.get!DubComponent(selectedWorkspaceRoot)
 		.setBuildType(JSONValue(["build-type" : JSONValue(value)]));
 }
 
 @protocolMethod("served/getBuildType")
 string getBuildType()
 {
-	return backend.get!DubComponent(workspaceRoot).buildType;
+	return backend.get!DubComponent(selectedWorkspaceRoot).buildType;
 }
 
 @protocolMethod("served/getCompiler")
 string getCompiler()
 {
-	return backend.get!DubComponent(workspaceRoot).compiler;
+	return backend.get!DubComponent(selectedWorkspaceRoot).compiler;
 }
 
 @protocolMethod("served/switchCompiler")
 bool switchCompiler(string value)
 {
-	return backend.get!DubComponent(workspaceRoot).setCompiler(value);
+	return backend.get!DubComponent(selectedWorkspaceRoot).setCompiler(value);
 }
 
 @protocolMethod("served/addImport")
@@ -1683,14 +1682,14 @@ bool restartServer()
 @protocolMethod("served/updateImports")
 bool updateImports()
 {
+	auto workspaceRoot = selectedWorkspaceRoot;
 	bool success;
-	if (backend.has!DubComponent)
+	if (backend.has!DubComponent(workspaceRoot))
 	{
-		success = backend.get!DubComponent.update.getYield;
+		success = backend.get!DubComponent(workspaceRoot).update.getYield;
 		if (success)
 			rpc.notifyMethod("coded/updateDubTree");
 	}
-	// TODO: do this for all
 	backend.get!DCDComponent(workspaceRoot).refreshImports();
 	return success;
 }
@@ -1698,7 +1697,7 @@ bool updateImports()
 @protocolMethod("served/listDependencies")
 DubDependency[] listDependencies(string packageName)
 {
-	// TODO: add workspaceRoot argument
+	auto workspaceRoot = selectedWorkspaceRoot;
 	DubDependency[] ret;
 	auto allDeps = backend.get!DubComponent(workspaceRoot).dependencies;
 	if (!packageName.length)
@@ -1883,15 +1882,16 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 @protocolNotification("served/killServer")
 void killServer()
 {
-	// TODO: do this for all workspaces
-	backend.get!DCDComponent(workspaceRoot).killServer();
+	foreach (instance; backend.instances)
+		if (instance.has!DCDComponent)
+			instance.get!DCDComponent.killServer();
 }
 
 @protocolNotification("served/installDependency")
 void installDependency(InstallRequest req)
 {
-	// TODO: add workspace argument
-	injectDependency(req);
+	auto workspaceRoot = selectedWorkspaceRoot;
+	injectDependency(workspaceRoot, req);
 	if (backend.has!DubComponent)
 	{
 		backend.get!DubComponent(workspaceRoot).upgrade();
@@ -1903,8 +1903,8 @@ void installDependency(InstallRequest req)
 @protocolNotification("served/updateDependency")
 void updateDependency(UpdateRequest req)
 {
-	// TODO: add workspace argument
-	if (changeDependency(req))
+	auto workspaceRoot = selectedWorkspaceRoot;
+	if (changeDependency(workspaceRoot, req))
 	{
 		if (backend.has!DubComponent)
 		{
@@ -1918,8 +1918,9 @@ void updateDependency(UpdateRequest req)
 @protocolNotification("served/uninstallDependency")
 void uninstallDependency(UninstallRequest req)
 {
+	auto workspaceRoot = selectedWorkspaceRoot;
 	// TODO: add workspace argument
-	removeDependency(req.name);
+	removeDependency(workspaceRoot, req.name);
 	if (backend.has!DubComponent)
 	{
 		backend.get!DubComponent(workspaceRoot).upgrade();
@@ -1928,9 +1929,8 @@ void uninstallDependency(UninstallRequest req)
 	updateImports();
 }
 
-void injectDependency(InstallRequest req)
+void injectDependency(string workspaceRoot, InstallRequest req)
 {
-	// TODO: add file argument
 	auto sdl = buildPath(workspaceRoot, "dub.sdl");
 	if (fs.exists(sdl))
 	{
@@ -2033,9 +2033,8 @@ void injectDependency(InstallRequest req)
 	}
 }
 
-bool changeDependency(UpdateRequest req)
+bool changeDependency(string workspaceRoot, UpdateRequest req)
 {
-	// TODO: add file argument
 	auto sdl = buildPath(workspaceRoot, "dub.sdl");
 	if (fs.exists(sdl))
 	{
@@ -2085,9 +2084,8 @@ bool changeDependency(UpdateRequest req)
 	}
 }
 
-bool removeDependency(string name)
+bool removeDependency(string workspaceRoot, string name)
 {
-	// TODO: add file argument
 	auto sdl = buildPath(workspaceRoot, "dub.sdl");
 	if (fs.exists(sdl))
 	{

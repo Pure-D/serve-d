@@ -174,6 +174,7 @@ struct Workspace
 	Configuration config;
 	bool initialized, disabled;
 	string[string] startupErrorNotifications;
+	bool selected;
 
 	void startupError(string folder, string error)
 	{
@@ -196,6 +197,14 @@ struct Workspace
 
 deprecated string workspaceRoot() @property
 {
+	return firstWorkspaceRootUri.uriToFile;
+}
+
+string selectedWorkspaceRoot() @property
+{
+	foreach (ref workspace; workspaces)
+		if (workspace.selected)
+			return workspace.folder.uri.uriToFile;
 	return firstWorkspaceRootUri.uriToFile;
 }
 
@@ -229,10 +238,10 @@ size_t workspaceIndex(string uri)
 	return best;
 }
 
-ref Workspace handleThings(ref Workspace workspace, string uri, bool triggerErrors,
+ref Workspace handleThings(ref Workspace workspace, string uri, bool userExecuted,
 		string file = __FILE__, size_t line = __LINE__)
 {
-	if (triggerErrors)
+	if (userExecuted)
 	{
 		string f = uri.uriToFile;
 		foreach (key, error; workspace.startupErrorNotifications)
@@ -249,17 +258,32 @@ ref Workspace handleThings(ref Workspace workspace, string uri, bool triggerErro
 				workspace.startupErrorNotifications.remove(key);
 			}
 		}
+
+		bool notifyChange, changedOne;
+		foreach (ref w; workspaces)
+		{
+			if (w.selected)
+			{
+				if (w.folder.uri != workspace.folder.uri)
+					notifyChange = true;
+				changedOne = true;
+				w.selected = false;
+			}
+		}
+		workspace.selected = true;
+		if (notifyChange || !changedOne)
+			rpc.notifyMethod("coded/changedSelectedWorkspace", workspace.folder);
 	}
 	return workspace;
 }
 
-ref Workspace workspace(string uri, bool triggerErrors = true,
+ref Workspace workspace(string uri, bool userExecuted = true,
 		string file = __FILE__, size_t line = __LINE__)
 {
 	auto best = workspaceIndex(uri);
 	if (best == size_t.max)
-		return bestWorkspaceByDependency(uri).handleThings(uri, triggerErrors, file, line);
-	return workspaces[best].handleThings(uri, triggerErrors, file, line);
+		return bestWorkspaceByDependency(uri).handleThings(uri, userExecuted, file, line);
+	return workspaces[best].handleThings(uri, userExecuted, file, line);
 }
 
 ref Workspace bestWorkspaceByDependency(string uri)
@@ -301,10 +325,10 @@ bool hasWorkspace(string uri)
 	return false;
 }
 
-ref Configuration config(string uri, bool triggerErrors = true,
+ref Configuration config(string uri, bool userExecuted = true,
 		string file = __FILE__, size_t line = __LINE__)
 {
-	return workspace(uri, triggerErrors, file, line).config;
+	return workspace(uri, userExecuted, file, line).config;
 }
 
 ref Configuration firstConfig()

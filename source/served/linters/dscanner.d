@@ -17,6 +17,8 @@ enum DiagnosticSlot = 0;
 
 void lint(Document document)
 {
+	auto workspaceRoot = workspaceRootFor(document.uri);
+
 	auto ini = buildPath(workspaceRoot, "dscanner.ini");
 	if (!exists(ini))
 		ini = "dscanner.ini";

@@ -26,7 +26,7 @@ enum DiagnosticSlot = 1;
 
 enum DubDiagnosticSource = "DUB";
 
-string fixPath(string path, string[] stringImportPaths)
+string fixPath(string workspaceRoot, string path, string[] stringImportPaths)
 {
 	auto mixinIndex = path.indexOf("-mixin-");
 	if (mixinIndex != -1)
@@ -72,13 +72,15 @@ DiagnosticSeverity mapDubLintType(ErrorType type)
 
 void lint(Document document)
 {
+	auto workspaceRoot = workspaceRootFor(document.uri);
+
 	stderr.writeln("Running dub build");
 	auto imports = backend.get!DubComponent(workspaceRoot).stringImports;
 	auto issues = backend.get!DubComponent(workspaceRoot).build.getYield;
 	PublishDiagnosticsParams[] result;
 	foreach (issue; issues)
 	{
-		auto uri = uriFromFile(fixPath(issue.file, imports));
+		auto uri = uriFromFile(fixPath(workspaceRoot, issue.file, imports));
 		Diagnostic error;
 		error.range = TextRange(Position(issue.line - 1, issue.column - 1));
 		error.severity = mapDubLintType(issue.type);
