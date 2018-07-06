@@ -1755,6 +1755,75 @@ DubDependency[] listDependencies(string packageName)
 	return ret;
 }
 
+@protocolMethod("served/buildTasks")
+Task[] provideBuildTasks()
+{
+	Task[] ret;
+	foreach (ref workspace; workspaces)
+	{
+		auto workspaceRoot = workspace.folder.uri.uriToFile;
+		if (!backend.has!DubComponent(workspaceRoot))
+			continue;
+		auto dub = backend.get!DubComponent(workspaceRoot);
+		{
+			Task t;
+			t.source = "dub";
+			t.definition = JSONValue(["type" : JSONValue("dub"), "run" : JSONValue(false),
+					"compiler" : JSONValue(dub.compiler), "archType" : JSONValue(dub.archType),
+					"buildType" : JSONValue(dub.buildType), "configuration" : JSONValue(dub.configuration)]);
+			t.group = Task.Group.build;
+			t.exec = [workspace.config.d.dubPath, "build",
+				"--compiler=" ~ dub.compiler, "-a=" ~ dub.archType, "-b=" ~ dub.buildType,
+				"-c=" ~ dub.configuration];
+			t.scope_ = workspace.folder.uri;
+			t.name = "Build " ~ dub.name;
+			ret ~= t;
+		}
+		{
+			Task t;
+			t.source = "dub";
+			t.definition = JSONValue(["type" : JSONValue("dub"), "run" : JSONValue(true),
+					"compiler" : JSONValue(dub.compiler), "archType" : JSONValue(dub.archType),
+					"buildType" : JSONValue(dub.buildType), "configuration" : JSONValue(dub.configuration)]);
+			t.group = Task.Group.build;
+			t.exec = [workspace.config.d.dubPath, "run", "--compiler=" ~ dub.compiler,
+				"-a=" ~ dub.archType, "-b=" ~ dub.buildType, "-c=" ~ dub.configuration];
+			t.scope_ = workspace.folder.uri;
+			t.name = "Run " ~ dub.name;
+			ret ~= t;
+		}
+		{
+			Task t;
+			t.source = "dub";
+			t.definition = JSONValue(["type" : JSONValue("dub"), "run"
+					: JSONValue(false), "force" : JSONValue(true), "compiler" : JSONValue(dub.compiler),
+					"archType" : JSONValue(dub.archType), "buildType"
+					: JSONValue(dub.buildType), "configuration" : JSONValue(dub.configuration)]);
+			t.group = Task.Group.rebuild;
+			t.exec = [workspace.config.d.dubPath, "build", "--force",
+				"--compiler=" ~ dub.compiler, "-a=" ~ dub.archType, "-b=" ~ dub.buildType,
+				"-c=" ~ dub.configuration];
+			t.scope_ = workspace.folder.uri;
+			t.name = "Rebuild " ~ dub.name;
+			ret ~= t;
+		}
+		{
+			Task t;
+			t.source = "dub";
+			t.definition = JSONValue(["type" : JSONValue("dub"), "test" : JSONValue(true),
+					"compiler" : JSONValue(dub.compiler), "archType" : JSONValue(dub.archType),
+					"buildType" : JSONValue(dub.buildType), "configuration" : JSONValue(dub.configuration)]);
+			t.group = Task.Group.test;
+			t.exec = [workspace.config.d.dubPath, "test", "--compiler=" ~ dub.compiler,
+				"-a=" ~ dub.archType, "-b=" ~ dub.buildType, "-c=" ~ dub.configuration];
+			t.scope_ = workspace.folder.uri;
+			t.name = "Test " ~ dub.name;
+			ret ~= t;
+		}
+	}
+	return ret;
+}
+
 // === Protocol Notifications starting here ===
 
 struct FileOpenInfo

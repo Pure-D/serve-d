@@ -66,3 +66,24 @@ struct UninstallRequest
 {
 	string name;
 }
+
+struct Task
+{
+	enum Group : string
+	{
+		clean = "clean",
+		build = "build",
+		rebuild = "rebuild",
+		test = "test"
+	}
+
+	JSONValue definition;
+	@SerializedName("scope")
+	string scope_;
+	string[] exec;
+	string name;
+	bool isBackground;
+	string source;
+	Group group;
+	string[] problemMatchers;
+}
