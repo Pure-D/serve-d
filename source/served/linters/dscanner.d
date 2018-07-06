@@ -1,5 +1,6 @@
 module served.linters.dscanner;
 
+import std.algorithm;
 import std.conv;
 import std.file;
 import std.path;
@@ -12,6 +13,8 @@ import served.extension;
 
 import workspaced.api;
 import workspaced.coms;
+
+static immutable string DScannerDiagnosticSource = "DScanner";
 
 enum DiagnosticSlot = 0;
 
@@ -28,6 +31,8 @@ void lint(Document document)
 
 	foreach (issue; issues)
 	{
+		if (config(document.uri).dscanner.ignoredKeys.canFind(issue.key))
+			continue;
 		Diagnostic d;
 		auto s = issue.description;
 		if (s.startsWith("Line is longer than ") && s.endsWith(" characters"))
@@ -37,8 +42,9 @@ void lint(Document document)
 		else
 			d.range = TextRange(Position(cast(uint) issue.line - 1, cast(uint) issue.column - 1));
 		d.severity = issue.type ? DiagnosticSeverity.warning : DiagnosticSeverity.error;
-		d.source = "DScanner";
+		d.source = DScannerDiagnosticSource;
 		d.message = issue.description;
+		d.code = JSONValue(issue.key);
 		result ~= d;
 	}
 

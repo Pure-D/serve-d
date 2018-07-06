@@ -86,6 +86,11 @@ struct Configuration
 		string templateConstraintStyle = "conditional_newline_indent";
 	}
 
+	struct DScanner
+	{
+		string[] ignoredKeys;
+	}
+
 	struct Editor
 	{
 		int[] rulers;
@@ -98,6 +103,7 @@ struct Configuration
 
 	D d;
 	DFmt dfmt;
+	DScanner dscanner;
 	Editor editor;
 	Git git;
 
@@ -134,6 +140,7 @@ struct Configuration
 		string[] ret;
 		ret ~= replaceSection!"d"(newConfig.d);
 		ret ~= replaceSection!"dfmt"(newConfig.dfmt);
+		ret ~= replaceSection!"dscanner"(newConfig.dscanner);
 		ret ~= replaceSection!"editor"(newConfig.editor);
 		ret ~= replaceSection!"git"(newConfig.git);
 		return ret;
@@ -150,6 +157,13 @@ struct Configuration
 	{
 		auto ret = compare!"dfmt."(dfmt, newDfmt);
 		dfmt = newDfmt;
+		return ret;
+	}
+
+	string[] replaceSection(string section : "dscanner")(DScanner newDscanner)
+	{
+		auto ret = compare!"dscanner."(dscanner, newDscanner);
+		dscanner = newDscanner;
 		return ret;
 	}
 

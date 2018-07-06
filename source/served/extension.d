@@ -30,6 +30,7 @@ import workspaced.com.importer;
 import workspaced.coms;
 
 import served.linters.dub : DubDiagnosticSource;
+import served.linters.dscanner : DScannerDiagnosticSource;
 
 /// Set to true when shutdown is called
 __gshared bool shutdownRequested;
@@ -1409,14 +1410,27 @@ Command[] provideCodeActions(CodeActionParams params)
 			noMatch:
 			}
 		}
-		else
+		else if (diagnostic.source == DScannerDiagnosticSource)
 		{
 			import dscanner.analysis.imports_sortedness : ImportSortednessCheck;
 
-			if (diagnostic.message == ImportSortednessCheck.MESSAGE)
+			string key = diagnostic.code.type == JSON_TYPE.STRING ? diagnostic.code.str : null;
+
+			info("Diagnostic: ", diagnostic);
+
+			if (key == ImportSortednessCheck.KEY)
 			{
 				ret ~= Command("Sort imports", "code-d.sortImports",
 						[JSONValue(document.positionToOffset(params.range[0]))]);
+			}
+
+			if (key.length)
+			{
+				if (key.startsWith("dscanner."))
+					key = key["dscanner.".length .. $];
+				ret ~= Command("Ignore " ~ key ~ " warnings", "code-d.ignoreDscannerKey", [diagnostic.code]);
+				ret ~= Command("Ignore " ~ key ~ " warnings (global)",
+						"code-d.ignoreDscannerKey", [diagnostic.code, JSONValue(true)]);
 			}
 		}
 	}
@@ -1454,19 +1468,27 @@ CodeLens resolveCodeLens(CodeLens lens)
 	switch (type.str)
 	{
 	case "importcompilecheck":
-		auto code = "code" in lens.data;
-		if (!code || code.type != JSON_TYPE.STRING || !code.str.length)
-			throw new Exception("No valid code provided");
-		auto module_ = "module" in lens.data;
-		if (!module_ || module_.type != JSON_TYPE.STRING || !module_.str.length)
-			throw new Exception("No valid module provided");
-		auto workspace = "workspace" in lens.data;
-		if (!workspace || workspace.type != JSON_TYPE.STRING || !workspace.str.length)
-			throw new Exception("No valid workspace provided");
-		int decMs = getImportCompilationTime(code.str, module_.str, workspace.str);
-		lens.command = Command((decMs < 10 ? "no noticable effect"
-				: "~" ~ decMs.to!string ~ "ms") ~ " for importing this");
-		return lens;
+		try
+		{
+			auto code = "code" in lens.data;
+			if (!code || code.type != JSON_TYPE.STRING || !code.str.length)
+				throw new Exception("No valid code provided");
+			auto module_ = "module" in lens.data;
+			if (!module_ || module_.type != JSON_TYPE.STRING || !module_.str.length)
+				throw new Exception("No valid module provided");
+			auto workspace = "workspace" in lens.data;
+			if (!workspace || workspace.type != JSON_TYPE.STRING || !workspace.str.length)
+				throw new Exception("No valid workspace provided");
+			int decMs = getImportCompilationTime(code.str, module_.str, workspace.str);
+			lens.command = Command((decMs < 10 ? "no noticable effect"
+					: "~" ~ decMs.to!string ~ "ms") ~ " for importing this");
+			return lens;
+		}
+		catch (Exception)
+		{
+			lens.command = Command.init;
+			return lens;
+		}
 	default:
 		throw new Exception("Unknown lens type");
 	}
@@ -1890,6 +1912,22 @@ void onDidOpenDocument(DidOpenTextDocumentParams params)
 int changeTimeout;
 @protocolNotification("textDocument/didChange")
 void onDidChangeDocument(DocumentLinkParams params)
+{
+	auto document = documents[params.textDocument.uri];
+	if (document.languageId != "d")
+		return;
+	int delay = document.text.length > 50 * 1024 ? 1000 : 200; // be slower after 50KiB
+	clearTimeout(changeTimeout);
+	changeTimeout = setTimeout({
+		import served.linters.dscanner;
+
+		lint(document);
+		// Delay to avoid too many requests
+	}, delay);
+}
+
+@protocolNotification("coded/doDscanner")
+void doDscanner(DocumentLinkParams params)
 {
 	auto document = documents[params.textDocument.uri];
 	if (document.languageId != "d")
