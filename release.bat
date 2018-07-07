@@ -10,9 +10,9 @@ cd %~dp0
     goto :eof
 )
 
-rem This will sync this repo with the folder %windir%\..\buildsd
-robocopy . %windir%\..\buildsd /MIR /XA:SH /XD .* /XF .* /XF *.zip
-pushd %windir%\..\buildsd
+rem This will sync this repo with the folder %SystemDrive%\buildsd
+robocopy . %SystemDrive%\buildsd /MIR /XA:SH /XD .* /XF .* /XF *.zip
+pushd %SystemDrive%\buildsd
 
 set /p Version=<version.txt
 dub build --compiler=ldc2 --arch=x86
@@ -28,5 +28,5 @@ if exist windows.zip del windows.zip
 powershell -nologo -noprofile -command "& { Add-Type -A 'System.IO.Compression.FileSystem'; [IO.Compression.ZipFile]::CreateFromDirectory('windows', 'windows.zip'); }"
 popd
 
-move %windir%\..\buildsd\windows.zip "serve-d-%Version%-windows.zip"
+move %SystemDrive%\buildsd\windows.zip "serve-d-%Version%-windows.zip"
 pause
