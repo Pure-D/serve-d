@@ -32,6 +32,24 @@ import workspaced.coms;
 import served.linters.dub : DubDiagnosticSource;
 import served.linters.dscanner : DScannerDiagnosticSource;
 
+version (ARM)
+{
+	version = DCDFromSource;
+}
+version (Win32)
+{
+}
+else version (Win64)
+{
+}
+else version (linux)
+{
+}
+else version (OSX)
+{
+}
+else version = DCDFromSource;
+
 /// Set to true when shutdown is called
 __gshared bool shutdownRequested;
 
@@ -316,7 +334,10 @@ void doGlobalStartup()
 			else
 			{
 				spawnFiber({
-					auto action = translate!"d.ext.compileProgram"("DCD");
+					version (DCDFromSource)
+						auto action = translate!"d.ext.compileProgram"("DCD");
+					else
+						auto action = translate!"d.ext.downloadProgram"("DCD");
 					auto res = rpc.window.requestMessage(MessageType.error, translate!"d.served.failDCD"(firstWorkspaceRootUri,
 						firstConfig.d.dcdClientPath, firstConfig.d.dcdServerPath), [action]);
 					if (res == action)
@@ -548,24 +569,87 @@ void updateDCD()
 		rmdirRecurseForce(outputFolder);
 	if (!fs.exists(outputFolder))
 		fs.mkdirRecurse(outputFolder);
-	string[] platformOptions;
+	string ext = "";
 	version (Windows)
-		platformOptions = ["--arch=x86_mscoff"];
-	bool success = compileDependency(outputFolder, "DCD",
-			"https://github.com/Hackerpilot/DCD.git", [[firstConfig.git.path,
-			"submodule", "update", "--init", "--recursive"], ["dub", "build",
-			"--config=client"] ~ platformOptions, ["dub", "build", "--config=server"] ~ platformOptions]);
-	if (success)
+		ext = ".exe";
+	string finalDestinationClient;
+	string finalDestinationServer;
+	version (DCDFromSource)
 	{
-		string ext = "";
+		string[] platformOptions;
 		version (Windows)
-			ext = ".exe";
-		string finalDestinationClient = buildPath(outputFolder, "DCD", "dcd-client" ~ ext);
+			platformOptions = ["--arch=x86_mscoff"];
+		bool success = compileDependency(outputFolder, "DCD",
+				"https://github.com/Hackerpilot/DCD.git", [[firstConfig.git.path,
+				"submodule", "update", "--init", "--recursive"], ["dub", "build",
+				"--config=client"] ~ platformOptions, ["dub", "build",
+				"--config=server"] ~ platformOptions]);
+		finalDestinationClient = buildPath(outputFolder, "DCD", "dcd-client" ~ ext);
 		if (!fs.exists(finalDestinationClient))
 			finalDestinationClient = buildPath(outputFolder, "DCD", "bin", "dcd-client" ~ ext);
-		string finalDestinationServer = buildPath(outputFolder, "DCD", "dcd-server" ~ ext);
+		finalDestinationServer = buildPath(outputFolder, "DCD", "dcd-server" ~ ext);
 		if (!fs.exists(finalDestinationServer))
 			finalDestinationServer = buildPath(outputFolder, "DCD", "bin", "dcd-server" ~ ext);
+	}
+	else
+	{
+		string url;
+		version (Win32)
+			url = "https://github.com/dlang-community/DCD/releases/download/v0.9.9/dcd-v0.9.9-windows-x86.zip";
+		else version (Win64)
+			url = "https://github.com/dlang-community/DCD/releases/download/v0.9.9/dcd-v0.9.9-windows-x86_64.zip";
+		else version (linux)
+			url = "https://github.com/dlang-community/DCD/releases/download/v0.9.9/dcd-v0.9.9-linux-x86_64.tar.gz";
+		else version (OSX)
+			url = "https://github.com/dlang-community/DCD/releases/download/v0.9.9/dcd-v0.9.9-osx-x86_64.tar.gz";
+		else
+			static assert(false);
+
+		import std.net.curl : download;
+		import std.process : pipeProcess, Redirect, Config, wait;
+		import std.zip : ZipArchive;
+
+		bool success;
+
+		try
+		{
+			rpc.notifyMethod("coded/logInstall", "Downloading from " ~ url ~ " to " ~ outputFolder);
+			string destDir = buildPath(outputFolder, url.baseName);
+			download(url, destDir);
+			rpc.notifyMethod("coded/logInstall", "Extracting download...");
+			if (url.endsWith(".tar.gz"))
+			{
+				rpc.notifyMethod("coded/logInstall", "> tar xvfz " ~ url.baseName);
+				auto proc = pipeProcess(["tar", "xvfz", url.baseName],
+						Redirect.stdout | Redirect.stderrToStdout, null, Config.none, outputFolder);
+				foreach (line; proc.stdout.byLineCopy)
+					rpc.notifyMethod("coded/logInstall", line);
+				proc.pid.wait;
+			}
+			else if (url.endsWith(".zip"))
+			{
+				auto zip = new ZipArchive(fs.read(destDir));
+				foreach (name, am; zip.directory)
+				{
+					if (name.isAbsolute)
+						name = "." ~ name;
+					zip.expand(am);
+					fs.write(chainPath(outputFolder, name), am.expandedData);
+				}
+			}
+			success = true;
+
+			finalDestinationClient = buildPath(outputFolder, "dcd-client" ~ ext);
+			finalDestinationServer = buildPath(outputFolder, "dcd-server" ~ ext);
+		}
+		catch (Exception e)
+		{
+			rpc.notifyMethod("coded/logInstall", "Failed installing: " ~ e.toString);
+			success = false;
+		}
+	}
+	if (success)
+	{
 		foreach (ref workspace; workspaces)
 		{
 			workspace.config.d.dcdClientPath = finalDestinationClient;
