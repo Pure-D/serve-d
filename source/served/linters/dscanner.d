@@ -21,6 +21,7 @@ enum DiagnosticSlot = 0;
 void lint(Document document)
 {
 	auto workspaceRoot = workspaceRootFor(document.uri);
+	auto ignoredKeys = config(document.uri).dscanner.ignoredKeys;
 
 	auto ini = buildPath(workspaceRoot, "dscanner.ini");
 	if (!exists(ini))
@@ -31,7 +32,7 @@ void lint(Document document)
 
 	foreach (issue; issues)
 	{
-		if (config(document.uri).dscanner.ignoredKeys.canFind(issue.key))
+		if (ignoredKeys.canFind(issue.key))
 			continue;
 		Diagnostic d;
 		auto s = issue.description;

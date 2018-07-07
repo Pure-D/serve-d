@@ -7,6 +7,7 @@ public import served.textdocumentmanager;
 import std.algorithm;
 import std.array;
 import std.conv;
+import std.experimental.logger;
 import std.json;
 import std.meta;
 import std.path;
@@ -40,8 +41,8 @@ string[] compare(string prefix, T)(ref T a, ref T b)
 }
 
 alias configurationTypes = AliasSeq!(Configuration.D, Configuration.DFmt,
-		Configuration.Editor, Configuration.Git);
-static immutable string[] configurationSections = ["d", "dfmt", "editor", "git"];
+		Configuration.DScanner, Configuration.Editor, Configuration.Git);
+static immutable string[] configurationSections = ["d", "dfmt", "dscanner", "editor", "git"];
 
 struct Configuration
 {
@@ -341,6 +342,11 @@ bool hasWorkspace(string uri)
 
 ref Configuration config(string uri, bool userExecuted = true,
 		string file = __FILE__, size_t line = __LINE__)
+out (result)
+{
+	trace("Config for ", uri, ": ", result);
+}
+do
 {
 	return workspace(uri, userExecuted, file, line).config;
 }
