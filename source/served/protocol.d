@@ -334,6 +334,7 @@ string toString(EolType eol)
 
 struct Position
 {
+	/// Zero-based line & character offset (UTF-16 codepoints)
 	uint line, character;
 }
 

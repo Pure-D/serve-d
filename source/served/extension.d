@@ -1429,8 +1429,8 @@ Command[] provideCodeActions(CodeActionParams params)
 				if (key.startsWith("dscanner."))
 					key = key["dscanner.".length .. $];
 				ret ~= Command("Ignore " ~ key ~ " warnings", "code-d.ignoreDscannerKey", [diagnostic.code]);
-				ret ~= Command("Ignore " ~ key ~ " warnings (global)",
-						"code-d.ignoreDscannerKey", [diagnostic.code, JSONValue(true)]);
+				ret ~= Command("Ignore " ~ key ~ " warnings (this line)",
+						"code-d.ignoreDscannerKey", [diagnostic.code, JSONValue("line")]);
 			}
 		}
 	}

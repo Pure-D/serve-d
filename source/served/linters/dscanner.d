@@ -36,6 +36,13 @@ void lint(Document document)
 			continue;
 		Diagnostic d;
 		auto s = issue.description;
+		auto text = document.lineAt(cast(uint) issue.line - 1).stripRight;
+		string keyNormalized = issue.key.startsWith("dscanner.")
+			? issue.key["dscanner.".length .. $] : issue.key;
+		if (text.canFind("@suppress(all)", "@suppress:all", "@suppress(" ~ issue.key ~ ")",
+				"@suppress:" ~ issue.key, "@suppress(" ~ keyNormalized ~ ")", "@suppress:" ~ keyNormalized)
+				|| text.endsWith("stfu"))
+			continue;
 		if (s.startsWith("Line is longer than ") && s.endsWith(" characters"))
 			d.range = TextRange(Position(cast(uint) issue.line - 1,
 					s["Line is longer than ".length .. $ - " characters".length].to!uint),

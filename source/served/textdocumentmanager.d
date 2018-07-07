@@ -140,7 +140,14 @@ struct Document
 		return cur;
 	}
 
+	/// Returns the text of a line at the given position.
 	string lineAt(Position position)
+	{
+		return lineAt(position.line);
+	}
+
+	/// Returns the text of a line starting at line 0.
+	string lineAt(uint line)
 	{
 		size_t index = 0;
 		size_t lineStart = 0;
@@ -151,12 +158,12 @@ struct Document
 		{
 			if (wasStart)
 			{
-				if (cur.line == position.line)
+				if (cur.line == line)
 				{
 					lineStart = index;
 					found = true;
 				}
-				if (cur.line == position.line + 1)
+				if (cur.line == line + 1)
 					break;
 			}
 			wasStart = false;
