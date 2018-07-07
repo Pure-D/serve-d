@@ -15,6 +15,7 @@ robocopy . %SystemDrive%\buildsd /MIR /XA:SH /XD .* /XF .* /XF *.zip
 pushd %SystemDrive%\buildsd
 
 set /p Version=<version.txt
+dub upgrade
 dub build --compiler=ldc2 --arch=x86
 
 if exist windows del /S /Q windows
@@ -28,5 +29,5 @@ if exist windows.zip del windows.zip
 powershell -nologo -noprofile -command "& { Add-Type -A 'System.IO.Compression.FileSystem'; [IO.Compression.ZipFile]::CreateFromDirectory('windows', 'windows.zip'); }"
 popd
 
-move %SystemDrive%\buildsd\windows.zip "serve-d-%Version%-windows.zip"
+move %SystemDrive%\buildsd\windows.zip "serve-d_%Version%-windows.zip"
 pause
