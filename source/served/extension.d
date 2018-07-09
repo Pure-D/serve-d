@@ -2048,7 +2048,7 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 				lint(document);
 			}
 		}, {
-			if (backend.has!DubComponent && config.d.enableDubLinting)
+			if (backend.has!DubComponent(workspaceRoot) && config.d.enableDubLinting)
 			{
 				import served.linters.dub;
 
