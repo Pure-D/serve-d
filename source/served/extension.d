@@ -1398,8 +1398,10 @@ Hover provideHover(TextDocumentPositionParams params)
 }
 
 private auto importRegex = regex(`import\s+(?:[a-zA-Z_]+\s*=\s*)?([a-zA-Z_]\w*(?:\.\w*[a-zA-Z_]\w*)*)?(\s*\:\s*(?:[a-zA-Z_,\s=]*(?://.*?[\r\n]|/\*.*?\*/|/\+.*?\+/)?)+)?;?`);
-private auto undefinedIdentifier = regex(
-		`^undefined identifier '(\w+)'(?:, did you mean .*? '(\w+)'\?)?$`);
+private static immutable regexQuoteChars = "['\"`]";
+private auto undefinedIdentifier = regex(`^undefined identifier ` ~ regexQuoteChars ~ `(\w+)`
+		~ regexQuoteChars ~ `(?:, did you mean .*? ` ~ regexQuoteChars ~ `(\w+)`
+		~ regexQuoteChars ~ `\?)?$`);
 private auto undefinedTemplate = regex(`template '(\w+)' is not defined`);
 private auto noProperty = regex(`^no property '(\w+)'(?: for type '.*?')?$`);
 private auto moduleRegex = regex(`module\s+([a-zA-Z_]\w*\s*(?:\s*\.\s*[a-zA-Z_]\w*)*)\s*;`);
@@ -1445,32 +1447,21 @@ Command[] provideCodeActions(CodeActionParams params)
 				ret ~= Command("Import " ~ match[1], "code-d.addImport",
 						[JSONValue(match[1]), JSONValue(document.positionToOffset(params.range[0]))]);
 			}
-			else /*if (cast(bool)(match = diagnostic.message.matchFirst(undefinedIdentifier))
+			else if (cast(bool)(match = diagnostic.message.matchFirst(undefinedIdentifier))
 					|| cast(bool)(match = diagnostic.message.matchFirst(undefinedTemplate))
-					|| cast(bool)(match = diagnostic.message.matchFirst(noProperty)))*/
+					|| cast(bool)(match = diagnostic.message.matchFirst(noProperty)))
 			{
-				// temporary fix for https://issues.dlang.org/show_bug.cgi?id=18565
 				string[] files;
 				string[] modules;
 				int lineNo;
-				match = diagnostic.message.matchFirst(undefinedIdentifier);
-				if (match)
-					goto start;
-				match = diagnostic.message.matchFirst(undefinedTemplate);
-				if (match)
-					goto start;
-				match = diagnostic.message.matchFirst(noProperty);
-				if (match)
-					goto start;
-				goto noMatch;
-			start:
 				joinAll({
 					files ~= backend.get!DscannerComponent(workspaceRoot)
 						.findSymbol(match[1]).getYield.map!"a.file".array;
 				}, {
-					if (backend.has!DCDComponent)
-						files ~= backend.get!DCDComponent.searchSymbol(match[1]).getYield.map!"a.file".array;
+					if (backend.has!DCDComponent(workspaceRoot))
+						files ~= backend.get!DCDComponent(workspaceRoot).searchSymbol(match[1]).getYield.map!"a.file".array;
 				});
+				info("Files: ", files);
 				foreach (file; files.sort().uniq)
 				{
 					if (!isAbsolute(file))
@@ -1491,7 +1482,6 @@ Command[] provideCodeActions(CodeActionParams params)
 				foreach (mod; modules.sort().uniq)
 					ret ~= Command("Import " ~ mod, "code-d.addImport", [JSONValue(mod),
 							JSONValue(document.positionToOffset(params.range[0]))]);
-			noMatch:
 			}
 		}
 		else if (diagnostic.source == DScannerDiagnosticSource)
