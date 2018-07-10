@@ -164,3 +164,5 @@ d.coverage.tooltip: Couverture dans ce fichier générée à partir du fichier .
 
 d.served.failDCD: DCD n'a pas pu être démarré. (racine={0}, chemin={1}, {2})
 d.served.failDscanner: DScanner n'a pas pu être démarré. (racine={0}, chemin={1})
+
+d.served.outdatedDCD: DCD est obsolète ! (cible={0}, dcd={1})

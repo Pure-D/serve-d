@@ -161,3 +161,5 @@ d.dub.override: Ohne Backup überschreiben
 
 d.coverage.statusText: {0}% Coverage
 d.coverage.tooltip: Testabdeckung in dieser Datei wurde aus der zugehörigen .lst Datei generiert
+
+d.served.outdatedDCD: DCD ist veraltet. (gesucht={0}, installiert={1})

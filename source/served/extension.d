@@ -1,7 +1,7 @@
 module served.extension;
 
 import core.exception;
-import core.thread : Fiber;
+import core.thread : Fiber, Thread;
 import core.sync.mutex;
 
 import std.algorithm;
@@ -329,6 +329,7 @@ void doGlobalStartup()
 
 		if (backend.get!DCDComponent.isOutdated)
 		{
+			info("DCD is outdated.");
 			if (firstConfig.d.aggressiveUpdate)
 				spawnFiber((&updateDCD).toDelegate);
 			else
@@ -338,8 +339,9 @@ void doGlobalStartup()
 						auto action = translate!"d.ext.compileProgram"("DCD");
 					else
 						auto action = translate!"d.ext.downloadProgram"("DCD");
-					auto res = rpc.window.requestMessage(MessageType.error, translate!"d.served.failDCD"(firstWorkspaceRootUri,
-						firstConfig.d.dcdClientPath, firstConfig.d.dcdServerPath), [action]);
+					auto res = rpc.window.requestMessage(MessageType.error,
+						translate!"d.served.outdatedDCD"(DCDComponent.latestKnownVersion.to!(string[])
+						.join("."), backend.get!DCDComponent.clientInstalledVersion), [action]);
 					if (res == action)
 						spawnFiber((&updateDCD).toDelegate);
 				});
@@ -1257,6 +1259,23 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 				if (def.name.toLower.startsWith(params.query.toLower))
 					infos ~= def;
 		}
+		auto exact = backend.get!DCDComponent(workspace.folder.uri.uriToFile)
+			.searchSymbol(params.query).getYield;
+		foreach (symbol; exact)
+		{
+			if (!symbol.file.isAbsolute)
+				continue;
+			string uri = symbol.file.uriFromFile;
+			if (infos.canFind!(a => a.location.uri == uri))
+				continue;
+			SymbolInformation info;
+			info.location.uri = uri;
+			auto doc = documents.tryGet(uri);
+			if (doc != Document.init)
+				info.location.range = TextRange(doc.bytesToPosition(symbol.position));
+			info.kind = symbol.type.convertFromDCDSearchType;
+			infos ~= info;
+		}
 	}
 	return infos;
 }
@@ -1466,6 +1485,8 @@ Command[] provideCodeActions(CodeActionParams params)
 				{
 					if (!isAbsolute(file))
 						file = buildNormalizedPath(workspaceRoot, file);
+					if (!fs.exists(file))
+						continue;
 					lineNo = 0;
 					foreach (line; io.File(file).byLine)
 					{
@@ -1768,7 +1789,11 @@ TextEdit[] implementMethods(ImplementMethodsParams params)
 @protocolMethod("served/restartServer")
 bool restartServer()
 {
-	backend.get!DCDComponent.restartServer().getYield;
+	Future!void[] fut;
+	foreach (instance; backend.instances)
+		if (instance.has!DCDComponent)
+			fut ~= instance.get!DCDComponent.restartServer();
+	joinAll(fut);
 	return true;
 }
 
@@ -1951,8 +1976,8 @@ void onChangeFiles(DidChangeWatchedFilesParams params)
 				}
 				string workspace = workspaceRootFor(file);
 				// Sending applyEdit so it is undoable
-				auto patches = backend.get!ModulemanComponent(workspace).normalizeModules(file.uriToFile,
-						document.text);
+				auto patches = backend.get!ModulemanComponent(workspace)
+					.normalizeModules(file.uriToFile, document.text);
 				if (patches.length)
 				{
 					WorkspaceEdit edit;

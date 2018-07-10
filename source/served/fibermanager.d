@@ -3,6 +3,9 @@ module served.fibermanager;
 import core.thread;
 
 import std.algorithm;
+import std.range;
+
+import workspaced.api : Future;
 
 struct FiberManager
 {
@@ -31,10 +34,27 @@ void joinAll(Fibers...)(Fibers fibers)
 	Fiber[] converted;
 	foreach (fiber; fibers)
 	{
-		static if (is(fiber == Fiber))
-			converted ~= fiber;
+		static if (isInputRange!(typeof(fiber)))
+		{
+			foreach (fib; fiber)
+			{
+				static if (is(typeof(fib) : Fiber))
+					converted ~= fib;
+				else static if (is(typeof(fib) : Future!T, T))
+					converted ~= new Fiber(&fib.getYield);
+				else
+					converted ~= new Fiber(fib);
+			}
+		}
 		else
-			converted ~= new Fiber(fiber);
+		{
+			static if (is(typeof(fiber) : Fiber))
+				converted ~= fiber;
+			else static if (is(typeof(fiber) : Future!T, T))
+				converted ~= new Fiber(&fiber.getYield);
+			else
+				converted ~= new Fiber(fiber);
+		}
 	}
 	f.fibers = converted;
 	while (f.length)

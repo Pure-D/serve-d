@@ -162,3 +162,5 @@ d.dub.override: バックアップをしないで上書き
 
 d.coverage.statusText: {0}% コードカバレッジ
 d.coverage.tooltip: コードカバッレジレポート
+
+d.served.outdatedDCD: DCD は古い可能性があります 更新してください (target={0}, installed={1})
