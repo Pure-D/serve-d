@@ -1949,8 +1949,9 @@ void onChangeFiles(DidChangeWatchedFilesParams params)
 					freshlyOpened.remove(file);
 					continue;
 				}
+				string workspace = workspaceRootFor(file);
 				// Sending applyEdit so it is undoable
-				auto patches = backend.get!ModulemanComponent.normalizeModules(file.uriToFile,
+				auto patches = backend.get!ModulemanComponent(workspace).normalizeModules(file.uriToFile,
 						document.text);
 				if (patches.length)
 				{
