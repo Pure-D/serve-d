@@ -339,9 +339,13 @@ void doGlobalStartup()
 						auto action = translate!"d.ext.compileProgram"("DCD");
 					else
 						auto action = translate!"d.ext.downloadProgram"("DCD");
+					static if (is(typeof(backend.get!DCDComponent.clientInstalledVersion)))
+						auto wanted = backend.get!DCDComponent.clientInstalledVersion;
+					else
+						auto wanted = "0.9.8";
 					auto res = rpc.window.requestMessage(MessageType.error,
 						translate!"d.served.outdatedDCD"(DCDComponent.latestKnownVersion.to!(string[])
-						.join("."), backend.get!DCDComponent.clientInstalledVersion), [action]);
+						.join("."), wanted), [action]);
 					if (res == action)
 						spawnFiber((&updateDCD).toDelegate);
 				});
