@@ -3,6 +3,7 @@ module served.protocol;
 import std.conv;
 import std.json;
 import std.traits;
+import std.meta;
 
 import painlessjson;
 
@@ -80,6 +81,28 @@ struct Optional(T)
 	}
 
 	alias value this;
+}
+
+mixin template StrictOptionalSerializer()
+{
+	const JSONValue _toJSON()
+	{
+		JSONValue[string] ret = this.defaultToJSON.object;
+		foreach (member; __traits(allMembers, typeof(this)))
+			static if (is(typeof(__traits(getMember, this, member)) == Optional!T, T))
+			{
+				static if (hasUDA!(__traits(getMember, this, member), SerializedName))
+					string name = getUDAs!(__traits(getMember, this, member), SerializedName)[0].to;
+				else static if (hasUDA!(__traits(getMember, this, member), SerializedToName))
+					string name = getUDAs!(__traits(getMember, this, member), SerializedToName)[0].name;
+				else
+					string name = member;
+
+				if (__traits(getMember, this, member).isNull)
+					ret.remove(name);
+			}
+		return JSONValue(ret);
+	}
 }
 
 Optional!T opt(T)(T val)
@@ -472,6 +495,8 @@ struct DynamicRegistration
 
 struct WorkspaceClientCapabilities
 {
+	mixin StrictOptionalSerializer;
+
 	bool applyEdit;
 	Optional!DynamicRegistration didChangeConfiguration;
 	Optional!DynamicRegistration didChangeWatchedFiles;
@@ -483,26 +508,68 @@ struct WorkspaceClientCapabilities
 
 struct TextDocumentClientCapabilities
 {
+	mixin StrictOptionalSerializer;
+
 	struct SyncInfo
 	{
+		mixin StrictOptionalSerializer;
+
 		Optional!bool dynamicRegistration;
-		bool willSave;
-		bool willSaveWaitUntil;
-		bool didSave;
+		Optional!bool willSave;
+		Optional!bool willSaveWaitUntil;
+		Optional!bool didSave;
 	}
 
 	struct CompletionInfo
 	{
+		mixin StrictOptionalSerializer;
+
 		struct CompletionItem
 		{
-			bool snippetSupport;
+			mixin StrictOptionalSerializer;
+
+			Optional!bool snippetSupport;
+			Optional!bool commitCharactersSupport;
+			//Optional!(MarkupKind[]) documentationFormat;
+			Optional!bool deprecatedSupport;
+			Optional!bool preselectSupport;
 		}
 
-		CompletionItem completionItem;
+		struct CompletionItemKindSet
+		{
+			mixin StrictOptionalSerializer;
+
+			// CompletionItemKind[]
+			Optional!(int[]) valueSet;
+		}
+
+		Optional!bool dynamicRegistration;
+		Optional!CompletionItem completionItem;
+		Optional!CompletionItemKindSet completionItemKind;
+		Optional!bool contextSupport;
+	}
+
+	struct DocumentSymbolInfo
+	{
+		mixin StrictOptionalSerializer;
+
+		struct SymbolKindSet
+		{
+			mixin StrictOptionalSerializer;
+
+			// SymbolKind[]
+			Optional!(int[]) valueSet;
+		}
+
+		Optional!bool dynamicRegistration;
+		Optional!SymbolKindSet symbolKind;
+		Optional!bool hierarchicalDocumentSymbolSupport;
 	}
 
 	struct PublishDiagnosticsCap
 	{
+		mixin StrictOptionalSerializer;
+
 		Optional!bool relatedInformation;
 	}
 
@@ -512,7 +579,7 @@ struct TextDocumentClientCapabilities
 	Optional!DynamicRegistration signatureHelp;
 	Optional!DynamicRegistration references;
 	Optional!DynamicRegistration documentHighlight;
-	Optional!DynamicRegistration documentSymbol;
+	Optional!DocumentSymbolInfo documentSymbol;
 	Optional!DynamicRegistration formatting;
 	Optional!DynamicRegistration rangeFormatting;
 	Optional!DynamicRegistration onTypeFormatting;
@@ -580,6 +647,8 @@ struct CodeLensOptions
 
 struct DocumentOnTypeFormattingOptions
 {
+	mixin StrictOptionalSerializer;
+
 	string firstTriggerCharacter;
 	Optional!(string[]) moreTriggerCharacter;
 }
@@ -614,6 +683,8 @@ struct TextDocumentSyncOptions
 
 struct ServerCapabilities
 {
+	mixin StrictOptionalSerializer;
+
 	JSONValue textDocumentSync;
 	bool hoverProvider;
 	Optional!CompletionOptions completionProvider;
@@ -640,8 +711,12 @@ struct ServerCapabilities
 
 struct ServerWorkspaceCapabilities
 {
+	mixin StrictOptionalSerializer;
+
 	struct WorkspaceFolders
 	{
+		mixin StrictOptionalSerializer;
+
 		Optional!bool supported;
 		Optional!bool changeNotifications;
 	}
@@ -657,6 +732,8 @@ struct ShowMessageParams
 
 struct ShowMessageRequestParams
 {
+	mixin StrictOptionalSerializer;
+
 	MessageType type;
 	string message;
 	Optional!(MessageActionItem[]) actions;
@@ -687,6 +764,8 @@ struct RegistrationParams
 
 struct TextDocumentRegistrationOptions
 {
+	mixin StrictOptionalSerializer;
+
 	Optional!DocumentSelector documentSelector;
 }
 
@@ -713,6 +792,8 @@ struct ConfigurationParams
 
 struct ConfigurationItem
 {
+	mixin StrictOptionalSerializer;
+
 	Optional!string scopeUri;
 	Optional!string section;
 }
@@ -730,6 +811,8 @@ struct DidChangeTextDocumentParams
 
 struct TextDocumentContentChangeEvent
 {
+	mixin StrictOptionalSerializer;
+
 	Optional!TextRange range;
 	Optional!int rangeLength;
 	string text;
@@ -737,6 +820,8 @@ struct TextDocumentContentChangeEvent
 
 struct TextDocumentChangeRegistrationOptions
 {
+	mixin StrictOptionalSerializer;
+
 	Optional!DocumentSelector documentSelector;
 	TextDocumentSyncKind syncKind;
 }
@@ -756,12 +841,16 @@ enum TextDocumentSaveReason
 
 struct DidSaveTextDocumentParams
 {
+	mixin StrictOptionalSerializer;
+
 	TextDocumentIdentifier textDocument;
 	Optional!string text;
 }
 
 struct TextDocumentSaveRegistrationOptions
 {
+	mixin StrictOptionalSerializer;
+
 	Optional!DocumentSelector documentSelector;
 	bool includeText;
 }
@@ -809,6 +898,8 @@ enum InsertTextFormat
 
 struct CompletionItem
 {
+	mixin StrictOptionalSerializer;
+
 	string label;
 	Optional!CompletionItemKind kind;
 	Optional!string detail;
@@ -842,7 +933,14 @@ enum CompletionItemKind
 	snippet,
 	color,
 	file,
-	reference
+	reference,
+	folder,
+	enumMember,
+	constant,
+	struct_,
+	event,
+	operator,
+	typeParameter
 }
 
 struct CompletionRegistrationOptions
@@ -996,6 +1094,20 @@ struct SymbolInformation
 	Optional!string containerName;
 }
 
+struct DocumentSymbol
+{
+	mixin StrictOptionalSerializer;
+
+	string name;
+	Optional!string detail;
+	SymbolKind kind;
+	@SerializedName("deprecated") Optional!bool deprecated_;
+	TextRange range;
+	TextRange selectionRange;
+	DocumentSymbol[] children;
+	@SerializeIgnore string parent;
+}
+
 enum SymbolKind
 {
 	file = 1,
@@ -1015,7 +1127,15 @@ enum SymbolKind
 	string,
 	number,
 	boolean,
-	array
+	array,
+	object,
+	key,
+	null_,
+	enumMember,
+	struct_,
+	event,
+	operator,
+	typeParameter
 }
 
 struct WorkspaceSymbolParams

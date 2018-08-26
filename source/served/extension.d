@@ -1271,8 +1271,6 @@ SignatureHelp provideSignatureHelp(TextDocumentPositionParams params)
 	}
 }
 
-PerDocumentCache!(SymbolInformation[]) documentSymbolsCache;
-
 @protocolMethod("workspace/symbol")
 SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 {
@@ -1284,11 +1282,11 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 		{
 			if (!file.isFile || file.extension != ".d")
 				continue;
-			auto defs = provideDocumentSymbols(
+			auto defs = provideDocumentSymbolsOld(
 					DocumentSymbolParams(TextDocumentIdentifier(file.uriFromFile)));
 			foreach (def; defs)
 				if (def.name.toLower.startsWith(params.query.toLower))
-					infos ~= def;
+					infos ~= def.downcast;
 		}
 		auto exact = backend.get!DCDComponent(workspace.folder.uri.uriToFile)
 			.searchSymbol(params.query).getYield;
@@ -1300,6 +1298,7 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 			if (infos.canFind!(a => a.location.uri == uri))
 				continue;
 			SymbolInformation info;
+			info.name = params.query;
 			info.location.uri = uri;
 			auto doc = documents.tryGet(uri);
 			if (doc != Document.init)
@@ -1312,22 +1311,34 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 }
 
 @protocolMethod("textDocument/documentSymbol")
-SymbolInformation[] provideDocumentSymbols(DocumentSymbolParams params)
+JSONValue provideDocumentSymbols(DocumentSymbolParams params)
 {
-	auto cached = documentSymbolsCache.cached(documents, params.textDocument.uri);
+	import painlessjson : toJSON;
+
+	if (capabilities.textDocument.documentSymbol.hierarchicalDocumentSymbolSupport)
+		return provideDocumentSymbolsHierarchical(params).toJSON;
+	else
+		return provideDocumentSymbolsOld(params).map!"a.downcast".array.toJSON;
+}
+
+PerDocumentCache!(SymbolInformationEx[]) documentSymbolsCacheOld;
+SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParams params)
+{
+	auto cached = documentSymbolsCacheOld.cached(documents, params.textDocument.uri);
 	if (cached.length)
 		return cached;
 	auto document = documents.tryGet(params.textDocument.uri);
 	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	auto result = backend.get!DscannerComponent(workspaceRoot)
 		.listDefinitions(uriToFile(params.textDocument.uri), document.text).getYield;
-	SymbolInformation[] ret;
+	SymbolInformationEx[] ret;
 	foreach (def; result)
 	{
-		SymbolInformation info;
+		SymbolInformationEx info;
 		info.name = def.name;
 		info.location.uri = params.textDocument.uri;
-		info.location.range = TextRange(Position(cast(uint) def.line - 1, 0));
+		info.location.range = TextRange(document.bytesToPosition(def.range[0]),
+				document.bytesToPosition(def.range[1]));
 		info.kind = convertFromDscannerType(def.type);
 		if (def.type == "f" && def.name == "this")
 			info.kind = SymbolKind.constructor;
@@ -1336,9 +1347,53 @@ SymbolInformation[] provideDocumentSymbols(DocumentSymbolParams params)
 		if ((ptr = "struct" in attribs) !is null || (ptr = "class" in attribs) !is null
 				|| (ptr = "enum" in attribs) !is null || (ptr = "union" in attribs) !is null)
 			info.containerName = *ptr;
+		if ("deprecation" in attribs)
+			info.deprecated_ = true;
 		ret ~= info;
 	}
-	documentSymbolsCache.store(document, ret);
+	documentSymbolsCacheOld.store(document, ret);
+	return ret;
+}
+
+PerDocumentCache!(DocumentSymbol[]) documentSymbolsCacheHierarchical;
+DocumentSymbol[] provideDocumentSymbolsHierarchical(DocumentSymbolParams params)
+{
+	auto cached = documentSymbolsCacheHierarchical.cached(documents, params.textDocument.uri);
+	if (cached.length)
+		return cached;
+	DocumentSymbol[] all;
+	auto symbols = provideDocumentSymbolsOld(params);
+	foreach (symbol; symbols)
+	{
+		DocumentSymbol sym;
+		static foreach (member; __traits(allMembers, SymbolInformationEx))
+			static if (__traits(hasMember, DocumentSymbol, member))
+				__traits(getMember, sym, member) = __traits(getMember, symbol, member);
+		sym.parent = symbol.containerName;
+		sym.range = sym.selectionRange = symbol.location.range;
+		sym.selectionRange.end.line = sym.selectionRange.start.line;
+		if (sym.selectionRange.end.character < sym.selectionRange.start.character)
+			sym.selectionRange.end.character = sym.selectionRange.start.character;
+		all ~= sym;
+	}
+
+	foreach (ref sym; all)
+	{
+		if (sym.parent.length)
+		{
+			foreach (ref other; all)
+			{
+				if (other.name == sym.parent)
+				{
+					other.children ~= sym;
+					break;
+				}
+			}
+		}
+	}
+
+	DocumentSymbol[] ret = all.filter!(a => a.parent.length == 0).array;
+	documentSymbolsCacheHierarchical.store(documents.tryGet(params.textDocument.uri), ret);
 	return ret;
 }
 

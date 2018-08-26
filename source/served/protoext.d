@@ -87,3 +87,23 @@ struct Task
 	Group group;
 	string[] problemMatchers;
 }
+
+struct SymbolInformationEx
+{
+	string name;
+	SymbolKind kind;
+	Location location;
+	string containerName;
+	@SerializedName("deprecated") bool deprecated_;
+	TextRange range;
+	TextRange selectionRange;
+
+	SymbolInformation downcast()
+	{
+		SymbolInformation ret;
+		static foreach (member; __traits(allMembers, SymbolInformationEx))
+			static if (__traits(hasMember, SymbolInformation, member))
+				__traits(getMember, ret, member) = __traits(getMember, this, member);
+		return ret;
+	}
+}
