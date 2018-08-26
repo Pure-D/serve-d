@@ -44,6 +44,13 @@ alias configurationTypes = AliasSeq!(Configuration.D, Configuration.DFmt,
 		Configuration.DScanner, Configuration.Editor, Configuration.Git);
 static immutable string[] configurationSections = ["d", "dfmt", "dscanner", "editor", "git"];
 
+enum ManyProjectsAction : string
+{
+	ask = "ask",
+	skip = "skip",
+	load = "load"
+}
+
 struct Configuration
 {
 	struct D
@@ -73,6 +80,8 @@ struct Configuration
 		bool scanAllFolders = true;
 		string[] disabledRootGlobs;
 		string[] extraRoots;
+		ManyProjectsAction manyProjectsAction = ManyProjectsAction.ask;
+		int manyProjectsThreshold = 4;
 	}
 
 	struct DFmt

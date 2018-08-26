@@ -36,6 +36,7 @@ version (ARM)
 {
 	version = DCDFromSource;
 }
+
 version (Win32)
 {
 }
@@ -260,6 +261,9 @@ InitializeResult initialize(InitializeParams params)
 	if (params.workspaceFolders.length)
 		workspaces = params.workspaceFolders.map!(a => Workspace(a,
 				served.types.Configuration.init)).array;
+	else if (params.rootUri.length)
+		workspaces = [Workspace(WorkspaceFolder(params.rootUri, "Root"),
+				served.types.Configuration.init)];
 	else if (params.rootPath.length)
 		workspaces = [Workspace(WorkspaceFolder(params.rootPath.uriFromFile,
 				"Root"), served.types.Configuration.init)];
@@ -367,7 +371,7 @@ struct RootSuggestion
 	bool useDub;
 }
 
-RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked, string[] extra)
+RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked, string[] extra, ManyProjectsAction manyAction, int manyThreshold)
 {
 	RootSuggestion[] ret;
 	bool rootDub = fs.exists(chainPath(root, "dub.json")) || fs.exists(chainPath(root, "dub.sdl"));
@@ -386,7 +390,9 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked, 
 	}
 	ret ~= RootSuggestion(root, rootDub);
 	if (recursive)
-		foreach (pkg; fs.dirEntries(root, "dub.{json,sdl}", fs.SpanMode.depth))
+	{
+	PackageDescriptorLoop:
+		foreach (pkg; fs.dirEntries(root, "dub.{json,sdl}", fs.SpanMode.breadth))
 		{
 			auto dir = dirName(pkg);
 			if (dir.canFind(".dub"))
@@ -398,6 +404,27 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked, 
 				continue;
 			ret ~= RootSuggestion(dir, true);
 		}
+	}
+	if (manyThreshold > 0 && ret.length >= manyThreshold)
+	{
+		switch (manyAction)
+		{
+		case ManyProjectsAction.ask:
+			// TODO: translate
+			auto res = rpc.window.requestMessage(MessageType.warning, "There are too many subprojects in this project according to d.manyProjectsThreshold\n\nDo you want to load additional " ~ (ret.length - manyThreshold + 1).to!string ~ " total projects?", ["Load", "Skip"]);
+			if (res != "Load")
+				ret = ret[0 .. manyThreshold];
+			break;
+		case ManyProjectsAction.load:
+			break;
+		default:
+			error("Ignoring invalid manyProjectsAction value ", manyAction, ", defaulting to skip");
+			goto case;
+		case ManyProjectsAction.skip:
+			ret = ret[0 .. manyThreshold];
+			break;
+		}
+	}
 	foreach (dir; extra)
 	{
 		string p = buildNormalizedPath(root, dir);
@@ -420,7 +447,7 @@ void doStartup(string workspaceUri)
 	trace("Initializing serve-d for " ~ workspaceUri);
 
 	foreach (root; rootsForProject(workspaceUri.uriToFile, proj.config.d.scanAllFolders,
-			proj.config.d.disabledRootGlobs, proj.config.d.extraRoots))
+			proj.config.d.disabledRootGlobs, proj.config.d.extraRoots, proj.config.d.manyProjectsAction, proj.config.d.manyProjectsThreshold))
 	{
 		auto workspaceRoot = root.dir;
 		workspaced.api.Configuration config;
