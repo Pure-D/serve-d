@@ -904,12 +904,15 @@ struct CompletionItem
 	Optional!CompletionItemKind kind;
 	Optional!string detail;
 	Optional!MarkupContent documentation;
+	@SerializedName("deprecated") Optional!bool deprecated_;
+	Optional!bool preselect;
 	Optional!string sortText;
 	Optional!string filterText;
 	Optional!string insertText;
 	Optional!InsertTextFormat insertTextFormat;
 	Optional!TextEdit textEdit;
 	Optional!(TextEdit[]) additionalTextEdits;
+	Optional!(string[]) commitCharacters;
 	Optional!Command command;
 	JSONValue data;
 }

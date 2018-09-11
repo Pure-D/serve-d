@@ -1029,7 +1029,7 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 		auto line = document.lineAt(params.position).strip;
 		auto defaultList = CompletionList(false, possibleFields.map!(a => CompletionItem(a.name,
 				CompletionItemKind.field.opt, Optional!string.init, MarkupContent(a.documentation)
-				.opt, Optional!string.init, Optional!string.init, (a.name ~ '=').opt)).array);
+				.opt, Optional!bool.init, Optional!bool.init, Optional!string.init, Optional!string.init, (a.name ~ '=').opt)).array);
 		if (!line.length)
 			return defaultList;
 		//dfmt off
@@ -1062,168 +1062,255 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 	}
 	else
 	{
-		if (document.languageId != "d")
+		if (document.languageId == "d")
+			return provideDSourceComplete(params, workspaceRoot, document);
+		else if (document.languageId == "diet")
+			return provideDietSourceComplete(params, workspaceRoot, document);
+		else
 			return CompletionList.init;
-		string line = document.lineAt(params.position);
-		string prefix = line[0 .. min($, params.position.character)];
-		CompletionItem[] completion;
-		if (prefix.strip == "///" || prefix.strip == "*")
+	}
+}
+
+CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
+		string workspaceRoot, ref Document document)
+{
+	import served.diet;
+	import dc = dietc.complete;
+
+	auto completion = updateDietFile(document.uri.uriToFile, workspaceRoot, document.text);
+
+	size_t offset = document.positionToBytes(params.position);
+	auto raw = completion.completeAt(offset);
+	CompletionItem[] ret;
+
+	if (raw is dc.Completion.completeD)
+	{
+		string code;
+		dc.extractD(completion, offset, code, offset);
+		if (offset <= code.length && backend.has!DCDComponent(workspaceRoot))
 		{
-			foreach (compl; import("ddocs.txt").lineSplitter)
-			{
-				auto item = CompletionItem(compl, CompletionItemKind.snippet.opt);
-				item.insertText = compl ~ ": ";
-				completion ~= item;
-			}
-			return CompletionList(false, completion);
+			info("DCD Completing Diet for ", code, " at ", offset);
+			auto dcd = backend.get!DCDComponent(workspaceRoot)
+				.listCompletion(code, cast(int)offset).getYield;
+			if (dcd.type == DCDCompletions.Type.identifiers)
+				ret = dcd.identifiers.convertDCDIdentifiers(workspace(params.textDocument.uri).config.d.argumentSnippets);
 		}
-		auto byteOff = cast(int) document.positionToBytes(params.position);
-		DCDCompletions result = DCDCompletions.empty;
-		joinAll({
-			if (backend.has!DCDComponent(workspaceRoot))
-				result = backend.get!DCDComponent(workspaceRoot)
-					.listCompletion(document.text, byteOff).getYield;
-		}, {
-			if (!line.strip.length)
+	}
+	else
+		ret = raw.map!((a) {
+				CompletionItem ret;
+				ret.label = a.text;
+				ret.kind = a.type.mapToCompletionItemKind.opt;
+				if (a.definition.length)
+					ret.detail = a.definition.opt;
+				if (a.documentation.length)
+					ret.documentation = MarkupContent(a.documentation).opt;
+				if (a.preselected)
+					ret.preselect = true.opt;
+				return ret;
+			})
+			.array;
+
+	return CompletionList(false, ret);
+}
+
+CompletionList provideDSourceComplete(TextDocumentPositionParams params,
+		string workspaceRoot, ref Document document)
+{
+	string line = document.lineAt(params.position);
+	string prefix = line[0 .. min($, params.position.character)];
+	CompletionItem[] completion;
+	if (prefix.strip == "///" || prefix.strip == "*")
+	{
+		foreach (compl; import("ddocs.txt").lineSplitter)
+		{
+			auto item = CompletionItem(compl, CompletionItemKind.snippet.opt);
+			item.insertText = compl ~ ": ";
+			completion ~= item;
+		}
+		return CompletionList(false, completion);
+	}
+	auto byteOff = cast(int) document.positionToBytes(params.position);
+	DCDCompletions result = DCDCompletions.empty;
+	joinAll({
+		if (backend.has!DCDComponent(workspaceRoot))
+			result = backend.get!DCDComponent(workspaceRoot)
+				.listCompletion(document.text, byteOff).getYield;
+	}, {
+		if (!line.strip.length)
+		{
+			auto defs = backend.get!DscannerComponent(workspaceRoot)
+				.listDefinitions(uriToFile(params.textDocument.uri), document.text).getYield;
+			ptrdiff_t di = -1;
+			FuncFinder: foreach (i, def; defs)
 			{
-				auto defs = backend.get!DscannerComponent(workspaceRoot)
-					.listDefinitions(uriToFile(params.textDocument.uri), document.text).getYield;
-				ptrdiff_t di = -1;
-				FuncFinder: foreach (i, def; defs)
-				{
-					for (int n = 1; n < 5; n++)
-						if (def.line == params.position.line + n)
-						{
-							di = i;
-							break FuncFinder;
-						}
-				}
-				if (di == -1)
-					return;
-				auto def = defs[di];
-				auto sig = "signature" in def.attributes;
-				if (!sig)
-				{
-					CompletionItem doc = CompletionItem("///");
-					doc.kind = CompletionItemKind.snippet;
-					doc.insertTextFormat = InsertTextFormat.snippet;
-					auto eol = document.eolAt(params.position.line).toString;
-					doc.insertText = "/// ";
-					CompletionItem doc2 = doc;
-					doc2.label = "/**";
-					doc2.insertText = "/** " ~ eol ~ " * $0" ~ eol ~ " */";
-					completion ~= doc;
-					completion ~= doc2;
-					return;
-				}
-				auto funcArgs = extractFunctionParameters(*sig);
-				string[] docs;
-				if (def.name.matchFirst(ctRegex!`^[Gg]et([^a-z]|$)`))
-					docs ~= "Gets $0";
-				else if (def.name.matchFirst(ctRegex!`^[Ss]et([^a-z]|$)`))
-					docs ~= "Sets $0";
-				else if (def.name.matchFirst(ctRegex!`^[Ii]s([^a-z]|$)`))
-					docs ~= "Checks if $0";
-				else
-					docs ~= "$0";
-				int argNo = 1;
-				foreach (arg; funcArgs)
-				{
-					auto space = arg.lastIndexOf(' ');
-					if (space == -1)
-						continue;
-					string identifier = arg[space + 1 .. $];
-					if (!identifier.matchFirst(ctRegex!`[a-zA-Z_][a-zA-Z0-9_]*`))
-						continue;
-					if (argNo == 1)
-						docs ~= "Params:";
-					docs ~= "  " ~ identifier ~ " = $" ~ argNo.to!string;
-					argNo++;
-				}
-				auto retAttr = "return" in def.attributes;
-				if (retAttr && *retAttr != "void")
-				{
-					docs ~= "Returns: $" ~ argNo.to!string;
-					argNo++;
-				}
-				auto depr = "deprecation" in def.attributes;
-				if (depr)
-				{
-					docs ~= "Deprecated: $" ~ argNo.to!string ~ *depr;
-					argNo++;
-				}
+				for (int n = 1; n < 5; n++)
+					if (def.line == params.position.line + n)
+					{
+						di = i;
+						break FuncFinder;
+					}
+			}
+			if (di == -1)
+				return;
+			auto def = defs[di];
+			auto sig = "signature" in def.attributes;
+			if (!sig)
+			{
 				CompletionItem doc = CompletionItem("///");
 				doc.kind = CompletionItemKind.snippet;
 				doc.insertTextFormat = InsertTextFormat.snippet;
 				auto eol = document.eolAt(params.position.line).toString;
-				doc.insertText = docs.map!(a => "/// " ~ a).join(eol);
+				doc.insertText = "/// ";
 				CompletionItem doc2 = doc;
 				doc2.label = "/**";
-				doc2.insertText = "/** " ~ eol ~ docs.map!(a => " * " ~ a ~ eol).join() ~ " */";
+				doc2.insertText = "/** " ~ eol ~ " * $0" ~ eol ~ " */";
 				completion ~= doc;
 				completion ~= doc2;
+				return;
 			}
-		});
-		switch (result.type)
-		{
-		case DCDCompletions.Type.identifiers:
-			foreach (identifier; result.identifiers)
+			auto funcArgs = extractFunctionParameters(*sig);
+			string[] docs;
+			if (def.name.matchFirst(ctRegex!`^[Gg]et([^a-z]|$)`))
+				docs ~= "Gets $0";
+			else if (def.name.matchFirst(ctRegex!`^[Ss]et([^a-z]|$)`))
+				docs ~= "Sets $0";
+			else if (def.name.matchFirst(ctRegex!`^[Ii]s([^a-z]|$)`))
+				docs ~= "Checks if $0";
+			else
+				docs ~= "$0";
+			int argNo = 1;
+			foreach (arg; funcArgs)
 			{
-				CompletionItem item;
-				item.label = identifier.identifier;
-				item.kind = identifier.type.convertFromDCDType;
-				if (identifier.documentation.length)
-					item.documentation = MarkupContent(identifier.documentation.ddocToMarked);
-				if (identifier.definition.length)
+				auto space = arg.lastIndexOf(' ');
+				if (space == -1)
+					continue;
+				string identifier = arg[space + 1 .. $];
+				if (!identifier.matchFirst(ctRegex!`[a-zA-Z_][a-zA-Z0-9_]*`))
+					continue;
+				if (argNo == 1)
+					docs ~= "Params:";
+				docs ~= "  " ~ identifier ~ " = $" ~ argNo.to!string;
+				argNo++;
+			}
+			auto retAttr = "return" in def.attributes;
+			if (retAttr && *retAttr != "void")
+			{
+				docs ~= "Returns: $" ~ argNo.to!string;
+				argNo++;
+			}
+			auto depr = "deprecation" in def.attributes;
+			if (depr)
+			{
+				docs ~= "Deprecated: $" ~ argNo.to!string ~ *depr;
+				argNo++;
+			}
+			CompletionItem doc = CompletionItem("///");
+			doc.kind = CompletionItemKind.snippet;
+			doc.insertTextFormat = InsertTextFormat.snippet;
+			auto eol = document.eolAt(params.position.line).toString;
+			doc.insertText = docs.map!(a => "/// " ~ a).join(eol);
+			CompletionItem doc2 = doc;
+			doc2.label = "/**";
+			doc2.insertText = "/** " ~ eol ~ docs.map!(a => " * " ~ a ~ eol).join() ~ " */";
+			completion ~= doc;
+			completion ~= doc2;
+		}
+	});
+	switch (result.type)
+	{
+	case DCDCompletions.Type.identifiers:
+		completion = convertDCDIdentifiers(result.identifiers, workspace(params.textDocument.uri).config.d.argumentSnippets);
+		goto case;
+	case DCDCompletions.Type.calltips:
+		return CompletionList(false, completion);
+	default:
+		throw new Exception("Unexpected result from DCD:\n\t" ~ result.raw.join("\n\t"));
+	}
+}
+
+auto convertDCDIdentifiers(DCDIdentifier[] identifiers, lazy bool argumentSnippets)
+{
+	CompletionItem[] completion;
+	foreach (identifier; identifiers)
+	{
+		CompletionItem item;
+		item.label = identifier.identifier;
+		item.kind = identifier.type.convertFromDCDType;
+		if (identifier.documentation.length)
+			item.documentation = MarkupContent(identifier.documentation.ddocToMarked);
+		if (identifier.definition.length)
+		{
+			item.detail = identifier.definition;
+			item.sortText = identifier.definition;
+			// TODO: only add arguments when this is a function call, eg not on template arguments
+			if (identifier.type == "f" && argumentSnippets)
+			{
+				item.insertTextFormat = InsertTextFormat.snippet;
+				string args;
+				auto parts = identifier.definition.extractFunctionParameters;
+				if (parts.length)
 				{
-					item.detail = identifier.definition;
-					item.sortText = identifier.definition;
-					// TODO: only add arguments when this is a function call, eg not on template arguments
-					if (identifier.type == "f" && workspace(params.textDocument.uri)
-							.config.d.argumentSnippets)
+					bool isOptional;
+					string[] optionals;
+					int numRequired;
+					foreach (i, part; parts)
 					{
-						item.insertTextFormat = InsertTextFormat.snippet;
-						string args;
-						auto parts = identifier.definition.extractFunctionParameters;
-						if (parts.length)
+						if (!isOptional)
+							isOptional = part.canFind('=');
+						if (isOptional)
+							optionals ~= part;
+						else
 						{
-							bool isOptional;
-							string[] optionals;
-							int numRequired;
-							foreach (i, part; parts)
-							{
-								if (!isOptional)
-									isOptional = part.canFind('=');
-								if (isOptional)
-									optionals ~= part;
-								else
-								{
-									if (args.length)
-										args ~= ", ";
-									args ~= "${" ~ (i + 1).to!string ~ ":" ~ part ~ "}";
-									numRequired++;
-								}
-							}
-							foreach (i, part; optionals)
-							{
-								if (args.length)
-									part = ", " ~ part;
-								// Go through optionals in reverse
-								args ~= "${" ~ (numRequired + optionals.length - i).to!string ~ ":" ~ part ~ "}";
-							}
-							item.insertText = identifier.identifier ~ "(${0:" ~ args ~ "})";
+							if (args.length)
+								args ~= ", ";
+							args ~= "${" ~ (i + 1).to!string ~ ":" ~ part ~ "}";
+							numRequired++;
 						}
 					}
+					foreach (i, part; optionals)
+					{
+						if (args.length)
+							part = ", " ~ part;
+						// Go through optionals in reverse
+						args ~= "${" ~ (numRequired + optionals.length - i).to!string ~ ":" ~ part ~ "}";
+					}
+					item.insertText = identifier.identifier ~ "(${0:" ~ args ~ "})";
 				}
-				completion ~= item;
 			}
-			goto case;
-		case DCDCompletions.Type.calltips:
-			return CompletionList(false, completion);
-		default:
-			throw new Exception("Unexpected result from DCD:\n\t" ~ result.raw.join("\n\t"));
 		}
+		completion ~= item;
 	}
+	return completion;
+}
+
+SignatureHelp convertDCDCalltips(string[] calltips, DCDCompletions.Symbol[] symbols, string textTilCursor)
+{
+	SignatureInformation[] signatures;
+	int[] paramsCounts;
+	SignatureHelp help;
+	foreach (i, calltip; calltips)
+	{
+		auto sig = SignatureInformation(calltip);
+		immutable DCDCompletions.Symbol symbol = symbols[i];
+		if (symbol.documentation.length)
+			sig.documentation = MarkupContent(symbol.documentation.ddocToMarked);
+		auto funcParams = calltip.extractFunctionParameters;
+
+		paramsCounts ~= cast(int) funcParams.length - 1;
+		foreach (param; funcParams)
+			sig.parameters ~= ParameterInformation(param);
+
+		help.signatures ~= sig;
+	}
+	auto extractedParams = textTilCursor.extractFunctionParameters(true);
+	help.activeParameter = max(0, cast(int) extractedParams.length - 1);
+	size_t[] possibleFunctions;
+	foreach (i, count; paramsCounts)
+		if (count >= cast(int) extractedParams.length - 1)
+			possibleFunctions ~= i;
+	help.activeSignature = possibleFunctions.length ? cast(int) possibleFunctions[0] : 0;
+	return help;
 }
 
 @protocolMethod("textDocument/signatureHelp")
@@ -1231,44 +1318,56 @@ SignatureHelp provideSignatureHelp(TextDocumentPositionParams params)
 {
 	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	auto document = documents[params.textDocument.uri];
-	if (document.languageId != "d")
+	if (document.languageId == "d")
+		return provideDSignatureHelp(params, workspaceRoot, document);
+	else if (document.languageId == "diet")
+		return provideDietSignatureHelp(params, workspaceRoot, document);
+	else
 		return SignatureHelp.init;
+}
+
+SignatureHelp provideDSignatureHelp(TextDocumentPositionParams params,
+		string workspaceRoot, ref Document document)
+{
 	auto pos = cast(int) document.positionToBytes(params.position);
 	DCDCompletions result = backend.get!DCDComponent(workspaceRoot)
 		.listCompletion(document.text, pos).getYield;
-	SignatureInformation[] signatures;
-	int[] paramsCounts;
-	SignatureHelp help;
 	switch (result.type)
 	{
 	case DCDCompletions.Type.calltips:
-		foreach (i, calltip; result.calltips)
-		{
-			auto sig = SignatureInformation(calltip);
-			immutable DCDCompletions.Symbol symbol = result.symbols[i];
-			if (symbol.documentation.length)
-				sig.documentation = MarkupContent(symbol.documentation.ddocToMarked);
-			auto funcParams = calltip.extractFunctionParameters;
-
-			paramsCounts ~= cast(int) funcParams.length - 1;
-			foreach (param; funcParams)
-				sig.parameters ~= ParameterInformation(param);
-
-			help.signatures ~= sig;
-		}
-		auto extractedParams = document.text[0 .. pos].extractFunctionParameters(true);
-		help.activeParameter = max(0, cast(int) extractedParams.length - 1);
-		size_t[] possibleFunctions;
-		foreach (i, count; paramsCounts)
-			if (count >= cast(int) extractedParams.length - 1)
-				possibleFunctions ~= i;
-		help.activeSignature = possibleFunctions.length ? cast(int) possibleFunctions[0] : 0;
-		goto case;
+		return convertDCDCalltips(result.calltips, result.symbols, document.text[0 .. pos]);
 	case DCDCompletions.Type.identifiers:
-		return help;
+		return SignatureHelp.init;
 	default:
 		throw new Exception("Unexpected result from DCD");
 	}
+}
+
+SignatureHelp provideDietSignatureHelp(TextDocumentPositionParams params,
+		string workspaceRoot, ref Document document)
+{
+	import served.diet;
+	import dc = dietc.complete;
+
+	auto completion = updateDietFile(document.uri.uriToFile, workspaceRoot, document.text);
+
+	size_t offset = document.positionToBytes(params.position);
+	auto raw = completion.completeAt(offset);
+	CompletionItem[] ret;
+
+	if (raw is dc.Completion.completeD)
+	{
+		string code;
+		dc.extractD(completion, offset, code, offset);
+		if (offset <= code.length && backend.has!DCDComponent(workspaceRoot))
+		{
+			auto dcd = backend.get!DCDComponent(workspaceRoot)
+				.listCompletion(code, cast(int)offset).getYield;
+			if (dcd.type == DCDCompletions.Type.calltips)
+				return convertDCDCalltips(dcd.calltips, dcd.symbols, code[0 .. offset]);
+		}
+	}
+	return SignatureHelp.init;
 }
 
 @protocolMethod("workspace/symbol")
