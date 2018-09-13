@@ -2,7 +2,7 @@ module served.textdocumentmanager;
 
 import std.algorithm;
 import std.json;
-import std.utf : decode;
+import std.utf : decode, codeLength;
 
 import served.jsonrpc;
 import served.protocol;
@@ -38,8 +38,8 @@ struct Document
 		size_t index;
 		while (index < offset)
 		{
-			decode(text, bytes);
-			index++;
+			const c = decode(text, bytes);
+			index += c.codeLength!wchar;
 		}
 		return bytes;
 	}
@@ -50,8 +50,8 @@ struct Document
 		size_t index;
 		while (index < bytes)
 		{
-			decode(text, index);
-			offset++;
+			const c = decode(text, index);
+			offset += c.codeLength!wchar;
 		}
 		return offset;
 	}
@@ -65,9 +65,9 @@ struct Document
 		{
 			if (position == cur)
 				return offset;
-			auto c = decode(text, index);
-			offset++;
-			cur.character++;
+			const c = decode(text, index);
+			offset += c.codeLength!wchar;
+			cur.character += c.codeLength!wchar;
 			if (c == '\n')
 			{
 				if (cur.line == position.line)
@@ -87,8 +87,8 @@ struct Document
 		{
 			if (position == cur)
 				return index;
-			auto c = decode(text, index);
-			cur.character++;
+			const c = decode(text, index);
+			cur.character += c.codeLength!wchar;
 			if (c == '\n')
 			{
 				if (cur.line == position.line)
@@ -109,9 +109,9 @@ struct Document
 		{
 			if (offs >= offset)
 				return cur;
-			auto c = decode(text, index);
-			offs++;
-			cur.character++;
+			const c = decode(text, index);
+			offs += c.codeLength!wchar;
+			cur.character += c.codeLength!wchar;
 			if (c == '\n')
 			{
 				cur.character = 0;
@@ -129,8 +129,8 @@ struct Document
 		{
 			if (index >= offset)
 				return cur;
-			auto c = decode(text, index);
-			cur.character++;
+			const c = decode(text, index);
+			cur.character += c.codeLength!wchar;
 			if (c == '\n')
 			{
 				cur.character = 0;
@@ -167,8 +167,8 @@ struct Document
 					break;
 			}
 			wasStart = false;
-			auto c = decode(text, index);
-			cur.character++;
+			const c = decode(text, index);
+			cur.character += c.codeLength!wchar;
 			if (c == '\n')
 			{
 				wasStart = true;
