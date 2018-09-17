@@ -284,7 +284,6 @@ InitializeResult initialize(InitializeParams params)
 	result.capabilities.codeLensProvider = CodeLensOptions(true);
 	result.capabilities.documentSymbolProvider = true;
 	result.capabilities.documentFormattingProvider = true;
-	result.capabilities.codeActionProvider = true;
 	result.capabilities.workspace = opt(ServerWorkspaceCapabilities(
 			opt(ServerWorkspaceCapabilities.WorkspaceFolders(opt(true), opt(true)))));
 
@@ -371,7 +370,8 @@ struct RootSuggestion
 	bool useDub;
 }
 
-RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked, string[] extra, ManyProjectsAction manyAction, int manyThreshold)
+RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
+		string[] extra, ManyProjectsAction manyAction, int manyThreshold)
 {
 	RootSuggestion[] ret;
 	bool rootDub = fs.exists(chainPath(root, "dub.json")) || fs.exists(chainPath(root, "dub.sdl"));
@@ -391,8 +391,7 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked, 
 	ret ~= RootSuggestion(root, rootDub);
 	if (recursive)
 	{
-	PackageDescriptorLoop:
-		foreach (pkg; fs.dirEntries(root, "dub.{json,sdl}", fs.SpanMode.breadth))
+		PackageDescriptorLoop: foreach (pkg; fs.dirEntries(root, "dub.{json,sdl}", fs.SpanMode.breadth))
 		{
 			auto dir = dirName(pkg);
 			if (dir.canFind(".dub"))
@@ -411,7 +410,8 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked, 
 		{
 		case ManyProjectsAction.ask:
 			// TODO: translate
-			auto res = rpc.window.requestMessage(MessageType.warning, "There are too many subprojects in this project according to d.manyProjectsThreshold\n\nDo you want to load additional " ~ (ret.length - manyThreshold + 1).to!string ~ " total projects?", ["Load", "Skip"]);
+			auto res = rpc.window.requestMessage(MessageType.warning, "There are too many subprojects in this project according to d.manyProjectsThreshold\n\nDo you want to load additional " ~ (
+					ret.length - manyThreshold + 1).to!string ~ " total projects?", ["Load", "Skip"]);
 			if (res != "Load")
 				ret = ret[0 .. manyThreshold];
 			break;
@@ -447,7 +447,8 @@ void doStartup(string workspaceUri)
 	trace("Initializing serve-d for " ~ workspaceUri);
 
 	foreach (root; rootsForProject(workspaceUri.uriToFile, proj.config.d.scanAllFolders,
-			proj.config.d.disabledRootGlobs, proj.config.d.extraRoots, proj.config.d.manyProjectsAction, proj.config.d.manyProjectsThreshold))
+			proj.config.d.disabledRootGlobs, proj.config.d.extraRoots,
+			proj.config.d.manyProjectsAction, proj.config.d.manyProjectsThreshold))
 	{
 		auto workspaceRoot = root.dir;
 		workspaced.api.Configuration config;
@@ -1028,8 +1029,9 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 		auto possibleFields = backend.get!DscannerComponent.listAllIniFields;
 		auto line = document.lineAt(params.position).strip;
 		auto defaultList = CompletionList(false, possibleFields.map!(a => CompletionItem(a.name,
-				CompletionItemKind.field.opt, Optional!string.init, MarkupContent(a.documentation)
-				.opt, Optional!bool.init, Optional!bool.init, Optional!string.init, Optional!string.init, (a.name ~ '=').opt)).array);
+				CompletionItemKind.field.opt, Optional!string.init,
+				MarkupContent(a.documentation).opt, Optional!bool.init, Optional!bool.init,
+				Optional!string.init, Optional!string.init, (a.name ~ '=').opt)).array);
 		if (!line.length)
 			return defaultList;
 		//dfmt off
@@ -1090,26 +1092,26 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 		if (offset <= code.length && backend.has!DCDComponent(workspaceRoot))
 		{
 			info("DCD Completing Diet for ", code, " at ", offset);
-			auto dcd = backend.get!DCDComponent(workspaceRoot)
-				.listCompletion(code, cast(int)offset).getYield;
+			auto dcd = backend.get!DCDComponent(workspaceRoot).listCompletion(code,
+					cast(int) offset).getYield;
 			if (dcd.type == DCDCompletions.Type.identifiers)
-				ret = dcd.identifiers.convertDCDIdentifiers(workspace(params.textDocument.uri).config.d.argumentSnippets);
+				ret = dcd.identifiers.convertDCDIdentifiers(workspace(params.textDocument.uri)
+						.config.d.argumentSnippets);
 		}
 	}
 	else
 		ret = raw.map!((a) {
-				CompletionItem ret;
-				ret.label = a.text;
-				ret.kind = a.type.mapToCompletionItemKind.opt;
-				if (a.definition.length)
-					ret.detail = a.definition.opt;
-				if (a.documentation.length)
-					ret.documentation = MarkupContent(a.documentation).opt;
-				if (a.preselected)
-					ret.preselect = true.opt;
-				return ret;
-			})
-			.array;
+			CompletionItem ret;
+			ret.label = a.text;
+			ret.kind = a.type.mapToCompletionItemKind.opt;
+			if (a.definition.length)
+				ret.detail = a.definition.opt;
+			if (a.documentation.length)
+				ret.documentation = MarkupContent(a.documentation).opt;
+			if (a.preselected)
+				ret.preselect = true.opt;
+			return ret;
+		}).array;
 
 	return CompletionList(false, ret);
 }
@@ -1220,7 +1222,8 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 	switch (result.type)
 	{
 	case DCDCompletions.Type.identifiers:
-		completion = convertDCDIdentifiers(result.identifiers, workspace(params.textDocument.uri).config.d.argumentSnippets);
+		completion = convertDCDIdentifiers(result.identifiers,
+				workspace(params.textDocument.uri).config.d.argumentSnippets);
 		goto case;
 	case DCDCompletions.Type.calltips:
 		return CompletionList(false, completion);
@@ -1284,7 +1287,8 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, lazy bool argumentSnippe
 	return completion;
 }
 
-SignatureHelp convertDCDCalltips(string[] calltips, DCDCompletions.Symbol[] symbols, string textTilCursor)
+SignatureHelp convertDCDCalltips(string[] calltips,
+		DCDCompletions.Symbol[] symbols, string textTilCursor)
 {
 	SignatureInformation[] signatures;
 	int[] paramsCounts;
@@ -1335,7 +1339,8 @@ SignatureHelp provideDSignatureHelp(TextDocumentPositionParams params,
 	switch (result.type)
 	{
 	case DCDCompletions.Type.calltips:
-		return convertDCDCalltips(result.calltips, result.symbols, document.text[0 .. pos]);
+		return convertDCDCalltips(result.calltips,
+				result.symbols, document.text[0 .. pos]);
 	case DCDCompletions.Type.identifiers:
 		return SignatureHelp.init;
 	default:
@@ -1361,8 +1366,8 @@ SignatureHelp provideDietSignatureHelp(TextDocumentPositionParams params,
 		dc.extractD(completion, offset, code, offset);
 		if (offset <= code.length && backend.has!DCDComponent(workspaceRoot))
 		{
-			auto dcd = backend.get!DCDComponent(workspaceRoot)
-				.listCompletion(code, cast(int)offset).getYield;
+			auto dcd = backend.get!DCDComponent(workspaceRoot).listCompletion(code,
+					cast(int) offset).getYield;
 			if (dcd.type == DCDCompletions.Type.calltips)
 				return convertDCDCalltips(dcd.calltips, dcd.symbols, code[0 .. offset]);
 		}
@@ -1602,13 +1607,16 @@ Hover provideHover(TextDocumentPositionParams params)
 }
 
 private auto importRegex = regex(`import\s+(?:[a-zA-Z_]+\s*=\s*)?([a-zA-Z_]\w*(?:\.\w*[a-zA-Z_]\w*)*)?(\s*\:\s*(?:[a-zA-Z_,\s=]*(?://.*?[\r\n]|/\*.*?\*/|/\+.*?\+/)?)+)?;?`);
-private static immutable regexQuoteChars = "['\"`]";
+private static immutable regexQuoteChars = "['\"`]?";
 private auto undefinedIdentifier = regex(`^undefined identifier ` ~ regexQuoteChars ~ `(\w+)`
 		~ regexQuoteChars ~ `(?:, did you mean .*? ` ~ regexQuoteChars ~ `(\w+)`
 		~ regexQuoteChars ~ `\?)?$`);
-private auto undefinedTemplate = regex(`template '(\w+)' is not defined`);
-private auto noProperty = regex(`^no property '(\w+)'(?: for type '.*?')?$`);
-private auto moduleRegex = regex(`module\s+([a-zA-Z_]\w*\s*(?:\s*\.\s*[a-zA-Z_]\w*)*)\s*;`);
+private auto undefinedTemplate = regex(
+		`template ` ~ regexQuoteChars ~ `(\w+)` ~ regexQuoteChars ~ ` is not defined`);
+private auto noProperty = regex(`^no property ` ~ regexQuoteChars ~ `(\w+)`
+		~ regexQuoteChars ~ `(?: for type ` ~ regexQuoteChars ~ `.*?` ~ regexQuoteChars ~ `)?$`);
+private auto moduleRegex = regex(
+		`(?<!//.*)\bmodule\s+([a-zA-Z_]\w*\s*(?:\s*\.\s*[a-zA-Z_]\w*)*)\s*;`);
 private auto whitespace = regex(`\s*`);
 
 @protocolMethod("textDocument/codeAction")
@@ -1644,14 +1652,12 @@ Command[] provideCodeActions(CodeActionParams params)
 		if (diagnostic.source == DubDiagnosticSource)
 		{
 			auto match = diagnostic.message.matchFirst(importRegex);
-			if (diagnostic.message.canFind("import "))
+			if (diagnostic.message.canFind("import ") && match)
 			{
-				if (!match)
-					continue;
 				ret ~= Command("Import " ~ match[1], "code-d.addImport",
 						[JSONValue(match[1]), JSONValue(document.positionToOffset(params.range[0]))]);
 			}
-			else if (cast(bool)(match = diagnostic.message.matchFirst(undefinedIdentifier))
+			if (cast(bool)(match = diagnostic.message.matchFirst(undefinedIdentifier))
 					|| cast(bool)(match = diagnostic.message.matchFirst(undefinedTemplate))
 					|| cast(bool)(match = diagnostic.message.matchFirst(noProperty)))
 			{
