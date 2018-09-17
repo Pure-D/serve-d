@@ -101,6 +101,7 @@ d.ext.exeIsDir: {0} points to a directory
 d.ext.exeENOENT: {0} is not installed or couldn't be found
 d.ext.compileProgram: Compile {0}
 d.ext.downloadProgram: Download {0}
+d.ext.dubRecipeMaybeBroken: Dub could not be started. Your dub.json/dub.sdl package recipe might be faulty! Fix it and save the file again.
 d.ext.dubUpgradeFail: Could not upgrade dub project
 d.ext.dubImportFail: Could not update import paths. Please check your build settings in the status bar.
 d.ext.configSwitchFail: Failed to switch configuration. See console for details.

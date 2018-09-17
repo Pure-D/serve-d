@@ -2260,10 +2260,33 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 	else if (fileName == "dub.json" || fileName == "dub.sdl")
 	{
 		info("Updating dependencies");
-		rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot).upgrade(),
-				MessageType.warning, translate!"d.ext.dubUpgradeFail");
-		rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
+		if (!backend.has!DubComponent(workspaceRoot))
+		{
+			bool success = backend.attach(backend.getInstance(workspaceRoot), "dub");
+			if (!success)
+				rpc.window.showMessage(MessageType.warning, translate!"d.ext.dubUpgradeFail");
+		}
+		else
+		{
+			if (backend.get!DubComponent(workspaceRoot).isRunning)
+				rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
+						.upgrade(), MessageType.warning, translate!"d.ext.dubUpgradeFail");
+		}
+
+		setTimeout({
+			rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
 				.updateImportPaths(true), MessageType.warning, translate!"d.ext.dubImportFail");
+		}, 500.msecs);
+
+		setTimeout({
+			if (!backend.get!DubComponent(workspaceRoot).isRunning)
+			{
+				if (backend.attach(backend.getInstance(workspaceRoot), "dub"))
+					rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
+						.updateImportPaths(true), MessageType.warning,
+						translate!"d.ext.dubRecipeMaybeBroken");
+			}
+		}, 1.seconds);
 		rpc.notifyMethod("coded/updateDubTree");
 	}
 }
