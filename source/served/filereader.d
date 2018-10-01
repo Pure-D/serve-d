@@ -71,3 +71,23 @@ private:
 	Mutex mutex;
 	bool running;
 }
+
+char[] readCodeWithBuffer(string file, ref ubyte[] buffer, size_t maxLen = 1024 * 50)
+{
+	auto f = File(file, "rb");
+	size_t len = f.rawRead(buffer).length;
+	if (f.eof)
+		return cast(char[]) buffer[0 .. len];
+	while (buffer.length * 2 < maxLen)
+	{
+		buffer.length *= 2;
+		len += f.rawRead(buffer[len .. $]).length;
+		if (f.eof)
+			return cast(char[]) buffer[0 .. len];
+	}
+	if (buffer.length >= maxLen)
+		return cast(char[]) buffer;
+	buffer.length = maxLen;
+	f.rawRead(buffer[len .. $]);
+	return cast(char[]) buffer;
+}

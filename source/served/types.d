@@ -224,12 +224,17 @@ deprecated string workspaceRoot() @property
 	return firstWorkspaceRootUri.uriToFile;
 }
 
-string selectedWorkspaceRoot() @property
+string selectedWorkspaceUri() @property
 {
 	foreach (ref workspace; workspaces)
 		if (workspace.selected)
-			return workspace.folder.uri.uriToFile;
-	return firstWorkspaceRootUri.uriToFile;
+			return workspace.folder.uri;
+	return firstWorkspaceRootUri;
+}
+
+string selectedWorkspaceRoot() @property
+{
+	return selectedWorkspaceUri.uriToFile;
 }
 
 string firstWorkspaceRootUri() @property
@@ -334,6 +339,14 @@ ref Workspace bestWorkspaceByDependency(string uri)
 	if (best == size_t.max)
 		return fallbackWorkspace;
 	return workspaces[best];
+}
+
+ref Workspace selectedWorkspace()
+{
+	foreach (ref workspace; workspaces)
+		if (workspace.selected)
+			return workspace;
+	return fallbackWorkspace;
 }
 
 string workspaceRootFor(string uri)
@@ -452,4 +465,29 @@ bool seemsLikeDubJson(JSONValue packageJson)
 	if ("name" !in packageJson)
 		return false;
 	return true;
+}
+
+/// Inserts a value into a sorted range. Inserts before equal elements.
+/// Returns: the index where the value has been inserted.
+size_t insertSorted(alias sort = "a<b", T)(ref T[] arr, T value)
+{
+	auto v = arr.binarySearch!sort(value);
+	if (v < 0)
+		v = ~v;
+	arr.length++;
+	for (ptrdiff_t i = cast(ptrdiff_t)arr.length - 1; i > v; i--)
+		move(arr[i - 1], arr[i]);
+	arr[v] = value;
+	return v;
+}
+
+/// Finds a value in a sorted range and returns its index.
+/// Returns: a bitwise invert of the first element bigger than value. Use `~ret` to turn it back.
+ptrdiff_t binarySearch(alias sort = "a<b", T)(T[] arr, T value)
+{
+	auto sorted = assumeSorted!sort(arr).trisect(value);
+	if (sorted[1].length)
+		return cast(ptrdiff_t) sorted[0].length;
+	else
+		return ~cast(ptrdiff_t) sorted[0].length;
 }
