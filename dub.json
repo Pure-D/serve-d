@@ -8,7 +8,7 @@
 		"painlessjson": "~>1.3.9",
 		"libddoc": "0.4.0",
 		"rm-rf": "~>0.1.0",
-		"diet-complete": { "path": "../DietComplete" }
+		"diet-complete": "~>0.0.1"
 	},
 	"stringImportPaths": [
 		"views"
