@@ -461,18 +461,24 @@ void doStartup(string workspaceUri)
 
 		bool disableDub = proj.config.d.neverUseDub || !root.useDub;
 		bool loadedDub;
+		Exception err;
 		if (!disableDub)
 		{
 			trace("Starting dub...");
+
 			try
 			{
-				if (backend.attach(instance, "dub"))
+				if (backend.attach(instance, "dub", err))
 					loadedDub = true;
 			}
 			catch (Exception e)
 			{
-				error("Exception starting dub: ", e);
+				err = e;
+				loadedDub = false;
 			}
+
+			if (!loadedDub)
+				error("Exception starting dub: ", err);
 		}
 		if (!loadedDub)
 		{
@@ -485,8 +491,8 @@ void doStartup(string workspaceUri)
 			{
 				instance.config.set("fsworkspace", "additionalPaths",
 						getPossibleSourceRoots(workspaceRoot));
-				if (!backend.attach(instance, "fsworkspace"))
-					throw new Exception("Attach returned failure");
+				if (!backend.attach(instance, "fsworkspace", err))
+					throw new Exception("Attach returned failure: " ~ err.msg);
 			}
 			catch (Exception e)
 			{
@@ -497,8 +503,8 @@ void doStartup(string workspaceUri)
 		else
 			setTimeout({ rpc.notifyMethod("coded/initDubTree"); }, 50);
 
-		if (!backend.attach(instance, "dmd"))
-			error("Failed to attach DMD component to ", workspaceUri);
+		if (!backend.attach(instance, "dmd", err))
+			error("Failed to attach DMD component to ", workspaceUri, "\n", err.msg);
 		startDCD(instance, workspaceUri);
 
 		trace("Loaded Components for ", instance.cwd, ": ",
@@ -537,12 +543,20 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 		error("Trying to start DCD on unknown workspace ", workspaceUri, "?");
 		return;
 	}
+	Exception err;
+	string startupError;
 	trace("Starting dcd");
-	if (!backend.attach(instance, "dcd"))
-		error("Failed to attach DCD component to ", instance.cwd);
+	if (!backend.attach(instance, "dcd", err))
+	{
+		error("Failed to attach DCD component to ", instance.cwd, ": ", err.msg);
+		startupError ~= "\n" ~ err.msg;
+	}
 	trace("Starting dcdext");
-	if (!backend.attach(instance, "dcdext"))
-		error("Failed to attach DCD component to ", instance.cwd);
+	if (!backend.attach(instance, "dcdext", err))
+	{
+		error("Failed to attach DCD component to ", instance.cwd, ": ", err.msg);
+		startupError ~= "\n" ~ err.msg;
+	}
 	trace("Running DCD setup");
 	try
 	{
@@ -558,7 +572,7 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 	}
 	catch (Exception e)
 	{
-		rpc.window.showErrorMessage(translate!"d.ext.dcdFail"(instance.cwd));
+		rpc.window.showErrorMessage(translate!"d.ext.dcdFail"(instance.cwd, startupError));
 		error(e);
 		trace("Instance Config: ", instance.config);
 		return;
@@ -1670,7 +1684,34 @@ Command[] provideCodeActions(CodeActionParams params)
 						.findSymbol(match[1]).getYield.map!"a.file".array;
 				}, {
 					if (backend.has!DCDComponent(workspaceRoot))
-						files ~= backend.get!DCDComponent(workspaceRoot).searchSymbol(match[1]).getYield.map!"a.file".array;
+						files ~= backend.get!DCDComponent(workspaceRoot)
+							.searchSymbol(match[1]).getYield.map!"a.file".array;
+				}, {
+					struct Symbol
+					{
+						string project, package_;
+					}
+
+					StopWatch sw;
+					bool got;
+					Symbol[] symbols;
+					sw.start();
+					info("asking the interwebs for ", match[1]);
+					new Thread({
+						import std.net.curl : get;
+						import std.uri : encodeComponent;
+
+						auto str = get(
+						"https://symbols.webfreak.org/symbols?limit=60&identifier=" ~ encodeComponent(match[1]));
+						foreach (symbol; parseJSON(str).array)
+							symbols ~= Symbol(symbol["project"].str, symbol["package"].str);
+						got = true;
+					}).start();
+					while (sw.peek < 3.seconds && !got)
+						Fiber.yield();
+					foreach (v; symbols.sort!"a.project < b.project"
+						.uniq!"a.project == b.project")
+						ret ~= Command("Import " ~ v.package_ ~ " from dub package " ~ v.project);
 				});
 				info("Files: ", files);
 				foreach (file; files.sort().uniq)
@@ -2407,9 +2448,13 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 		info("Updating dependencies");
 		if (!backend.has!DubComponent(workspaceRoot))
 		{
-			bool success = backend.attach(backend.getInstance(workspaceRoot), "dub");
+			Exception err;
+			bool success = backend.attach(backend.getInstance(workspaceRoot), "dub", err);
 			if (!success)
+			{
 				rpc.window.showMessage(MessageType.warning, translate!"d.ext.dubUpgradeFail");
+				error(err);
+			}
 		}
 		else
 		{
@@ -2426,10 +2471,14 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 		setTimeout({
 			if (!backend.get!DubComponent(workspaceRoot).isRunning)
 			{
-				if (backend.attach(backend.getInstance(workspaceRoot), "dub"))
+				Exception err;
+				if (backend.attach(backend.getInstance(workspaceRoot), "dub", err))
+				{
 					rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
 						.updateImportPaths(true), MessageType.warning,
 						translate!"d.ext.dubRecipeMaybeBroken");
+					error(err);
+				}
 			}
 		}, 1.seconds);
 		rpc.notifyMethod("coded/updateDubTree");
@@ -2743,9 +2792,10 @@ shared static this()
 	backend = new WorkspaceD();
 
 	backend.onBroadcast = (&handleBroadcast).toDelegate;
-	backend.onBindFail = (WorkspaceD.Instance instance, ComponentFactory factory) {
+	backend.onBindFail = (WorkspaceD.Instance instance, ComponentFactory factory, Exception err) {
 		rpc.window.showErrorMessage(
-				"Failed to load component " ~ factory.info.name ~ " for workspace " ~ instance.cwd);
+				"Failed to load component " ~ factory.info.name ~ " for workspace "
+				~ instance.cwd ~ "\n\nError: " ~ err.msg);
 	};
 }
 

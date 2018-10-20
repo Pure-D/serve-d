@@ -91,7 +91,7 @@ d.ext.config.invalid.buildType: Der Build Type '{0}' welcher in den Einstellunge
 d.ext.config.invalid.compiler: Der Compiler '{0}' welcher in den Einstellungen angegeben wurde, wurde nicht gefunden!
 d.ext.dubFail: Konnte dub für {0} nicht starten. Funktionalität begrenzt!
 d.ext.fsworkspaceFail: Konnte fsworkspace für {0} nicht starten. In die Entwicklertools umschalten für Details.
-d.ext.dcdFail: Konnte DCD für {0} nicht starten. In die Entwicklertools umschalten für Details.
+d.ext.dcdFail: Konnte DCD für {0} nicht starten.{1}
 d.ext.gcLens: {0} Bytes allocated / {1} Allocation
 d.ext.stdlibNoPhobosNoDRuntime: d.stdlibPath Einstellung enthält keinen Eintrag für phobos und druntime. Autovervollständigung könnte Lücken aufweisen!
 d.ext.stdlibNoPhobos: d.stdlibPath Einstellung enthält keinen Eintrag für phobos. Autovervollständigung könnte Lücken aufweisen!
