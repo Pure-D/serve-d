@@ -1684,34 +1684,7 @@ Command[] provideCodeActions(CodeActionParams params)
 						.findSymbol(match[1]).getYield.map!"a.file".array;
 				}, {
 					if (backend.has!DCDComponent(workspaceRoot))
-						files ~= backend.get!DCDComponent(workspaceRoot)
-							.searchSymbol(match[1]).getYield.map!"a.file".array;
-				}, {
-					struct Symbol
-					{
-						string project, package_;
-					}
-
-					StopWatch sw;
-					bool got;
-					Symbol[] symbols;
-					sw.start();
-					info("asking the interwebs for ", match[1]);
-					new Thread({
-						import std.net.curl : get;
-						import std.uri : encodeComponent;
-
-						auto str = get(
-						"https://symbols.webfreak.org/symbols?limit=60&identifier=" ~ encodeComponent(match[1]));
-						foreach (symbol; parseJSON(str).array)
-							symbols ~= Symbol(symbol["project"].str, symbol["package"].str);
-						got = true;
-					}).start();
-					while (sw.peek < 3.seconds && !got)
-						Fiber.yield();
-					foreach (v; symbols.sort!"a.project < b.project"
-						.uniq!"a.project == b.project")
-						ret ~= Command("Import " ~ v.package_ ~ " from dub package " ~ v.project);
+						files ~= backend.get!DCDComponent(workspaceRoot).searchSymbol(match[1]).getYield.map!"a.file".array;
 				});
 				info("Files: ", files);
 				foreach (file; files.sort().uniq)
