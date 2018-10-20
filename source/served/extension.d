@@ -623,12 +623,26 @@ void updateDCD()
 		ext = ".exe";
 	string finalDestinationClient;
 	string finalDestinationServer;
+
+	bool success;
+
+	enum bundledDCDVersion = "v0.9.13";
+
+	bool compileFromSource = false;
 	version (DCDFromSource)
+		compileFromSource = true;
+	else
+	{
+		if (!checkVersion(bundledDCDVersion, DCDComponent.latestKnownVersion))
+			compileFromSource = true;
+	}
+
+	if (compileFromSource)
 	{
 		string[] platformOptions;
 		version (Windows)
 			platformOptions = ["--arch=x86_mscoff"];
-		bool success = compileDependency(outputFolder, "DCD",
+		success = compileDependency(outputFolder, "DCD",
 				"https://github.com/Hackerpilot/DCD.git", [[firstConfig.git.path,
 				"submodule", "update", "--init", "--recursive"], ["dub", "build",
 				"--config=client"] ~ platformOptions, ["dub", "build",
@@ -643,22 +657,24 @@ void updateDCD()
 	else
 	{
 		string url;
+
+		enum commonPrefix = "https://github.com/dlang-community/DCD/releases/download/"
+				~ bundledDCDVersion ~ "/dcd-" ~ bundledDCDVersion;
+
 		version (Win32)
-			url = "https://github.com/dlang-community/DCD/releases/download/v0.9.9/dcd-v0.9.9-windows-x86.zip";
+			url = commonPrefix ~ "-windows-x86.zip";
 		else version (Win64)
-			url = "https://github.com/dlang-community/DCD/releases/download/v0.9.9/dcd-v0.9.9-windows-x86_64.zip";
+			url = commonPrefix ~ "-windows-x86_64.zip";
 		else version (linux)
-			url = "https://github.com/dlang-community/DCD/releases/download/v0.9.9/dcd-v0.9.9-linux-x86_64.tar.gz";
+			url = commonPrefix ~ "-linux-x86_64.tar.gz";
 		else version (OSX)
-			url = "https://github.com/dlang-community/DCD/releases/download/v0.9.9/dcd-v0.9.9-osx-x86_64.tar.gz";
+			url = commonPrefix ~ "-osx-x86_64.tar.gz";
 		else
 			static assert(false);
 
 		import std.net.curl : download;
 		import std.process : pipeProcess, Redirect, Config, wait;
 		import std.zip : ZipArchive;
-
-		bool success;
 
 		try
 		{
@@ -697,6 +713,7 @@ void updateDCD()
 			success = false;
 		}
 	}
+
 	if (success)
 	{
 		foreach (ref workspace; workspaces)
