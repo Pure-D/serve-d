@@ -453,7 +453,7 @@ int toInt(JSONValue value)
 		return cast(int) value.integer;
 }
 
-WorkspaceD backend;
+__gshared WorkspaceD backend;
 
 /// Quick function to check if a package.json can not not be a dub package file.
 /// Returns: false if fields are used which aren't usually used in dub but in nodejs.
