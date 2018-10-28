@@ -7,6 +7,7 @@ pushd %~dp0
     echo !-- Error: version.txt is missing :/
     echo.
     pause
+    popd
     goto :eof
 )
 
