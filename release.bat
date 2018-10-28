@@ -1,6 +1,6 @@
 rem Building & compressing serve-d for release inside a virtual machine with Windows 8 or above
 
-cd %~dp0
+pushd %~dp0
 
 @if not exist version.txt (
 	echo.
@@ -30,4 +30,5 @@ powershell -nologo -noprofile -command "& { Add-Type -A 'System.IO.Compression.F
 popd
 
 move %SystemDrive%\buildsd\windows.zip "serve-d_%Version%-windows.zip"
+popd
 pause
