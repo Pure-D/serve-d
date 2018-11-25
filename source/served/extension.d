@@ -103,12 +103,16 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 		switch (path)
 		{
 		case "d.stdlibPath":
+			if (backend.has!DCDComponent(workspaceFs))
 			backend.get!DCDComponent(workspaceFs).addImports(config.stdlibPath);
 			break;
 		case "d.projectImportPaths":
+			if (backend.has!DCDComponent(workspaceFs))
 			backend.get!DCDComponent(workspaceFs).addImports(config.d.projectImportPaths);
 			break;
 		case "d.dubConfiguration":
+			if (backend.has!DubComponent(workspaceFs))
+			{
 			auto configs = backend.get!DubComponent(workspaceFs).configurations;
 			if (configs.length == 0)
 				rpc.window.showInformationMessage(translate!"d.ext.noConfigurations.project");
@@ -126,21 +130,23 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 				else
 					backend.get!DubComponent(workspaceFs).setConfiguration(configs[0]);
 			}
+			}
 			break;
 		case "d.dubArchType":
-			if (config.d.dubArchType.length && !backend.get!DubComponent(workspaceFs)
+			if (backend.has!DubComponent(workspaceFs) && config.d.dubArchType.length
+					&& !backend.get!DubComponent(workspaceFs)
 					.setArchType(JSONValue(["arch-type" : JSONValue(config.d.dubArchType)])))
 				rpc.window.showErrorMessage(
 						translate!"d.ext.config.invalid.archType"(config.d.dubArchType));
 			break;
 		case "d.dubBuildType":
-			if (config.d.dubBuildType.length && !backend.get!DubComponent(workspaceFs)
+			if (backend.has!DubComponent(workspaceFs) && config.d.dubBuildType.length && !backend.get!DubComponent(workspaceFs)
 					.setBuildType(JSONValue(["build-type" : JSONValue(config.d.dubBuildType)])))
 				rpc.window.showErrorMessage(
 						translate!"d.ext.config.invalid.buildType"(config.d.dubBuildType));
 			break;
 		case "d.dubCompiler":
-			if (config.d.dubCompiler.length && !backend.get!DubComponent(workspaceFs)
+			if (backend.has!DubComponent(workspaceFs) && config.d.dubCompiler.length && !backend.get!DubComponent(workspaceFs)
 					.setCompiler(config.d.dubCompiler))
 				rpc.window.showErrorMessage(
 						translate!"d.ext.config.invalid.compiler"(config.d.dubCompiler));
@@ -190,7 +196,7 @@ void processConfigChange(served.types.Configuration configuration)
 		if (workspaces.length > 1)
 			error(
 					"Client does not support configuration request, only applying config for first workspace.");
-		served.extension.changedConfig(workspaces[0].folder.uri,
+		changedConfig(workspaces[0].folder.uri,
 				workspaces[0].config.replace(configuration), workspaces[0].config);
 	}
 }
@@ -331,9 +337,10 @@ void doGlobalStartup()
 		trace("Starting moduleman");
 		backend.register!ModulemanComponent;
 
-		if (backend.get!DCDComponent.isOutdated)
+		if (!backend.has!DCDComponent || backend.get!DCDComponent.isOutdated)
 		{
 			info("DCD is outdated.");
+			dcdUpdating = true;
 			if (firstConfig.d.aggressiveUpdate)
 				spawnFiber((&updateDCD).toDelegate);
 			else
@@ -343,13 +350,14 @@ void doGlobalStartup()
 						auto action = translate!"d.ext.compileProgram"("DCD");
 					else
 						auto action = translate!"d.ext.downloadProgram"("DCD");
-					static if (is(typeof(backend.get!DCDComponent.clientInstalledVersion)))
-						auto wanted = backend.get!DCDComponent.clientInstalledVersion;
-					else
-						auto wanted = "0.9.8";
+
+					auto installed = backend.has!DCDComponent
+						? backend.get!DCDComponent.clientInstalledVersion : "none";
+
 					auto res = rpc.window.requestMessage(MessageType.error,
 						translate!"d.served.outdatedDCD"(DCDComponent.latestKnownVersion.to!(string[])
-						.join("."), wanted), [action]);
+						.join("."), installed), [action]);
+
 					if (res == action)
 						spawnFiber((&updateDCD).toDelegate);
 				});
@@ -549,12 +557,15 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 	if (!backend.attach(instance, "dcd", err))
 	{
 		error("Failed to attach DCD component to ", instance.cwd, ": ", err.msg);
+		if (dcdUpdating)
+			return;
+		else
 		startupError ~= "\n" ~ err.msg;
 	}
 	trace("Starting dcdext");
 	if (!backend.attach(instance, "dcdext", err))
 	{
-		error("Failed to attach DCD component to ", instance.cwd, ": ", err.msg);
+		error("Failed to attach DCDExt component to ", instance.cwd, ": ", err.msg);
 		startupError ~= "\n" ~ err.msg;
 	}
 	trace("Running DCD setup");
@@ -579,8 +590,8 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 	}
 	info("Imports for ", instance.cwd, ": ", backend.getInstance(instance.cwd).importPaths);
 
-	auto globalDCD = backend.get!DCDComponent;
-	if (!globalDCD.isActive)
+	auto globalDCD = backend.has!DCDComponent ? backend.get!DCDComponent : null;
+	if (globalDCD && !globalDCD.isActive)
 	{
 		globalDCD.fromRunning(globalDCD.getSupportsFullOutput, globalDCD.isUsingUnixDomainSockets
 				? globalDCD.getSocketFile : "", globalDCD.isUsingUnixDomainSockets ? 0
@@ -609,9 +620,13 @@ string determineOutputFolder()
 	}
 }
 
+__gshared bool dcdUpdating;
 @protocolNotification("served/updateDCD")
 void updateDCD()
 {
+	scope (exit)
+		dcdUpdating = false;
+
 	rpc.notifyMethod("coded/logInstall", "Installing DCD");
 	string outputFolder = determineOutputFolder;
 	if (fs.exists(outputFolder))
@@ -637,13 +652,14 @@ void updateDCD()
 			compileFromSource = true;
 	}
 
+	string[] triedPaths;
+
 	if (compileFromSource)
 	{
 		string[] platformOptions;
 		version (Windows)
 			platformOptions = ["--arch=x86_mscoff"];
-		success = compileDependency(outputFolder, "DCD",
-				"https://github.com/Hackerpilot/DCD.git", [[firstConfig.git.path,
+		success = compileDependency(outputFolder, "DCD", "https://github.com/Hackerpilot/DCD.git", [[firstConfig.git.path,
 				"submodule", "update", "--init", "--recursive"], ["dub", "build",
 				"--config=client"] ~ platformOptions, ["dub", "build",
 				"--config=server"] ~ platformOptions]);
@@ -653,6 +669,9 @@ void updateDCD()
 		finalDestinationServer = buildPath(outputFolder, "DCD", "dcd-server" ~ ext);
 		if (!fs.exists(finalDestinationServer))
 			finalDestinationServer = buildPath(outputFolder, "DCD", "bin", "dcd-server" ~ ext);
+
+		triedPaths = ["DCD/dcd-client" ~ ext, "DCD/dcd-server" ~ ext,
+			"DCD/bin/dcd-client" ~ ext, "DCD/bin/dcd-server" ~ ext];
 	}
 	else
 	{
@@ -706,6 +725,14 @@ void updateDCD()
 
 			finalDestinationClient = buildPath(outputFolder, "dcd-client" ~ ext);
 			finalDestinationServer = buildPath(outputFolder, "dcd-server" ~ ext);
+
+			if (!fs.exists(finalDestinationClient))
+				finalDestinationClient = buildPath(outputFolder, "bin", "dcd-client" ~ ext);
+			if (!fs.exists(finalDestinationServer))
+				finalDestinationServer = buildPath(outputFolder, "bin", "dcd-client" ~ ext);
+
+			triedPaths = ["dcd-client" ~ ext, "dcd-server" ~ ext,
+				"bin/dcd-client" ~ ext, "bin/dcd-server" ~ ext];
 		}
 		catch (Exception e)
 		{
@@ -714,8 +741,25 @@ void updateDCD()
 		}
 	}
 
+	if (success && (!fs.exists(finalDestinationClient) || !fs.exists(finalDestinationServer)))
+	{
+		rpc.notifyMethod("coded/logInstall",
+				"Successfully downloaded DCD, but could not find the executables.");
+		rpc.notifyMethod("coded/logInstall",
+				"Please open your user settings and insert the paths for dcd-client and dcd-server manually.");
+		rpc.notifyMethod("coded/logInstall", "Download base location: " ~ outputFolder);
+		rpc.notifyMethod("coded/logInstall", "");
+		rpc.notifyMethod("coded/logInstall", format("Tried %(%s, %)", triedPaths));
+
+		finalDestinationClient = "dcd-client";
+		finalDestinationServer = "dcd-server";
+	}
+
 	if (success)
 	{
+		backend.globalConfiguration.set("dcd", "clientPath", finalDestinationClient);
+		backend.globalConfiguration.set("dcd", "serverPath", finalDestinationServer);
+
 		foreach (ref workspace; workspaces)
 		{
 			workspace.config.d.dcdClientPath = finalDestinationClient;
@@ -733,9 +777,14 @@ void updateDCD()
 				rpc.notifyMethod("coded/logInstall",
 						"Failed to find workspace to start DCD for " ~ workspace.folder.uri);
 			else
+			{
+				instance.config.set("dcd", "clientPath", finalDestinationClient);
+				instance.config.set("dcd", "serverPath", finalDestinationServer);
+
 				startDCD(instance, workspace.folder.uri);
 		}
 	}
+}
 }
 
 bool compileDependency(string cwd, string name, string gitURI, string[][] commands)
@@ -1365,6 +1414,9 @@ SignatureHelp provideSignatureHelp(TextDocumentPositionParams params)
 SignatureHelp provideDSignatureHelp(TextDocumentPositionParams params,
 		string workspaceRoot, ref Document document)
 {
+	if (!backend.has!DCDComponent(workspaceRoot))
+		return SignatureHelp.init;
+
 	auto pos = cast(int) document.positionToBytes(params.position);
 	DCDCompletions result = backend.get!DCDComponent(workspaceRoot)
 		.listCompletion(document.text, pos).getYield;
@@ -1424,6 +1476,8 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 				if (def.name.toLower.startsWith(params.query.toLower))
 					infos ~= def.downcast;
 		}
+		if (backend.has!DCDComponent(workspace.folder.uri.uriToFile))
+		{
 		auto exact = backend.get!DCDComponent(workspace.folder.uri.uriToFile)
 			.searchSymbol(params.query).getYield;
 		foreach (symbol; exact)
@@ -1442,6 +1496,7 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 			info.kind = symbol.type.convertFromDCDSearchType;
 			infos ~= info;
 		}
+	}
 	}
 	return infos;
 }
@@ -1537,13 +1592,18 @@ DocumentSymbol[] provideDocumentSymbolsHierarchical(DocumentSymbolParams params)
 ArrayOrSingle!Location provideDefinition(TextDocumentPositionParams params)
 {
 	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
+	if (!backend.has!DCDComponent(workspaceRoot))
+		return ArrayOrSingle!Location.init;
+
 	auto document = documents[params.textDocument.uri];
 	if (document.languageId != "d")
 		return ArrayOrSingle!Location.init;
+
 	auto result = backend.get!DCDComponent(workspaceRoot).findDeclaration(document.text,
 			cast(int) document.positionToBytes(params.position)).getYield;
 	if (result == DCDDeclaration.init)
 		return ArrayOrSingle!Location.init;
+
 	auto uri = document.uri;
 	if (result.file != "stdin")
 	{
@@ -1628,9 +1688,14 @@ TextEdit[] provideFormatting(DocumentFormattingParams params)
 Hover provideHover(TextDocumentPositionParams params)
 {
 	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
+
+	if (!backend.has!DCDComponent(workspaceRoot))
+		return Hover.init;
+
 	auto document = documents[params.textDocument.uri];
 	if (document.languageId != "d")
 		return Hover.init;
+
 	auto docs = backend.get!DCDComponent(workspaceRoot).getDocumentation(document.text,
 			cast(int) document.positionToBytes(params.position)).getYield;
 	Hover ret;
@@ -2031,7 +2096,8 @@ bool updateImports()
 		if (success)
 			rpc.notifyMethod("coded/updateDubTree");
 	}
-	backend.get!DCDComponent(workspaceRoot).refreshImports();
+	if (backend.has!DCDComponent(workspaceRoot))
+		backend.get!DCDComponent(workspaceRoot).refreshImports();
 	return success;
 }
 
