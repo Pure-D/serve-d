@@ -152,6 +152,17 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 				rpc.window.showErrorMessage(
 						translate!"d.ext.config.invalid.compiler"(config.d.dubCompiler));
 			break;
+		case "d.enableAutoComplete":
+			if (config.d.enableAutoComplete)
+			{
+				if (!backend.has!DCDComponent(workspaceFs))
+					startDCD(backend.getInstance(workspaceFs), workspaceUri);
+			}
+			else if (backend.has!DCDComponent(workspaceFs))
+			{
+				backend.get!DCDComponent(workspaceFs).stopServer();
+			}
+			break;
 		default:
 			break;
 		}
@@ -552,6 +563,11 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 		error("Trying to start DCD on unknown workspace ", workspaceUri, "?");
 		return;
 	}
+	if (!proj.config.d.enableAutoComplete)
+	{
+		return;
+	}
+
 	Exception err;
 	string startupError;
 	trace("Starting dcd");
