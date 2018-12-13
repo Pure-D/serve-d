@@ -104,32 +104,32 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 		{
 		case "d.stdlibPath":
 			if (backend.has!DCDComponent(workspaceFs))
-			backend.get!DCDComponent(workspaceFs).addImports(config.stdlibPath);
+				backend.get!DCDComponent(workspaceFs).addImports(config.stdlibPath);
 			break;
 		case "d.projectImportPaths":
 			if (backend.has!DCDComponent(workspaceFs))
-			backend.get!DCDComponent(workspaceFs).addImports(config.d.projectImportPaths);
+				backend.get!DCDComponent(workspaceFs).addImports(config.d.projectImportPaths);
 			break;
 		case "d.dubConfiguration":
 			if (backend.has!DubComponent(workspaceFs))
 			{
-			auto configs = backend.get!DubComponent(workspaceFs).configurations;
-			if (configs.length == 0)
-				rpc.window.showInformationMessage(translate!"d.ext.noConfigurations.project");
-			else
-			{
-				auto defaultConfig = config.d.dubConfiguration;
-				if (defaultConfig.length)
-				{
-					if (!configs.canFind(defaultConfig))
-						rpc.window.showErrorMessage(
-								translate!"d.ext.config.invalid.configuration"(defaultConfig));
-					else
-						backend.get!DubComponent(workspaceFs).setConfiguration(defaultConfig);
-				}
+				auto configs = backend.get!DubComponent(workspaceFs).configurations;
+				if (configs.length == 0)
+					rpc.window.showInformationMessage(translate!"d.ext.noConfigurations.project");
 				else
-					backend.get!DubComponent(workspaceFs).setConfiguration(configs[0]);
-			}
+				{
+					auto defaultConfig = config.d.dubConfiguration;
+					if (defaultConfig.length)
+					{
+						if (!configs.canFind(defaultConfig))
+							rpc.window.showErrorMessage(
+									translate!"d.ext.config.invalid.configuration"(defaultConfig));
+						else
+							backend.get!DubComponent(workspaceFs).setConfiguration(defaultConfig);
+					}
+					else
+						backend.get!DubComponent(workspaceFs).setConfiguration(configs[0]);
+				}
 			}
 			break;
 		case "d.dubArchType":
@@ -140,14 +140,15 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 						translate!"d.ext.config.invalid.archType"(config.d.dubArchType));
 			break;
 		case "d.dubBuildType":
-			if (backend.has!DubComponent(workspaceFs) && config.d.dubBuildType.length && !backend.get!DubComponent(workspaceFs)
+			if (backend.has!DubComponent(workspaceFs) && config.d.dubBuildType.length
+					&& !backend.get!DubComponent(workspaceFs)
 					.setBuildType(JSONValue(["build-type" : JSONValue(config.d.dubBuildType)])))
 				rpc.window.showErrorMessage(
 						translate!"d.ext.config.invalid.buildType"(config.d.dubBuildType));
 			break;
 		case "d.dubCompiler":
-			if (backend.has!DubComponent(workspaceFs) && config.d.dubCompiler.length && !backend.get!DubComponent(workspaceFs)
-					.setCompiler(config.d.dubCompiler))
+			if (backend.has!DubComponent(workspaceFs) && config.d.dubCompiler.length
+					&& !backend.get!DubComponent(workspaceFs).setCompiler(config.d.dubCompiler))
 				rpc.window.showErrorMessage(
 						translate!"d.ext.config.invalid.compiler"(config.d.dubCompiler));
 			break;
@@ -560,7 +561,7 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 		if (dcdUpdating)
 			return;
 		else
-		startupError ~= "\n" ~ err.msg;
+			startupError ~= "\n" ~ err.msg;
 	}
 	trace("Starting dcdext");
 	if (!backend.attach(instance, "dcdext", err))
@@ -678,7 +679,7 @@ void updateDCD()
 		string url;
 
 		enum commonPrefix = "https://github.com/dlang-community/DCD/releases/download/"
-				~ bundledDCDVersion ~ "/dcd-" ~ bundledDCDVersion;
+			~ bundledDCDVersion ~ "/dcd-" ~ bundledDCDVersion;
 
 		version (Win32)
 			url = commonPrefix ~ "-windows-x86.zip";
@@ -782,9 +783,9 @@ void updateDCD()
 				instance.config.set("dcd", "serverPath", finalDestinationServer);
 
 				startDCD(instance, workspace.folder.uri);
+			}
 		}
 	}
-}
 }
 
 bool compileDependency(string cwd, string name, string gitURI, string[][] commands)
@@ -1478,25 +1479,25 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 		}
 		if (backend.has!DCDComponent(workspace.folder.uri.uriToFile))
 		{
-		auto exact = backend.get!DCDComponent(workspace.folder.uri.uriToFile)
-			.searchSymbol(params.query).getYield;
-		foreach (symbol; exact)
-		{
-			if (!symbol.file.isAbsolute)
-				continue;
-			string uri = symbol.file.uriFromFile;
-			if (infos.canFind!(a => a.location.uri == uri))
-				continue;
-			SymbolInformation info;
-			info.name = params.query;
-			info.location.uri = uri;
-			auto doc = documents.tryGet(uri);
-			if (doc != Document.init)
-				info.location.range = TextRange(doc.bytesToPosition(symbol.position));
-			info.kind = symbol.type.convertFromDCDSearchType;
-			infos ~= info;
+			auto exact = backend.get!DCDComponent(workspace.folder.uri.uriToFile)
+				.searchSymbol(params.query).getYield;
+			foreach (symbol; exact)
+			{
+				if (!symbol.file.isAbsolute)
+					continue;
+				string uri = symbol.file.uriFromFile;
+				if (infos.canFind!(a => a.location.uri == uri))
+					continue;
+				SymbolInformation info;
+				info.name = params.query;
+				info.location.uri = uri;
+				auto doc = documents.tryGet(uri);
+				if (doc != Document.init)
+					info.location.range = TextRange(doc.bytesToPosition(symbol.position));
+				info.kind = symbol.type.convertFromDCDSearchType;
+				infos ~= info;
+			}
 		}
-	}
 	}
 	return infos;
 }
