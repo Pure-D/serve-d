@@ -7,6 +7,8 @@ import std.range;
 
 import workspaced.api : Future;
 
+public import core.thread : Fiber, Thread;
+
 struct FiberManager
 {
 	Fiber[] fibers;

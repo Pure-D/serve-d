@@ -59,14 +59,14 @@ ResponseMessage processRequest(RequestMessage msg)
 		res.error = ResponseError(ErrorCode.serverNotInitialized);
 		return res;
 	}
-	foreach (name; __traits(derivedMembers, served.extension))
+	foreach (name; served.extension.members)
 	{
 		static if (__traits(compiles, __traits(getMember, served.extension, name)))
 		{
 			alias symbol = Identity!(__traits(getMember, served.extension, name));
-			static if (isSomeFunction!symbol && __traits(getProtection, symbol[0]) == "public")
+			static if (symbol.length == 1 && hasUDA!(symbol, protocolMethod))
 			{
-				static if (hasUDA!(symbol, protocolMethod))
+				static if (isSomeFunction!symbol && __traits(getProtection, symbol[0]) == "public")
 				{
 					enum method = getUDAs!(symbol, protocolMethod)[0];
 					if (msg.method == method.method)
@@ -118,14 +118,14 @@ void processNotify(RequestMessage msg)
 	if (msg.method == "workspace/didChangeConfiguration")
 		served.extension.processConfigChange(msg.params["settings"].fromJSON!Configuration);
 	documents.process(msg);
-	foreach (name; __traits(derivedMembers, served.extension))
+	foreach (name; served.extension.members)
 	{
 		static if (__traits(compiles, __traits(getMember, served.extension, name)))
 		{
 			alias symbol = Identity!(__traits(getMember, served.extension, name));
-			static if (isSomeFunction!symbol && __traits(getProtection, symbol[0]) == "public")
+			static if (symbol.length == 1 && hasUDA!(symbol, protocolNotification))
 			{
-				static if (hasUDA!(symbol, protocolNotification))
+				static if (isSomeFunction!symbol && __traits(getProtection, symbol[0]) == "public")
 				{
 					enum method = getUDAs!(symbol, protocolNotification)[0];
 					if (msg.method == method.method)
