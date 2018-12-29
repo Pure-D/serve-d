@@ -48,6 +48,12 @@ struct DubDependency
 	bool root;
 }
 
+struct DubConvertRequest
+{
+	TextDocumentIdentifier textDocument;
+	string newFormat;
+}
+
 struct InstallRequest
 {
 	string name;

@@ -2,14 +2,18 @@ module served.commands.dub;
 
 import served.extension;
 import served.types;
+import served.translate;
 
 import workspaced.api;
 import workspaced.coms;
 
+import painlessjson : toJSON;
+
 import std.array : array;
-import std.algorithm : map, count, startsWith, endsWith;
+import std.algorithm : map, count, startsWith, endsWith, among, canFind;
+import std.experimental.logger;
 import std.json : JSONValue;
-import std.path : buildPath;
+import std.path : buildPath, dirName, baseName, setExtension;
 import std.regex : regex, replaceFirst;
 import std.string : splitLines, KeepTerminator, strip, stripLeft, stripRight, indexOf, join;
 
@@ -244,6 +248,54 @@ Task[] provideBuildTasks()
 }
 
 // === Protocol Notifications starting here ===
+
+@protocolNotification("served/convertDubFormat")
+void convertDubFormat(DubConvertRequest req)
+{
+	import std.process : execute, Config;
+
+	auto file = req.textDocument.uri.uriToFile;
+	if (!fs.exists(file))
+	{
+		error("Specified file does not exist");
+		return;
+	}
+
+	if (!file.baseName.among!("dub.json", "dub.sdl", "package.json"))
+	{
+		rpc.window.showErrorMessage(translate!"d.dub.notRecipeFile");
+		return;
+	}
+
+	auto document = documents[req.textDocument.uri];
+
+	auto result = execute([workspace(req.textDocument.uri)
+			.config.d.dubPath.userPath, "convert", "-f", req.newFormat, "-s"], null,
+			Config.stderrPassThrough, 1024 * 1024 * 4, file.dirName);
+
+	if (result.status != 0)
+	{
+		rpc.window.showErrorMessage(translate!"d.dub.convertFailed");
+		return;
+	}
+
+	auto newUri = req.textDocument.uri.setExtension("." ~ req.newFormat);
+
+	WorkspaceEdit edit;
+	auto edits = [
+		TextEdit(TextRange(Position(0, 0),
+			document.offsetToPosition(document.text.length)), result.output)
+	];
+
+	if (capabilities.workspace.workspaceEdit.resourceOperations.canFind(ResourceOperationKind.rename))
+	{
+		edit.documentChanges = JSONValue([toJSON(RenameFile(req.textDocument.uri, newUri)),
+				toJSON(TextDocumentEdit(VersionedTextDocumentIdentifier(newUri, document.version_), edits))]);
+	}
+	else
+		edit.changes[req.textDocument.uri] = edits;
+	rpc.sendMethod("workspace/applyEdit", ApplyWorkspaceEditParams(edit));
+}
 
 @protocolNotification("served/installDependency")
 void installDependency(InstallRequest req)

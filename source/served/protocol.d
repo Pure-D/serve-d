@@ -49,6 +49,7 @@ struct Optional(T)
 	void nullify()
 	{
 		isNull = true;
+		value = T.init;
 	}
 
 	string toString() const
@@ -61,6 +62,8 @@ struct Optional(T)
 
 	const JSONValue _toJSON()
 	{
+		import painlessjson : toJSON;
+
 		if (isNull)
 			return JSONValue(null);
 		else
@@ -436,11 +439,73 @@ struct TextEdit
 	string newText;
 }
 
+struct CreateFileOptions
+{
+	mixin StrictOptionalSerializer;
+
+	Optional!bool overwrite;
+	Optional!bool ignoreIfExists;
+}
+
+struct CreateFile
+{
+	mixin StrictOptionalSerializer;
+
+	string uri;
+	Optional!CreateFileOptions options;
+	string kind = "create";
+}
+
+struct RenameFileOptions
+{
+	mixin StrictOptionalSerializer;
+
+	Optional!bool overwrite;
+	Optional!bool ignoreIfExists;
+}
+
+struct RenameFile
+{
+	mixin StrictOptionalSerializer;
+
+	string oldUri;
+	string newUri;
+	Optional!RenameFileOptions options;
+	string kind = "rename";
+}
+
+struct DeleteFileOptions
+{
+	mixin StrictOptionalSerializer;
+
+	Optional!bool recursive;
+	Optional!bool ignoreIfNotExists;
+}
+
+struct DeleteFile
+{
+	mixin StrictOptionalSerializer;
+
+	string uri;
+	Optional!DeleteFileOptions options;
+	string kind = "delete";
+}
+
+struct TextDocumentEdit
+{
+	VersionedTextDocumentIdentifier textDocument;
+	TextEdit[] edits;
+}
+
 alias TextEditCollection = TextEdit[];
 
 struct WorkspaceEdit
 {
+	mixin StrictOptionalSerializer;
+
 	TextEditCollection[DocumentUri] changes;
+
+	Optional!JSONValue documentChanges;
 }
 
 struct TextDocumentIdentifier
@@ -490,7 +555,33 @@ struct InitializeParams
 
 struct DynamicRegistration
 {
+	mixin StrictOptionalSerializer;
+
 	Optional!bool dynamicRegistration;
+}
+
+enum ResourceOperationKind : string
+{
+	create = "create",
+	rename = "rename",
+	delete_ = "delete"
+}
+
+enum FailureHandlingKind : string
+{
+	abort = "abort",
+	transactional = "transactional",
+	textOnlyTransactional = "textOnlyTransactional",
+	undo = "undo"
+}
+
+struct WorkspaceEditClientCapabilities
+{
+	mixin StrictOptionalSerializer;
+
+	Optional!bool documentChanges;
+	Optional!(string[]) resourceOperations;
+	Optional!string failureHandling;
 }
 
 struct WorkspaceClientCapabilities
@@ -498,6 +589,7 @@ struct WorkspaceClientCapabilities
 	mixin StrictOptionalSerializer;
 
 	bool applyEdit;
+	Optional!WorkspaceEditClientCapabilities workspaceEdit;
 	Optional!DynamicRegistration didChangeConfiguration;
 	Optional!DynamicRegistration didChangeWatchedFiles;
 	Optional!DynamicRegistration symbol;

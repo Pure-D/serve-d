@@ -159,6 +159,8 @@ d.dub.dubJsonFail: dub.json is not a valid json file
 d.dub.generateFail: Failed to generate dub.json
 d.dub.updateFail: Failed to update dub.json
 d.dub.override: Override without Backup
+d.dub.notRecipeFile: Dub format conversion only works with package recipes named dub.json, dub.sdl, package.json
+d.dub.convertFailed: The dub conversion command has failed
 
 d.coverage.statusText: {0}% Coverage
 d.coverage.tooltip: Coverage in this file generated from the according .lst file
