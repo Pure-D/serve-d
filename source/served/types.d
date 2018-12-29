@@ -77,6 +77,7 @@ struct Configuration
 		bool overrideDfmtEditorconfig = true;
 		bool aggressiveUpdate = true;
 		bool argumentSnippets = false;
+		bool completeNoDupes = true;
 		bool scanAllFolders = true;
 		string[] disabledRootGlobs;
 		string[] extraRoots;

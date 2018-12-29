@@ -997,6 +997,12 @@ struct MarkupContent
 	MarkupKind kind;
 	string value;
 
+	this(MarkupKind kind, string value)
+	{
+		this.kind = kind;
+		this.value = value;
+	}
+
 	this(string text)
 	{
 		kind = MarkupKind.plaintext;

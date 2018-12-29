@@ -10,7 +10,7 @@ import workspaced.com.dcd;
 import workspaced.coms;
 
 import std.array : array;
-import std.algorithm : reverse, map, canFind, endsWith, min;
+import std.algorithm : reverse, map, canFind, endsWith, min, filter, chunkBy, uniq, sort, any;
 import std.conv : to;
 import std.experimental.logger;
 import std.regex : matchFirst, ctRegex;
@@ -331,8 +331,10 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 			auto dcd = backend.get!DCDComponent(workspaceRoot).listCompletion(code,
 					cast(int) offset).getYield;
 			if (dcd.type == DCDCompletions.Type.identifiers)
-				ret = dcd.identifiers.convertDCDIdentifiers(workspace(params.textDocument.uri)
-						.config.d.argumentSnippets);
+			{
+				auto d = workspace(params.textDocument.uri).config.d;
+				ret = dcd.identifiers.convertDCDIdentifiers(d.argumentSnippets, d.completeNoDupes);
+			}
 		}
 	}
 	else
@@ -458,8 +460,8 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 	switch (result.type)
 	{
 	case DCDCompletions.Type.identifiers:
-		completion = convertDCDIdentifiers(result.identifiers,
-				workspace(params.textDocument.uri).config.d.argumentSnippets);
+		auto d = workspace(params.textDocument.uri).config.d;
+		completion = convertDCDIdentifiers(result.identifiers, d.argumentSnippets, d.completeNoDupes);
 		goto case;
 	case DCDCompletions.Type.calltips:
 		return CompletionList(false, completion);
@@ -468,7 +470,7 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 	}
 }
 
-auto convertDCDIdentifiers(DCDIdentifier[] identifiers, lazy bool argumentSnippets)
+auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, bool completeNoDupes)
 {
 	CompletionItem[] completion;
 	foreach (identifier; identifiers)
@@ -481,7 +483,8 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, lazy bool argumentSnippe
 		if (identifier.definition.length)
 		{
 			item.detail = identifier.definition;
-			item.sortText = identifier.definition;
+			if (!completeNoDupes)
+				item.sortText = identifier.definition;
 			// TODO: only add arguments when this is a function call, eg not on template arguments
 			if (identifier.type == "f" && argumentSnippets)
 			{
@@ -514,7 +517,45 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, lazy bool argumentSnippe
 		}
 		completion ~= item;
 	}
-	return completion;
+
+	completion.sort!"a.label < b.label";
+	if (completeNoDupes)
+		return completion.chunkBy!((a, b) => a.label == b.label && a.kind == b.kind)
+			.map!((a) {
+				CompletionItem ret = a.front;
+				auto details = a.map!"a.detail"
+					.filter!"!a.isNull && a.value.length"
+					.uniq
+					.array;
+				auto docs = a.map!"a.documentation"
+					.filter!"!a.isNull && a.value.value.length"
+					.uniq
+					.array;
+				bool isMarkdown = docs.any!(a => a.kind == MarkupKind.markdown);
+				if (docs.length)
+					ret.documentation = MarkupContent(isMarkdown ? MarkupKind.markdown
+						: MarkupKind.plaintext, docs.map!"a.value.value".join("\n\n"));
+				if (details.length)
+					ret.detail = details.map!"a.value".join("\n");
+				return ret;
+			})
+			.array;
+	else
+		return completion.chunkBy!((a, b) => a.label == b.label && a.detail == b.detail
+				&& a.kind == b.kind)
+			.map!((a) {
+				CompletionItem ret = a.front;
+				auto docs = a.map!"a.documentation"
+					.filter!"!a.isNull && a.value.value.length"
+					.uniq
+					.array;
+				bool isMarkdown = docs.any!(a => a.kind == MarkupKind.markdown);
+				if (docs.length)
+					ret.documentation = MarkupContent(isMarkdown ? MarkupKind.markdown
+						: MarkupKind.plaintext, docs.map!"a.value.value".join("\n\n"));
+				return ret;
+			})
+			.array;
 }
 
 // === Protocol Notifications starting here ===
