@@ -14,7 +14,7 @@ import std.algorithm : reverse, map, canFind, endsWith, min;
 import std.conv : to;
 import std.experimental.logger;
 import std.regex : matchFirst, ctRegex;
-import std.string : toLower, lastIndexOf, strip, indexOf, lineSplitter, join;
+import std.string : toLower, lastIndexOf, strip, stripRight, indexOf, lineSplitter, join;
 
 import fs = std.file;
 import io = std.stdio;
@@ -490,29 +490,23 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, lazy bool argumentSnippe
 				auto parts = identifier.definition.extractFunctionParameters;
 				if (parts.length)
 				{
-					bool isOptional;
-					string[] optionals;
 					int numRequired;
 					foreach (i, part; parts)
 					{
-						if (!isOptional)
-							isOptional = part.canFind('=');
-						if (isOptional)
-							optionals ~= part;
-						else
+						ptrdiff_t equals = part.indexOf('=');
+						if (equals != -1)
 						{
-							if (args.length)
-								args ~= ", ";
-							args ~= "${" ~ (i + 1).to!string ~ ":" ~ part ~ "}";
-							numRequired++;
+							part = part[0 .. equals].stripRight;
+							// remove default value from autocomplete
 						}
-					}
-					foreach (i, part; optionals)
-					{
+						auto space = part.lastIndexOf(' ');
+						if (space != -1)
+							part = part[space + 1 .. $];
+
 						if (args.length)
-							part = ", " ~ part;
-						// Go through optionals in reverse
-						args ~= "${" ~ (numRequired + optionals.length - i).to!string ~ ":" ~ part ~ "}";
+							args ~= ", ";
+						args ~= "${" ~ (i + 1).to!string ~ ":" ~ part ~ "}";
+						numRequired++;
 					}
 					item.insertText = identifier.identifier ~ "(${0:" ~ args ~ "})";
 				}
