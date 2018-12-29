@@ -731,6 +731,8 @@ void didChangeWorkspaceFolders(DidChangeWorkspaceFoldersParams params)
 void onDidOpenDocument(DidOpenTextDocumentParams params)
 {
 	freshlyOpened[params.textDocument.uri] = FileOpenInfo(Clock.currTime);
+
+	onDidChangeDocument(DocumentLinkParams(TextDocumentIdentifier(params.textDocument.uri)));
 }
 
 int changeTimeout;
