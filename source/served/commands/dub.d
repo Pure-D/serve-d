@@ -250,7 +250,7 @@ void installDependency(InstallRequest req)
 {
 	auto workspaceRoot = selectedWorkspaceRoot;
 	injectDependency(workspaceRoot, req);
-	if (backend.has!DubComponent)
+	if (backend.has!DubComponent(workspaceRoot))
 	{
 		backend.get!DubComponent(workspaceRoot).upgrade();
 		backend.get!DubComponent(workspaceRoot).updateImportPaths(true);
@@ -264,7 +264,7 @@ void updateDependency(UpdateRequest req)
 	auto workspaceRoot = selectedWorkspaceRoot;
 	if (changeDependency(workspaceRoot, req))
 	{
-		if (backend.has!DubComponent)
+		if (backend.has!DubComponent(workspaceRoot))
 		{
 			backend.get!DubComponent(workspaceRoot).upgrade();
 			backend.get!DubComponent(workspaceRoot).updateImportPaths(true);
@@ -279,7 +279,7 @@ void uninstallDependency(UninstallRequest req)
 	auto workspaceRoot = selectedWorkspaceRoot;
 	// TODO: add workspace argument
 	removeDependency(workspaceRoot, req.name);
-	if (backend.has!DubComponent)
+	if (backend.has!DubComponent(workspaceRoot))
 	{
 		backend.get!DubComponent(workspaceRoot).upgrade();
 		backend.get!DubComponent(workspaceRoot).updateImportPaths(true);
