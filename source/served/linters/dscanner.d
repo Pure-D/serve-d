@@ -21,6 +21,9 @@ enum DiagnosticSlot = 0;
 void lint(Document document)
 {
 	auto workspaceRoot = workspaceRootFor(document.uri);
+	if (!backend.has!DscannerComponent(workspaceRoot))
+		return;
+
 	auto ignoredKeys = config(document.uri).dscanner.ignoredKeys;
 
 	auto ini = buildPath(workspaceRoot, "dscanner.ini");
