@@ -57,8 +57,6 @@ struct Configuration
 	{
 		JSONValue stdlibPath = JSONValue("auto");
 		string dcdClientPath = "dcd-client", dcdServerPath = "dcd-server";
-		string dscannerPath = "dscanner";
-		string dfmtPath = "dfmt";
 		string dubPath = "dub";
 		string dmdPath = "dmd";
 		bool enableLinting = true;
@@ -122,7 +120,7 @@ struct Configuration
 	{
 		auto p = d.stdlibPath;
 		if (p.type == JSON_TYPE.ARRAY)
-			return p.array.map!"a.str".array;
+			return p.array.map!(a => a.str.userPath).array;
 		else
 		{
 			if (p.type != JSON_TYPE.STRING || p.str == "auto")
@@ -142,7 +140,7 @@ struct Configuration
 				}
 			}
 			else
-				return [p.str];
+				return [p.str.userPath];
 		}
 	}
 
@@ -440,6 +438,11 @@ string uriToFile(DocumentUri uri)
 	testUri(`\\localhost\c$\GitDevelopment\express`, `file://localhost/c%24/GitDevelopment/express`);
 }
 
+string userPath(string path)
+{
+	return expandTilde(path);
+}
+
 DocumentUri uri(string scheme, string authority, string path, string query, string fragment)
 {
 	return scheme ~ "://" ~ (authority.length ? authority : "") ~ (path.length ? path
@@ -476,7 +479,7 @@ size_t insertSorted(alias sort = "a<b", T)(ref T[] arr, T value)
 	if (v < 0)
 		v = ~v;
 	arr.length++;
-	for (ptrdiff_t i = cast(ptrdiff_t)arr.length - 1; i > v; i--)
+	for (ptrdiff_t i = cast(ptrdiff_t) arr.length - 1; i > v; i--)
 		move(arr[i - 1], arr[i]);
 	arr[v] = value;
 	return v;

@@ -189,7 +189,7 @@ Task[] provideBuildTasks()
 					"compiler" : JSONValue(dub.compiler), "archType" : JSONValue(dub.archType),
 					"buildType" : JSONValue(dub.buildType), "configuration" : JSONValue(dub.configuration)]);
 			t.group = Task.Group.build;
-			t.exec = [workspace.config.d.dubPath, "build",
+			t.exec = [workspace.config.d.dubPath.userPath, "build",
 				"--compiler=" ~ dub.compiler, "-a=" ~ dub.archType, "-b=" ~ dub.buildType,
 				"-c=" ~ dub.configuration];
 			t.scope_ = workspace.folder.uri;
@@ -203,8 +203,9 @@ Task[] provideBuildTasks()
 					"compiler" : JSONValue(dub.compiler), "archType" : JSONValue(dub.archType),
 					"buildType" : JSONValue(dub.buildType), "configuration" : JSONValue(dub.configuration)]);
 			t.group = Task.Group.build;
-			t.exec = [workspace.config.d.dubPath, "run", "--compiler=" ~ dub.compiler,
-				"-a=" ~ dub.archType, "-b=" ~ dub.buildType, "-c=" ~ dub.configuration];
+			t.exec = [workspace.config.d.dubPath.userPath, "run",
+				"--compiler=" ~ dub.compiler, "-a=" ~ dub.archType, "-b=" ~ dub.buildType,
+				"-c=" ~ dub.configuration];
 			t.scope_ = workspace.folder.uri;
 			t.name = "Run " ~ dub.name;
 			ret ~= t;
@@ -217,7 +218,7 @@ Task[] provideBuildTasks()
 					"archType" : JSONValue(dub.archType), "buildType"
 					: JSONValue(dub.buildType), "configuration" : JSONValue(dub.configuration)]);
 			t.group = Task.Group.rebuild;
-			t.exec = [workspace.config.d.dubPath, "build", "--force",
+			t.exec = [workspace.config.d.dubPath.userPath, "build", "--force",
 				"--compiler=" ~ dub.compiler, "-a=" ~ dub.archType, "-b=" ~ dub.buildType,
 				"-c=" ~ dub.configuration];
 			t.scope_ = workspace.folder.uri;
@@ -231,8 +232,9 @@ Task[] provideBuildTasks()
 					"compiler" : JSONValue(dub.compiler), "archType" : JSONValue(dub.archType),
 					"buildType" : JSONValue(dub.buildType), "configuration" : JSONValue(dub.configuration)]);
 			t.group = Task.Group.test;
-			t.exec = [workspace.config.d.dubPath, "test", "--compiler=" ~ dub.compiler,
-				"-a=" ~ dub.archType, "-b=" ~ dub.buildType, "-c=" ~ dub.configuration];
+			t.exec = [workspace.config.d.dubPath.userPath, "test",
+				"--compiler=" ~ dub.compiler, "-a=" ~ dub.archType, "-b=" ~ dub.buildType,
+				"-c=" ~ dub.configuration];
 			t.scope_ = workspace.folder.uri;
 			t.name = "Test " ~ dub.name;
 			ret ~= t;

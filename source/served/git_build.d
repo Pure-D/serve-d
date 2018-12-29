@@ -60,7 +60,8 @@ bool compileDependency(string cwd, string name, string gitURI, string[][] comman
 				rpc.notifyMethod("coded/logInstall", "WARNING: Failed to delete " ~ newCwd);
 			}
 		}
-		auto ret = run([firstConfig.git.path, "clone", "--recursive", "--depth=1", gitURI, name], cwd);
+		auto ret = run([firstConfig.git.path.userPath, "clone", "--recursive",
+				"--depth=1", gitURI, name], cwd);
 		if (ret != 0)
 			throw new Exception("git ended with error code " ~ ret.to!string);
 		foreach (command; commands)

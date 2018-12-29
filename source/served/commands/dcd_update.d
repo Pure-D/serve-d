@@ -56,7 +56,8 @@ void updateDCD()
 		string[] platformOptions;
 		version (Windows)
 			platformOptions = ["--arch=x86_mscoff"];
-		success = compileDependency(outputFolder, "DCD", "https://github.com/Hackerpilot/DCD.git", [[firstConfig.git.path,
+		success = compileDependency(outputFolder, "DCD",
+				"https://github.com/Hackerpilot/DCD.git", [[firstConfig.git.path.userPath,
 				"submodule", "update", "--init", "--recursive"], ["dub", "build",
 				"--config=client"] ~ platformOptions, ["dub", "build",
 				"--config=server"] ~ platformOptions]);

@@ -17,7 +17,8 @@ import std.experimental.logger;
 import std.functional : toDelegate;
 import std.json : JSONValue, JSON_TYPE, parseJSON;
 import std.meta : AliasSeq;
-import std.path : baseName, buildNormalizedPath, buildPath, chainPath, dirName, globMatch, relativePath;
+import std.path : baseName, buildNormalizedPath, buildPath, chainPath, dirName,
+	globMatch, relativePath;
 import std.string : join;
 
 import fs = std.file;
@@ -101,7 +102,8 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 			break;
 		case "d.projectImportPaths":
 			if (backend.has!DCDComponent(workspaceFs))
-				backend.get!DCDComponent(workspaceFs).addImports(config.d.projectImportPaths);
+				backend.get!DCDComponent(workspaceFs)
+					.addImports(config.d.projectImportPaths.map!(a => a.userPath).array);
 			break;
 		case "d.dubConfiguration":
 			if (backend.has!DubComponent(workspaceFs))
@@ -315,9 +317,9 @@ void doGlobalStartup()
 		trace("Initializing serve-d for global access");
 
 		backend.globalConfiguration.base = JSONValue(["dcd" : JSONValue(["clientPath"
-				: JSONValue(firstConfig.d.dcdClientPath), "serverPath"
-				: JSONValue(firstConfig.d.dcdServerPath), "port" : JSONValue(9166)]),
-				"dmd" : JSONValue(["path" : JSONValue(firstConfig.d.dmdPath)])]);
+				: JSONValue(firstConfig.d.dcdClientPath.userPath), "serverPath"
+				: JSONValue(firstConfig.d.dcdServerPath.userPath), "port" : JSONValue(9166)]),
+				"dmd" : JSONValue(["path" : JSONValue(firstConfig.d.dmdPath.userPath)])]);
 
 		trace("Setup global configuration as " ~ backend.globalConfiguration.base.toString);
 
@@ -467,9 +469,9 @@ void doStartup(string workspaceUri)
 		auto workspaceRoot = root.dir;
 		workspaced.api.Configuration config;
 		config.base = JSONValue(["dcd" : JSONValue(["clientPath"
-				: JSONValue(proj.config.d.dcdClientPath), "serverPath"
-				: JSONValue(proj.config.d.dcdServerPath), "port" : JSONValue(9166)]),
-				"dmd" : JSONValue(["path" : JSONValue(proj.config.d.dmdPath)])]);
+				: JSONValue(proj.config.d.dcdClientPath.userPath), "serverPath"
+				: JSONValue(proj.config.d.dcdServerPath.userPath), "port" : JSONValue(9166)]),
+				"dmd" : JSONValue(["path" : JSONValue(proj.config.d.dmdPath.userPath)])]);
 		auto instance = backend.addInstance(workspaceRoot, config);
 
 		bool disableDub = proj.config.d.neverUseDub || !root.useDub;
