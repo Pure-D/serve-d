@@ -24,7 +24,11 @@ void lint(Document document)
 	if (!backend.has!DscannerComponent(workspaceRoot))
 		return;
 
-	auto ignoredKeys = config(document.uri).dscanner.ignoredKeys;
+	auto fileConfig = config(document.uri);
+	if (!fileConfig.d.enableLinting || !fileConfig.d.enableStaticLinting)
+		return;
+
+	auto ignoredKeys = fileConfig.dscanner.ignoredKeys;
 
 	auto ini = buildPath(workspaceRoot, "dscanner.ini");
 	if (!exists(ini))
@@ -68,4 +72,10 @@ void lint(Document document)
 		}
 	diagnostics[DiagnosticSlot] ~= PublishDiagnosticsParams(document.uri, result);
 	updateDiagnostics(document.uri);
+}
+
+void clear()
+{
+	diagnostics[DiagnosticSlot] = null;
+	updateDiagnostics();
 }

@@ -74,6 +74,10 @@ void lint(Document document)
 {
 	auto workspaceRoot = workspaceRootFor(document.uri);
 
+	auto fileConfig = config(document.uri);
+	if (!fileConfig.d.enableLinting || !fileConfig.d.enableDubLinting)
+		return;
+
 	stderr.writeln("Running dub build");
 	auto imports = backend.get!DubComponent(workspaceRoot).stringImports;
 	auto issues = backend.get!DubComponent(workspaceRoot).build.getYield;
@@ -99,4 +103,10 @@ void lint(Document document)
 
 	diagnostics[DiagnosticSlot] = result;
 	updateDiagnostics(document.uri);
+}
+
+void clear()
+{
+	diagnostics[DiagnosticSlot] = null;
+	updateDiagnostics();
 }

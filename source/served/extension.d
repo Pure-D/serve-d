@@ -158,6 +158,32 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 				backend.get!DCDComponent(workspaceFs).stopServer();
 			}
 			break;
+		case "d.enableLinting":
+			if (!config.d.enableLinting)
+			{
+				import served.linters.dscanner : clear1 = clear;
+				import served.linters.dub : clear2 = clear;
+
+				clear1();
+				clear2();
+			}
+			break;
+		case "d.enableStaticLinting":
+			if (!config.d.enableStaticLinting)
+			{
+				import served.linters.dscanner : clear;
+
+				clear();
+			}
+			break;
+		case "d.enableDubLinting":
+			if (!config.d.enableDubLinting)
+			{
+				import served.linters.dub : clear;
+
+				clear();
+			}
+			break;
 		default:
 			break;
 		}
@@ -741,17 +767,7 @@ int changeTimeout;
 @protocolNotification("textDocument/didChange")
 void onDidChangeDocument(DocumentLinkParams params)
 {
-	auto document = documents[params.textDocument.uri];
-	if (document.languageId != "d")
-		return;
-	int delay = document.text.length > 50 * 1024 ? 1000 : 200; // be slower after 50KiB
-	clearTimeout(changeTimeout);
-	changeTimeout = setTimeout({
-		import served.linters.dscanner;
-
-		lint(document);
-		// Delay to avoid too many requests
-	}, delay);
+	doDscanner(params);
 }
 
 @protocolNotification("coded/doDscanner")
@@ -760,6 +776,10 @@ void doDscanner(DocumentLinkParams params)
 	auto document = documents[params.textDocument.uri];
 	if (document.languageId != "d")
 		return;
+	auto d = config(params.textDocument.uri).d;
+	if (!d.enableStaticLinting || !d.enableLinting)
+		return;
+
 	int delay = document.text.length > 50 * 1024 ? 1000 : 200; // be slower after 50KiB
 	clearTimeout(changeTimeout);
 	changeTimeout = setTimeout({
@@ -790,6 +810,7 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 				import served.linters.dscanner;
 
 				lint(document);
+				clearTimeout(changeTimeout);
 			}
 		}, {
 			if (backend.has!DubComponent(workspaceRoot) && config.d.enableDubLinting)
