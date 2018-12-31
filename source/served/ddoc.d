@@ -8,7 +8,7 @@ import ddoc;
 string ddocToMarkdown(string ddoc)
 {
 	auto lexer = Lexer(prepareDDoc(ddoc), true);
-	return expand(lexer, markdownMacros).replace("&#36;", "$");
+	return expand(lexer, markdownMacros, false).replace("&#36;", "$");
 }
 
 MarkedString[] ddocToMarked(string ddoc)
