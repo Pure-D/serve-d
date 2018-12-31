@@ -27,7 +27,19 @@ void updateDCD()
 	rpc.notifyMethod("coded/logInstall", "Installing DCD");
 	string outputFolder = determineOutputFolder;
 	if (fs.exists(outputFolder))
-		rmdirRecurseForce(outputFolder);
+	{
+		foreach (file; ["dcd", "DCD", "dcd-client", "dcd-server"])
+		{
+			auto path = buildPath(outputFolder, file);
+			if (fs.exists(path))
+			{
+				if (fs.isFile(path))
+					fs.remove(path);
+				else
+					rmdirRecurseForce(path);
+			}
+		}
+	}
 	if (!fs.exists(outputFolder))
 		fs.mkdirRecurse(outputFolder);
 	string ext = "";
