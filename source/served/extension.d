@@ -530,6 +530,8 @@ void doStartup(string workspaceUri)
 			}
 			try
 			{
+				trace("Starting fsworkspace...");
+
 				instance.config.set("fsworkspace", "additionalPaths",
 						getPossibleSourceRoots(workspaceRoot));
 				if (!backend.attach(instance, "fsworkspace", err))
@@ -544,6 +546,9 @@ void doStartup(string workspaceUri)
 		else
 			setTimeout({ rpc.notifyMethod("coded/initDubTree"); }, 50);
 
+		trace("Started files provider for root ", root);
+
+		trace("Attaching dmd");
 		if (!backend.attach(instance, "dmd", err))
 			error("Failed to attach DMD component to ", workspaceUri, "\n", err.msg);
 		startDCD(instance, workspaceUri);
