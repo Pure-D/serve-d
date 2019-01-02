@@ -233,31 +233,9 @@ int main(string[] args)
 			// Log on client side instead! (vscode setting: "serve-d.trace.server": "verbose")
 			//trace("Message: ", msg);
 			if (msg.id.hasData)
-				pushFiber({
-					ResponseMessage res;
-					try
-					{
-						res = processRequest(msg);
-					}
-					catch (Throwable e)
-					{
-						res.error = ResponseError(e);
-						res.error.code = ErrorCode.internalError;
-						error("Failed processing request: ", e);
-					}
-					rpc.send(res);
-				});
+				pushFiber(gotRequest(msg));
 			else
-				pushFiber({
-					try
-					{
-						processNotify(msg);
-					}
-					catch (Throwable e)
-					{
-						error("Failed processing notification: ", e);
-					}
-				});
+				pushFiber(gotNotify(msg));
 		}
 		Thread.sleep(10.msecs);
 		synchronized (fibersMutex)
@@ -267,9 +245,41 @@ int main(string[] args)
 	return served.extension.shutdownRequested ? 0 : 1;
 }
 
+void delegate() gotRequest(RequestMessage msg)
+{
+	return {
+		ResponseMessage res;
+		try
+		{
+			res = processRequest(msg);
+		}
+		catch (Throwable e)
+		{
+			res.error = ResponseError(e);
+			res.error.code = ErrorCode.internalError;
+			error("Failed processing request: ", e);
+		}
+		rpc.send(res);
+	};
+}
+
+void delegate() gotNotify(RequestMessage msg)
+{
+	return {
+		try
+		{
+			processNotify(msg);
+		}
+		catch (Throwable e)
+		{
+			error("Failed processing notification: ", e);
+		}
+	};
+}
+
 __gshared Mutex fibersMutex;
 void pushFiber(T)(T callback)
 {
 	synchronized (fibersMutex)
-		fibers ~= new Fiber(callback, 4096 * 16);
+		fibers ~= new Fiber(callback, 4096 * 24);
 }

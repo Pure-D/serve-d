@@ -25,7 +25,7 @@ class RPCProcessor : Fiber
 {
 	this(FileReader reader, File writer)
 	{
-		super(&run, 4096 * 16);
+		super(&run, 4096 * 8);
 		this.reader = reader;
 		this.writer = writer;
 	}
