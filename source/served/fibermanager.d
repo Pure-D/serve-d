@@ -43,9 +43,9 @@ void joinAll(Fibers...)(Fibers fibers)
 				static if (is(typeof(fib) : Fiber))
 					converted ~= fib;
 				else static if (is(typeof(fib) : Future!T, T))
-					converted ~= new Fiber(&fib.getYield);
+					converted ~= new Fiber(&fib.getYield, 4096 * 8);
 				else
-					converted ~= new Fiber(fib);
+					converted ~= new Fiber(fib, 4096 * 8);
 			}
 		}
 		else
@@ -53,9 +53,9 @@ void joinAll(Fibers...)(Fibers fibers)
 			static if (is(typeof(fiber) : Fiber))
 				converted ~= fiber;
 			else static if (is(typeof(fiber) : Future!T, T))
-				converted ~= new Fiber(&fiber.getYield);
+				converted ~= new Fiber(&fiber.getYield, 4096 * 8);
 			else
-				converted ~= new Fiber(fiber);
+				converted ~= new Fiber(fiber, 4096 * 8);
 		}
 	}
 	f.fibers = converted;
