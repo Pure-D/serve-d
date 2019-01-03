@@ -23,30 +23,40 @@ import io = std.stdio;
 @protocolMethod("served/listConfigurations")
 string[] listConfigurations()
 {
+	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+		return null;
 	return backend.get!DubComponent(selectedWorkspaceRoot).configurations;
 }
 
 @protocolMethod("served/switchConfig")
 bool switchConfig(string value)
 {
+	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+		return false;
 	return backend.get!DubComponent(selectedWorkspaceRoot).setConfiguration(value);
 }
 
 @protocolMethod("served/getConfig")
 string getConfig(string value)
 {
+	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+		return null;
 	return backend.get!DubComponent(selectedWorkspaceRoot).configuration;
 }
 
 @protocolMethod("served/listArchTypes")
 string[] listArchTypes()
 {
+	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+		return null;
 	return backend.get!DubComponent(selectedWorkspaceRoot).archTypes;
 }
 
 @protocolMethod("served/switchArchType")
 bool switchArchType(string value)
 {
+	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+		return false;
 	return backend.get!DubComponent(selectedWorkspaceRoot)
 		.setArchType(JSONValue(["arch-type" : JSONValue(value)]));
 }
@@ -54,18 +64,24 @@ bool switchArchType(string value)
 @protocolMethod("served/getArchType")
 string getArchType(string value)
 {
+	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+		return null;
 	return backend.get!DubComponent(selectedWorkspaceRoot).archType;
 }
 
 @protocolMethod("served/listBuildTypes")
 string[] listBuildTypes()
 {
+	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+		return null;
 	return backend.get!DubComponent(selectedWorkspaceRoot).buildTypes;
 }
 
 @protocolMethod("served/switchBuildType")
 bool switchBuildType(string value)
 {
+	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+		return false;
 	return backend.get!DubComponent(selectedWorkspaceRoot)
 		.setBuildType(JSONValue(["build-type" : JSONValue(value)]));
 }
@@ -73,18 +89,24 @@ bool switchBuildType(string value)
 @protocolMethod("served/getBuildType")
 string getBuildType()
 {
+	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+		return null;
 	return backend.get!DubComponent(selectedWorkspaceRoot).buildType;
 }
 
 @protocolMethod("served/getCompiler")
 string getCompiler()
 {
+	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+		return null;
 	return backend.get!DubComponent(selectedWorkspaceRoot).compiler;
 }
 
 @protocolMethod("served/switchCompiler")
 bool switchCompiler(string value)
 {
+	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+		return false;
 	return backend.get!DubComponent(selectedWorkspaceRoot).setCompiler(value);
 }
 
