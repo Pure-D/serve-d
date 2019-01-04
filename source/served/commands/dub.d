@@ -10,7 +10,7 @@ import workspaced.coms;
 import painlessjson : toJSON;
 
 import std.array : array;
-import std.algorithm : map, count, startsWith, endsWith, among, canFind;
+import std.algorithm : map, count, startsWith, endsWith, among, canFind, remove;
 import std.experimental.logger;
 import std.json : JSONValue;
 import std.path : buildPath, dirName, baseName, setExtension;
@@ -198,6 +198,11 @@ DubDependency[] listDependencies(string packageName)
 	return ret;
 }
 
+private string[] fixEmptyArgs(string[] args)
+{
+	return args.remove!(a => a.endsWith('='));
+}
+
 @protocolMethod("served/buildTasks")
 Task[] provideBuildTasks()
 {
@@ -217,7 +222,7 @@ Task[] provideBuildTasks()
 			t.group = Task.Group.build;
 			t.exec = [workspace.config.d.dubPath.userPath, "build",
 				"--compiler=" ~ dub.compiler, "-a=" ~ dub.archType, "-b=" ~ dub.buildType,
-				"-c=" ~ dub.configuration];
+				"-c=" ~ dub.configuration].fixEmptyArgs;
 			t.scope_ = workspace.folder.uri;
 			t.name = "Build " ~ dub.name;
 			ret ~= t;
@@ -231,7 +236,7 @@ Task[] provideBuildTasks()
 			t.group = Task.Group.build;
 			t.exec = [workspace.config.d.dubPath.userPath, "run",
 				"--compiler=" ~ dub.compiler, "-a=" ~ dub.archType, "-b=" ~ dub.buildType,
-				"-c=" ~ dub.configuration];
+				"-c=" ~ dub.configuration].fixEmptyArgs;
 			t.scope_ = workspace.folder.uri;
 			t.name = "Run " ~ dub.name;
 			ret ~= t;
@@ -246,7 +251,7 @@ Task[] provideBuildTasks()
 			t.group = Task.Group.rebuild;
 			t.exec = [workspace.config.d.dubPath.userPath, "build", "--force",
 				"--compiler=" ~ dub.compiler, "-a=" ~ dub.archType, "-b=" ~ dub.buildType,
-				"-c=" ~ dub.configuration];
+				"-c=" ~ dub.configuration].fixEmptyArgs;
 			t.scope_ = workspace.folder.uri;
 			t.name = "Rebuild " ~ dub.name;
 			ret ~= t;
@@ -260,7 +265,7 @@ Task[] provideBuildTasks()
 			t.group = Task.Group.test;
 			t.exec = [workspace.config.d.dubPath.userPath, "test",
 				"--compiler=" ~ dub.compiler, "-a=" ~ dub.archType, "-b=" ~ dub.buildType,
-				"-c=" ~ dub.configuration];
+				"-c=" ~ dub.configuration].fixEmptyArgs;
 			t.scope_ = workspace.folder.uri;
 			t.name = "Test " ~ dub.name;
 			ret ~= t;
