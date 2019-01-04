@@ -5,6 +5,7 @@ import core.sync.mutex : Mutex;
 import served.types;
 import served.translate;
 import served.fibermanager;
+import served.nothrow_fs;
 
 import core.time : Duration, msecs, seconds;
 
@@ -21,7 +22,6 @@ import std.path : baseName, buildNormalizedPath, buildPath, chainPath, dirName,
 	globMatch, relativePath;
 import std.string : join;
 
-import fs = std.file;
 import io = std.stdio;
 
 import workspaced.api;
@@ -419,9 +419,9 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 	bool rootDub = fs.exists(chainPath(root, "dub.json")) || fs.exists(chainPath(root, "dub.sdl"));
 	if (!rootDub && fs.exists(chainPath(root, "package.json")))
 	{
-		auto packageJson = fs.readText(chainPath(root, "package.json"));
 		try
 		{
+			auto packageJson = fs.readText(chainPath(root, "package.json"));
 			auto json = parseJSON(packageJson);
 			if (seemsLikeDubJson(json))
 				rootDub = true;
@@ -433,7 +433,7 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 	ret ~= RootSuggestion(root, rootDub);
 	if (recursive)
 	{
-		PackageDescriptorLoop: foreach (pkg; fs.dirEntries(root, "dub.{json,sdl}", fs.SpanMode.breadth))
+		PackageDescriptorLoop: foreach (pkg; tryDirEntries(root, "dub.{json,sdl}", fs.SpanMode.breadth))
 		{
 			auto dir = dirName(pkg);
 			if (dir.canFind(".dub"))
