@@ -893,9 +893,11 @@ int setTimeout(void delegate() callback, Duration timeout)
 	to.timeout = timeout;
 	to.callback = callback;
 	to.sw.start();
-	to.id = ++timeoutID;
 	synchronized (timeoutsMutex)
+	{
+		to.id = ++timeoutID;
 		timeouts ~= to;
+	}
 	return to.id;
 }
 
@@ -938,6 +940,8 @@ __gshared Mutex timeoutsMutex;
 void parallelMain()
 {
 	timeoutsMutex = new Mutex;
+	void delegate()[32] callsBuf;
+	void delegate()[] calls;
 	while (true)
 	{
 		synchronized (timeoutsMutex)
@@ -946,13 +950,23 @@ void parallelMain()
 				if (timeout.sw.peek >= timeout.timeout)
 				{
 					timeout.sw.stop();
-					timeout.callback();
 					trace("Calling timeout");
+					callsBuf[calls.length] = timeout.callback;
+					calls = callsBuf[0 .. calls.length + 1];
 					if (timeouts.length > 1)
 						timeouts[i] = timeouts[$ - 1];
 					timeouts.length--;
+
+					if (calls.length >= callsBuf.length)
+						break;
 				}
 			}
+
+		foreach (call; calls)
+			call();
+
+		callsBuf[] = null;
+		calls = null;
 		Fiber.yield();
 	}
 }
