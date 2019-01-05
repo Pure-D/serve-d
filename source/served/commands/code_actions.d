@@ -88,7 +88,7 @@ Command[] provideCodeActions(CodeActionParams params)
 					if (backend.has!DCDComponent(workspaceRoot))
 						files ~= backend.get!DCDComponent(workspaceRoot)
 							.searchSymbol(match[1]).getYield.map!"a.file".array;
-				}/*, {
+				} /*, {
 					struct Symbol
 					{
 						string project, package_;
@@ -114,7 +114,8 @@ Command[] provideCodeActions(CodeActionParams params)
 					foreach (v; symbols.sort!"a.project < b.project"
 						.uniq!"a.project == b.project")
 						ret ~= Command("Import " ~ v.package_ ~ " from dub package " ~ v.project);
-				}*/);
+				}*/
+				);
 				info("Files: ", files);
 				foreach (file; files.sort().uniq)
 				{
@@ -178,7 +179,12 @@ TextEdit[] sortImports(SortImportsParams params)
 		return ret;
 	auto start = document.bytesToPosition(sorted.start);
 	auto end = document.bytesToPosition(sorted.end);
-	string code = sorted.imports.to!(string[]).join(document.eolAt(0).toString);
+	auto lines = sorted.imports.to!(string[]);
+	if (!lines.length)
+		return null;
+	foreach (ref line; lines[1 .. $])
+		line = sorted.indentation ~ line;
+	string code = lines.join(document.eolAt(0).toString);
 	return [TextEdit(TextRange(start, end), code)];
 }
 
