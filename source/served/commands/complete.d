@@ -51,6 +51,9 @@ CompletionItemKind convertFromDCDType(string type)
 	case "t":
 	case "T":
 		return CompletionItemKind.property;
+	case "h":
+	case "p":
+		return CompletionItemKind.typeParameter;
 	default:
 		return CompletionItemKind.text;
 	}
