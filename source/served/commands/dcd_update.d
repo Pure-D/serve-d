@@ -101,7 +101,8 @@ void updateDCD()
 		else
 			static assert(false);
 
-		import std.net.curl : download;
+		import std.stdio : File;
+		import std.net.curl : HTTP;
 		import std.process : pipeProcess, Redirect, Config, wait;
 		import std.zip : ZipArchive;
 
@@ -109,7 +110,12 @@ void updateDCD()
 		{
 			rpc.notifyMethod("coded/logInstall", "Downloading from " ~ url ~ " to " ~ outputFolder);
 			string destDir = buildPath(outputFolder, url.baseName);
-			download(url, destDir);
+			auto f = File(destDir, "wb");
+			auto conn = HTTP(url);
+			conn.verifyPeer = false;
+			conn.onReceive = (ubyte[] data) { f.rawWrite(data); return data.length; };
+			conn.perform();
+
 			rpc.notifyMethod("coded/logInstall", "Extracting download...");
 			if (url.endsWith(".tar.gz"))
 			{
