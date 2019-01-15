@@ -3,14 +3,101 @@ module served.ddoc;
 import served.protocol;
 
 import std.string;
+import std.format;
 import ddoc;
 
-string ddocToMarkdown(string ddoc)
+
+/**
+ * A test function for checking `DDoc` parsing
+ *
+ * Params:
+ *     hello = a string
+ *     world = an integer
+ *
+ * Author: Jonny
+ * Bugs: None
+ * ---
+ * import std.stdio;
+ *
+ * int main(string[] args) {
+ * 	   writeln("Testing inline code")
+ * }
+ * ---
+ */
+private int testFunction(string foo, int bar)
 {
-	auto lexer = Lexer(prepareDDoc(ddoc), true);
-	return expand(lexer, markdownMacros, false).replace("&#36;", "$");
+	import std.stdio : writeln;
+	writeln(foo, bar);
+	return 0;
 }
 
+
+/**
+ * Convert a Ddoc comment string to markdown. Returns ddoc string back if it is
+ * not valid.
+ * Params:
+ *		ddoc = string of a valid Ddoc comment.
+ */
+string ddocToMarkdown(string ddoc)
+{
+	// Parse ddoc. Return if exception.
+	Comment comment;
+	try
+	{
+		comment = parseComment(prepareDDoc(ddoc), markdownMacros);
+	}
+	catch (Exception e)
+	{
+		return ddoc;
+	}
+
+	auto output = "";
+	foreach(Section section; comment.sections)
+	{
+		import std.uni : toLower;
+		switch(section.name.toLower)
+		{
+		case "":
+		case "summary":
+			output ~= section.content ~= "\n\n";
+			break;
+		case "params":
+			output ~= "**Params**\n\n";
+			foreach (parameter; section.mapping)
+			{
+				output ~= format!"`%s` %s\n\n"(parameter[0], parameter[1]);
+			}
+			break;
+		case "author":
+		case "authors":
+		case "bugs":
+		case "date":
+		case "deprecated":
+		case "history":
+		default:
+			// Single line sections go on the same line as section titles. Multi
+			// line sections go on the line below.
+			import std.algorithm : find;
+			if (section.content.chomp().find('\n').empty)
+			{
+				output ~= format!"**%s** — %s\n\n"(section.name, section.content.chomp());
+			}
+			else
+			{
+				output ~= format!"**%s**\n\n%s\n\n"(section.name, section.content.chomp());
+			}
+			break;
+		}
+	}
+	return output.replace("&#36;", "$");
+}
+
+/**
+ * Convert a DDoc comment string to MarkedString (as defined in the language
+ * server spec)
+ * Params:
+ *		ddoc = A DDoc string to be converted to Markdown
+ */
 MarkedString[] ddocToMarked(string ddoc)
 {
 	MarkedString[] ret;
@@ -34,71 +121,39 @@ MarkedString[] ddocToMarked(string ddoc)
 	return ret;
 }
 
-string prepareDDoc(string str)
+/**
+ * Performs preprocessing of the document. Wraps code blocks in macros.
+ * Params:
+ * 		str = This is one of the params
+ */
+private string prepareDDoc(string str)
 {
-	import ddoc.lexer;
+	import ddoc.lexer : Lexer;
 
 	auto lex = Lexer(str, true);
 	string output;
-	bool wasHeader = false;
-	bool hadWhitespace = false;
-	bool insertNewlineIntoPos = false;
-	bool wroteSomething = false;
-	size_t newlinePos = 0;
-	int numNewlines = 0;
 	foreach (tok; lex)
 	{
 		if (tok.type == Type.embedded || tok.type == Type.inlined)
 		{
+			// Add newlines before documentation
 			if (tok.type == Type.embedded)
 			{
-				if (numNewlines == 0)
-					output ~= "\n\n";
-				else if (numNewlines == 1)
-					output ~= "\n";
+				output ~= "\n\n";
 			}
 			output ~= tok.type == Type.embedded ? "$(D_CODE " : "$(DDOC_BACKQUOTED ";
 			output ~= tok.text;
 			output ~= ")";
 		}
-		else if (tok.type == Type.newline)
-		{
-			numNewlines++;
-			if (insertNewlineIntoPos)
-			{
-				output = output[0 .. newlinePos] ~ "\n" ~ output[newlinePos .. $];
-				insertNewlineIntoPos = false;
-			}
-			if (wasHeader)
-				output ~= "\n";
-			output ~= tok.text;
-			newlinePos = output.length;
-			hadWhitespace = false;
-			wroteSomething = false;
-		}
-		else if (tok.type == Type.whitespace)
-		{
-			insertNewlineIntoPos = false;
-			hadWhitespace = true;
-			if (wroteSomething)
-				output ~= tok.text;
-		}
 		else
 		{
-			numNewlines = 0;
-			insertNewlineIntoPos = false;
-			if (!hadWhitespace && tok.text.length && tok.text[$ - 1] == ':')
-				insertNewlineIntoPos = true;
 			output ~= tok.text;
-			wroteSomething = true;
 		}
-		wasHeader = tok.text.length && tok.text[$ - 1] == ':';
 	}
 	return output;
 }
 
-string[string] markdownMacros;
-
+private string[string] markdownMacros;
 shared static this()
 {
 	//dfmt off
@@ -203,29 +258,28 @@ unittest
 		assert(a == b, a.to!string ~ " is not equal to " ~ b.to!string);
 	}
 
-	auto md = ddocToMarkdown(`&#36;(D something, else) is *a
-------------
-test
-/** this is some test code */
-assert (whatever);
----------
-Params:
-	a = $(B param)
-Returns:
-	nothing of consequence`);
-	assertEqual(md, "$(D something, else) is *a
+	auto comment = "Quick example of a comment\n"
+		~ "&#36;(D something, else) is *a\n"
+		~ "------------\n"
+		~ "test\n"
+		~ "/** this is some test code */\n"
+		~ "assert (whatever);\n"
+		~ "---------\n"
+		~ "Params:\n"
+		~ "	a = $(B param)\n"
+		~ "Returns:\n"
+		~ "	nothing of consequence";
 
-```d
-test
-/** this is some test code */
-assert (whatever);
-```
+	auto commentMarkdown = "Quick example of a comment\n"
+		~ "$(D something, else) is *a\n"
+		~ "\n"
+		~ "```d\n"
+		~ "test\n"
+		~ "/** this is some test code */\n"
+		~ "assert (whatever);\n"
+		~ "```\n\n"
+		~ "`a` **param**\n\n"
+		~ "*Returns* — nothing of consequence\n\n";
 
-Params:
-
-a = **param**
-
-Returns:
-
-nothing of consequence");
+	assertEqual(ddocToMarkdown(comment), commentMarkdown);
 }
