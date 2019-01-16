@@ -138,13 +138,10 @@ string substr(T)(string s, T start, T end)
 	return s[start .. end];
 }
 
-/**
- * Take a function signature and return an array of parameters. May wish to do
- * this in dparse or a library created for this purpose but seems to work fine.
- * Params:
- * 		sig = a string of a function signature e.g. `int f(string arg);`
- *		exact = perform a more more accurate but slower parsing (I think).
- */
+/// Extracts all function parameters for a given declaration string.
+/// Params:
+///   sig = the function signature such as `string[] example(string sig, bool exact = false)`
+///   exact = set to true to make the returned values include the closing paren at the end (if exists)
 string[] extractFunctionParameters(string sig, bool exact = false)
 {
 	if (!sig.length)

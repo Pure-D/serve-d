@@ -13,10 +13,10 @@ import std.algorithm : max;
 /**
  * Convert DCD calltips to LSP compatible `SignatureHelp` objects
  * Params:
- * 		calltips = Ddoc strings for each available calltip
- * 		symbols = array of possible signatures as DCD symbols
- *      textTilCursor = The entire contents of the file being edited up until
- * 		the cursor
+ *      calltips = Ddoc strings for each available calltip
+ *      symbols = array of possible signatures as DCD symbols
+ *      textTilCursor = The entire contents of the file being edited up
+ *                      until the cursor
  */
 SignatureHelp convertDCDCalltips(string[] calltips,
 		DCDCompletions.Symbol[] symbols, string textTilCursor)
@@ -39,13 +39,11 @@ SignatureHelp convertDCDCalltips(string[] calltips,
 		help.signatures ~= sig;
 	}
 	auto extractedParams = textTilCursor.extractFunctionParameters(true);
-	help.activeParameter = max(0, cast(int) extractedParams.length - 1);
 	size_t[] possibleFunctions;
 	foreach (i, count; paramsCounts)
 		if (count >= cast(int) extractedParams.length - 1)
 			possibleFunctions ~= i;
 
-	help.activeParameter = cast(int)extractedParams.length - 1;
 	help.activeSignature = possibleFunctions.length ? cast(int) possibleFunctions[0] : 0;
 	return help;
 }
@@ -69,7 +67,7 @@ SignatureHelp provideDSignatureHelp(TextDocumentPositionParams params,
 	if (!backend.has!DCDComponent(workspaceRoot))
 		return SignatureHelp.init;
 
-	auto currOffset = cast(int) document.positionToOffset(params.position);
+	auto currOffset = cast(int) document.positionToBytes(params.position);
 
 	// Show call tip if open bracket is on same line and and not followed by
 	// close bracket. Not as reliable as AST parsing but much faster and should

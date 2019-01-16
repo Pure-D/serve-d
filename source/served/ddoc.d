@@ -31,7 +31,6 @@ private int testFunction(string foo, int bar)
 	return 0;
 }
 
-
 /**
  * Convert a Ddoc comment string to markdown. Returns ddoc string back if it is
  * not valid.
@@ -77,8 +76,8 @@ string ddocToMarkdown(string ddoc)
 		default:
 			// Single line sections go on the same line as section titles. Multi
 			// line sections go on the line below.
-			import std.algorithm : find;
-			if (section.content.chomp().find('\n').empty)
+			import std.algorithm : canFind;
+			if (!section.content.chomp.canFind("\n"))
 			{
 				output ~= format!"**%s** — %s\n\n"(section.name, section.content.chomp());
 			}
@@ -153,7 +152,7 @@ private string prepareDDoc(string str)
 	return output;
 }
 
-private string[string] markdownMacros;
+string[string] markdownMacros;
 shared static this()
 {
 	//dfmt off
