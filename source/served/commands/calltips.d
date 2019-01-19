@@ -10,11 +10,19 @@ import workspaced.coms;
 
 import std.algorithm : max;
 
+/**
+ * Convert DCD calltips to LSP compatible `SignatureHelp` objects
+ * Params:
+ *      calltips = Ddoc strings for each available calltip
+ *      symbols = array of possible signatures as DCD symbols
+ *      textTilCursor = The entire contents of the file being edited up
+ *                      until the cursor
+ */
 SignatureHelp convertDCDCalltips(string[] calltips,
 		DCDCompletions.Symbol[] symbols, string textTilCursor)
 {
 	SignatureInformation[] signatures;
-	int[] paramsCounts;
+	int[] paramsCounts; // Number of params for each calltip
 	SignatureHelp help;
 	foreach (i, calltip; calltips)
 	{
@@ -31,11 +39,11 @@ SignatureHelp convertDCDCalltips(string[] calltips,
 		help.signatures ~= sig;
 	}
 	auto extractedParams = textTilCursor.extractFunctionParameters(true);
-	help.activeParameter = max(0, cast(int) extractedParams.length - 1);
 	size_t[] possibleFunctions;
 	foreach (i, count; paramsCounts)
 		if (count >= cast(int) extractedParams.length - 1)
 			possibleFunctions ~= i;
+
 	help.activeSignature = possibleFunctions.length ? cast(int) possibleFunctions[0] : 0;
 	return help;
 }
@@ -59,14 +67,28 @@ SignatureHelp provideDSignatureHelp(TextDocumentPositionParams params,
 	if (!backend.has!DCDComponent(workspaceRoot))
 		return SignatureHelp.init;
 
-	auto pos = cast(int) document.positionToBytes(params.position);
+	auto currOffset = cast(int) document.positionToBytes(params.position);
+
+	// Show call tip if open bracket is on same line and and not followed by
+	// close bracket. Not as reliable as AST parsing but much faster and should
+	// work for 90%+ of cases.
+	import std.algorithm : countUntil;
+	import std.range: retro;
+	auto openBracketOffset = document.text[0..currOffset].retro().countUntil("(");
+	auto closeBracketOffset = document.text[0..currOffset].retro().countUntil(")");
+	auto nlBracketOffset = document.text[0..currOffset].retro().countUntil("\n");
+	if (openBracketOffset >= 0 && openBracketOffset < closeBracketOffset
+			&& openBracketOffset < nlBracketOffset) {
+		currOffset -= openBracketOffset;
+	}
+
 	DCDCompletions result = backend.get!DCDComponent(workspaceRoot)
-		.listCompletion(document.text, pos).getYield;
+		.listCompletion(document.text, currOffset).getYield;
 	switch (result.type)
 	{
 	case DCDCompletions.Type.calltips:
 		return convertDCDCalltips(result.calltips,
-				result.symbols, document.text[0 .. pos]);
+				result.symbols, document.text[0 .. currOffset]);
 	case DCDCompletions.Type.identifiers:
 		return SignatureHelp.init;
 	default:

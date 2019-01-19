@@ -138,6 +138,10 @@ string substr(T)(string s, T start, T end)
 	return s[start .. end];
 }
 
+/// Extracts all function parameters for a given declaration string.
+/// Params:
+///   sig = the function signature such as `string[] example(string sig, bool exact = false)`
+///   exact = set to true to make the returned values include the closing paren at the end (if exists)
 string[] extractFunctionParameters(string sig, bool exact = false)
 {
 	if (!sig.length)
