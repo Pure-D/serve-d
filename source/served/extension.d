@@ -130,14 +130,16 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 		case "d.dubArchType":
 			if (backend.has!DubComponent(workspaceFs) && config.d.dubArchType.length
 					&& !backend.get!DubComponent(workspaceFs)
-					.setArchType(JSONValue(["arch-type" : JSONValue(config.d.dubArchType)])))
+					.setArchType(JSONValue(["arch-type": JSONValue(config.d.dubArchType)])))
 				rpc.window.showErrorMessage(
 						translate!"d.ext.config.invalid.archType"(config.d.dubArchType));
 			break;
 		case "d.dubBuildType":
 			if (backend.has!DubComponent(workspaceFs) && config.d.dubBuildType.length
 					&& !backend.get!DubComponent(workspaceFs)
-					.setBuildType(JSONValue(["build-type" : JSONValue(config.d.dubBuildType)])))
+					.setBuildType(JSONValue([
+							"build-type": JSONValue(config.d.dubBuildType)
+						])))
 				rpc.window.showErrorMessage(
 						translate!"d.ext.config.invalid.buildType"(config.d.dubBuildType));
 			break;
@@ -302,11 +304,14 @@ InitializeResult initialize(InitializeParams params)
 		workspaces = params.workspaceFolders.map!(a => Workspace(a,
 				served.types.Configuration.init)).array;
 	else if (params.rootUri.length)
-		workspaces = [Workspace(WorkspaceFolder(params.rootUri, "Root"),
-				served.types.Configuration.init)];
+		workspaces = [
+			Workspace(WorkspaceFolder(params.rootUri, "Root"), served.types.Configuration.init)
+		];
 	else if (params.rootPath.length)
-		workspaces = [Workspace(WorkspaceFolder(params.rootPath.uriFromFile,
-				"Root"), served.types.Configuration.init)];
+		workspaces = [
+			Workspace(WorkspaceFolder(params.rootPath.uriFromFile, "Root"),
+					served.types.Configuration.init)
+		];
 	if (workspaces.length)
 	{
 		fallbackWorkspace.folder = workspaces[0].folder;
@@ -316,7 +321,9 @@ InitializeResult initialize(InitializeParams params)
 	InitializeResult result;
 	result.capabilities.textDocumentSync = documents.syncKind;
 	result.capabilities.completionProvider = CompletionOptions(false, [".", "="]);
-	result.capabilities.signatureHelpProvider = SignatureHelpOptions(["(", "[", ","]);
+	result.capabilities.signatureHelpProvider = SignatureHelpOptions([
+			"(", "[", ","
+			]);
 	result.capabilities.workspaceSymbolProvider = true;
 	result.capabilities.definitionProvider = true;
 	result.capabilities.hoverProvider = true;
@@ -342,10 +349,15 @@ void doGlobalStartup()
 	{
 		trace("Initializing serve-d for global access");
 
-		backend.globalConfiguration.base = JSONValue(["dcd" : JSONValue(["clientPath"
-				: JSONValue(firstConfig.d.dcdClientPath.userPath), "serverPath"
-				: JSONValue(firstConfig.d.dcdServerPath.userPath), "port" : JSONValue(9166)]),
-				"dmd" : JSONValue(["path" : JSONValue(firstConfig.d.dmdPath.userPath)])]);
+		backend.globalConfiguration.base = JSONValue(
+				[
+				"dcd": JSONValue([
+						"clientPath": JSONValue(firstConfig.d.dcdClientPath.userPath),
+						"serverPath": JSONValue(firstConfig.d.dcdServerPath.userPath),
+						"port": JSONValue(9166)
+					]),
+				"dmd": JSONValue(["path": JSONValue(firstConfig.d.dmdPath.userPath)])
+				]);
 
 		trace("Setup global configuration as " ~ backend.globalConfiguration.base.toString);
 
@@ -453,7 +465,9 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 		case ManyProjectsAction.ask:
 			// TODO: translate
 			auto res = rpc.window.requestMessage(MessageType.warning, "There are too many subprojects in this project according to d.manyProjectsThreshold\n\nDo you want to load additional " ~ (
-					ret.length - manyThreshold + 1).to!string ~ " total projects?", ["Load", "Skip"]);
+					ret.length - manyThreshold + 1).to!string ~ " total projects?", [
+					"Load", "Skip"
+					]);
 			if (res != "Load")
 				ret = ret[0 .. manyThreshold];
 			break;
@@ -494,10 +508,14 @@ void doStartup(string workspaceUri)
 	{
 		auto workspaceRoot = root.dir;
 		workspaced.api.Configuration config;
-		config.base = JSONValue(["dcd" : JSONValue(["clientPath"
-				: JSONValue(proj.config.d.dcdClientPath.userPath), "serverPath"
-				: JSONValue(proj.config.d.dcdServerPath.userPath), "port" : JSONValue(9166)]),
-				"dmd" : JSONValue(["path" : JSONValue(proj.config.d.dmdPath.userPath)])]);
+		config.base = JSONValue([
+				"dcd": JSONValue([
+						"clientPath": JSONValue(proj.config.d.dcdClientPath.userPath),
+						"serverPath": JSONValue(proj.config.d.dcdServerPath.userPath),
+						"port": JSONValue(9166)
+					]),
+				"dmd": JSONValue(["path": JSONValue(proj.config.d.dmdPath.userPath)])
+				]);
 		auto instance = backend.addInstance(workspaceRoot, config);
 
 		bool disableDub = proj.config.d.neverUseDub || !root.useDub;
@@ -637,8 +655,8 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 	if (globalDCD && !globalDCD.isActive)
 	{
 		globalDCD.fromRunning(globalDCD.getSupportsFullOutput, globalDCD.isUsingUnixDomainSockets
-				? globalDCD.getSocketFile : "", globalDCD.isUsingUnixDomainSockets ? 0
-				: globalDCD.getRunningPort);
+				? globalDCD.getSocketFile : "", globalDCD.isUsingUnixDomainSockets
+				? 0 : globalDCD.getRunningPort);
 	}
 }
 

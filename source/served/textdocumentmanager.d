@@ -288,7 +288,9 @@ struct TextDocumentManager
 						break;
 					}
 					auto range = *rangePtr;
-					TextRange textRange = [range["start"].fromJSON!Position, range["end"].fromJSON!Position];
+					TextRange textRange = [
+						range["start"].fromJSON!Position, range["end"].fromJSON!Position
+					];
 					auto start = documentStore[idx].positionToBytes(textRange[0]);
 					auto end = documentStore[idx].positionToBytes(textRange[1]);
 					if (start > end)

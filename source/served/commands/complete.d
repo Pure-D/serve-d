@@ -244,18 +244,24 @@ unittest
 	assertEqual(extractFunctionParameters(`auto bar(int foo, Button, my.Callback cb)`),
 			["int foo", "Button", "my.Callback cb"]);
 	assertEqual(extractFunctionParameters(`SomeType!(int, "int_") foo(T, Args...)(T a, T b, string[string] map, Other!"(" stuff1, SomeType!(double, ")double") myType, Other!"(" stuff, Other!")")`),
-			["T a", "T b", "string[string] map", `Other!"(" stuff1`,
-			`SomeType!(double, ")double") myType`, `Other!"(" stuff`, `Other!")"`]);
+			[
+				"T a", "T b", "string[string] map", `Other!"(" stuff1`,
+				`SomeType!(double, ")double") myType`, `Other!"(" stuff`, `Other!")"`
+			]);
 	assertEqual(extractFunctionParameters(`SomeType!(int,"int_")foo(T,Args...)(T a,T b,string[string] map,Other!"(" stuff1,SomeType!(double,")double")myType,Other!"(" stuff,Other!")")`),
-			["T a", "T b", "string[string] map", `Other!"(" stuff1`,
-			`SomeType!(double,")double")myType`, `Other!"(" stuff`, `Other!")"`]);
+			[
+				"T a", "T b", "string[string] map", `Other!"(" stuff1`,
+				`SomeType!(double,")double")myType`, `Other!"(" stuff`, `Other!")"`
+			]);
 	assertEqual(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4`,
 			true), [`4`]);
 	assertEqual(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4, f(4)`,
 			true), [`4`, `f(4)`]);
 	assertEqual(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4, ["a"], JSONValue(["b": JSONValue("c")]), recursive(func, call!s()), "texts )\"(too"`,
-			true), [`4`, `["a"]`, `JSONValue(["b": JSONValue("c")])`,
-			`recursive(func, call!s())`, `"texts )\"(too"`]);
+			true), [
+			`4`, `["a"]`, `JSONValue(["b": JSONValue("c")])`,
+			`recursive(func, call!s())`, `"texts )\"(too"`
+			]);
 }
 
 // === Protocol Methods starting here ===
@@ -277,33 +283,33 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 				Optional!string.init, Optional!string.init, (a.name ~ '=').opt)).array);
 		if (!line.length)
 			return defaultList;
-		//dfmt off
 		if (line[0] == '[')
 			return CompletionList(false, [
-				CompletionItem("analysis.config.StaticAnalysisConfig", CompletionItemKind.keyword.opt),
-				CompletionItem("analysis.config.ModuleFilters", CompletionItemKind.keyword.opt, Optional!string.init,
-					MarkupContent("In this optional section a comma-separated list of inclusion and exclusion"
-					~ " selectors can be specified for every check on which selective filtering"
-					~ " should be applied. These given selectors match on the module name and"
-					~ " partial matches (std. or .foo.) are possible. Moreover, every selectors"
-					~ " must begin with either + (inclusion) or - (exclusion). Exclusion selectors"
-					~ " take precedence over all inclusion operators.").opt)
-			]);
-		//dfmt on
+					CompletionItem("analysis.config.StaticAnalysisConfig",
+						CompletionItemKind.keyword.opt),
+					CompletionItem("analysis.config.ModuleFilters", CompletionItemKind.keyword.opt, Optional!string.init,
+						MarkupContent("In this optional section a comma-separated list of inclusion and exclusion"
+						~ " selectors can be specified for every check on which selective filtering"
+						~ " should be applied. These given selectors match on the module name and"
+						~ " partial matches (std. or .foo.) are possible. Moreover, every selectors"
+						~ " must begin with either + (inclusion) or - (exclusion). Exclusion selectors"
+						~ " take precedence over all inclusion operators.").opt)
+					]);
 		auto eqIndex = line.indexOf('=');
 		auto quotIndex = line.lastIndexOf('"');
 		if (quotIndex != -1 && params.position.character >= quotIndex)
 			return CompletionList.init;
 		if (params.position.character < eqIndex)
 			return defaultList;
-		else//dfmt off
+		else
 			return CompletionList(false, [
-				CompletionItem(`"disabled"`, CompletionItemKind.value.opt, "Check is disabled".opt),
-				CompletionItem(`"enabled"`, CompletionItemKind.value.opt, "Check is enabled".opt),
-				CompletionItem(`"skip-unittest"`, CompletionItemKind.value.opt,
-					"Check is enabled but not operated in the unittests".opt)
-			]);
-		//dfmt on
+					CompletionItem(`"disabled"`, CompletionItemKind.value.opt,
+						"Check is disabled".opt),
+					CompletionItem(`"enabled"`, CompletionItemKind.value.opt,
+						"Check is enabled".opt),
+					CompletionItem(`"skip-unittest"`, CompletionItemKind.value.opt,
+						"Check is enabled but not operated in the unittests".opt)
+					]);
 	}
 	else
 	{

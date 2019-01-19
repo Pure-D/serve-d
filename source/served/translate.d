@@ -9,14 +9,12 @@ private Translation[string] translations;
 
 shared static this()
 {
-	//dfmt off
 	translations = [
-		"en" : parseTranslation!(import("en.txt")),
-		"de" : parseTranslation!(import("de.txt")),
-		"fr" : parseTranslation!(import("fr.txt")),
-		"ja" : parseTranslation!(import("ja.txt"))
+		"en": parseTranslation!(import("en.txt")),
+		"de": parseTranslation!(import("de.txt")),
+		"fr": parseTranslation!(import("fr.txt")),
+		"ja": parseTranslation!(import("ja.txt"))
 	];
-	//dfmt on
 }
 
 private Translation parseTranslation(string s)()

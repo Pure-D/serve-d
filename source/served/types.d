@@ -42,7 +42,9 @@ string[] compare(string prefix, T)(ref T a, ref T b)
 
 alias configurationTypes = AliasSeq!(Configuration.D, Configuration.DFmt,
 		Configuration.DScanner, Configuration.Editor, Configuration.Git);
-static immutable string[] configurationSections = ["d", "dfmt", "dscanner", "editor", "git"];
+static immutable string[] configurationSections = [
+	"d", "dfmt", "dscanner", "editor", "git"
+];
 
 enum ManyProjectsAction : string
 {
@@ -128,7 +130,9 @@ struct Configuration
 				version (Windows)
 					return [`C:\D\dmd2\src\druntime\import`, `C:\D\dmd2\src\phobos`];
 				else version (OSX)
-					return [`/Library/D/dmd/src/druntime/import`, `/Library/D/dmd/src/phobos`];
+					return [
+						`/Library/D/dmd/src/druntime/import`, `/Library/D/dmd/src/phobos`
+					];
 				else version (Posix)
 					return [`/usr/include/dmd/druntime/import`, `/usr/include/dmd/phobos`];
 				else

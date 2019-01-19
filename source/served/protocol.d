@@ -250,7 +250,10 @@ struct RequestMessage
 
 	JSONValue toJSON()
 	{
-		auto ret = JSONValue(["jsonrpc" : JSONValue("2.0"), "method" : JSONValue(method)]);
+		auto ret = JSONValue([
+				"jsonrpc": JSONValue("2.0"),
+				"method": JSONValue(method)
+				]);
 		if (!params.isNull)
 			ret["params"] = params;
 		if (id.hasData)
@@ -1061,7 +1064,10 @@ struct MarkedString
 		if (!language.length)
 			return JSONValue(value);
 		else
-			return JSONValue(["value" : JSONValue(value), "language" : JSONValue(language)]);
+			return JSONValue([
+					"value": JSONValue(value),
+					"language": JSONValue(language)
+					]);
 	}
 
 	static MarkedString fromJSON(JSONValue val)
