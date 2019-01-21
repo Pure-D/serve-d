@@ -212,6 +212,8 @@ int main(string[] args)
 
 	version (Windows)
 		auto input = new WindowsStdinReader();
+	else version (Posix)
+		auto input = new PosixStdinReader();
 	else
 		auto input = new StdFileReader(stdin);
 	input.start();

@@ -33,8 +33,7 @@ class StdFileReader : FileReader
 	File file;
 }
 
-version (Windows)
-class WindowsStdinReader : FileReader
+version (Windows) class WindowsStdinReader : FileReader
 {
 	import core.sys.windows.windows;
 
@@ -88,6 +87,49 @@ class WindowsStdinReader : FileReader
 			default:
 				stderr.writeln("Unexpected WaitForSingleObject response");
 				break;
+			}
+		}
+	}
+}
+
+version (Posix) class PosixStdinReader : FileReader
+{
+	import core.sys.posix.sys.select;
+	import core.sys.posix.sys.time;
+	import core.sys.posix.sys.types;
+	import core.sys.posix.unistd;
+
+	override void stop()
+	{
+		stdin.close();
+	}
+
+	override void run()
+	{
+
+		ubyte[4096] buffer;
+		while (!stdin.eof)
+		{
+			fd_set rfds;
+			timeval tv;
+
+			FD_ZERO(&rfds);
+			FD_SET(0, &rfds);
+
+			tv.tv_sec = 1;
+
+			auto ret = select(1, &rfds, null, null, &tv);
+
+			if (ret == -1)
+				stderr.writeln("PosixStdinReader error in select()");
+			else if (ret)
+			{
+				auto len = read(0, buffer.ptr, buffer.length);
+				if (len == -1)
+					stderr.writeln("PosixStdinReader error in read()");
+				else
+					synchronized (mutex)
+						data ~= buffer[0 .. len];
 			}
 		}
 	}
