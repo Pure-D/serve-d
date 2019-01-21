@@ -210,7 +210,10 @@ int main(string[] args)
 			throw new Exception("Feature set '" ~ feature ~ "' not in this version of serve-d");
 	trace("Features fulfilled");
 
-	auto input = new FileReader(stdin);
+	version (Windows)
+		auto input = new WindowsStdinReader();
+	else
+		auto input = new StdFileReader(stdin);
 	input.start();
 	scope (exit)
 		input.stop();

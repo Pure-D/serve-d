@@ -6,13 +6,99 @@ import core.sync.mutex;
 import std.algorithm;
 import std.stdio;
 
-class FileReader : Thread
+class StdFileReader : FileReader
 {
 	this(File file)
 	{
+		super();
+		this.file = file;
+	}
+
+	override void stop()
+	{
+		file.close();
+	}
+
+	override void run()
+	{
+		ubyte[1] buffer;
+		while (!file.eof)
+		{
+			auto chunk = file.rawRead(buffer[]);
+			synchronized (mutex)
+				data ~= chunk;
+		}
+	}
+
+	File file;
+}
+
+version (Windows)
+class WindowsStdinReader : FileReader
+{
+	import core.sys.windows.windows;
+
+	bool running;
+
+	this()
+	{
+		super();
+	}
+
+	override void stop()
+	{
+		running = false;
+	}
+
+	override void run()
+	{
+		auto stdin = GetStdHandle(STD_INPUT_HANDLE);
+		INPUT_RECORD inputRecord;
+		DWORD nbRead;
+		ubyte[4096] buffer;
+		running = true;
+		while (running)
+		{
+			switch (WaitForSingleObject(stdin, 1000))
+			{
+			case WAIT_TIMEOUT:
+				break;
+			case WAIT_OBJECT_0:
+				DWORD len;
+				if (!ReadFile(stdin, &buffer, buffer.length, &len, null))
+				{
+					stderr.writeln("ReadFile failed ", GetLastError());
+					break;
+				}
+				if (len == 0)
+				{
+					stderr.writeln("WindowsStdinReader EOF");
+					running = false;
+					return;
+				}
+				synchronized (mutex)
+					data ~= buffer[0 .. len];
+				break;
+			case WAIT_FAILED:
+				stderr.writeln("stdin read failed ", GetLastError());
+				break;
+			case WAIT_ABANDONED:
+				stderr.writeln("stdin read wait was abandoned ", GetLastError());
+				break;
+			default:
+				stderr.writeln("Unexpected WaitForSingleObject response");
+				break;
+			}
+		}
+	}
+}
+
+abstract class FileReader : Thread
+{
+	this()
+	{
 		super(&run);
 		mutex = new Mutex();
-		this.file = file;
 	}
 
 	string yieldLine()
@@ -53,21 +139,12 @@ class FileReader : Thread
 		}
 	}
 
-	void stop()
-	{
-		file.close();
-	}
+	abstract void stop();
 
-private:
-	void run()
-	{
-		foreach (b; file.byChunk(1))
-			synchronized (mutex)
-				data ~= b[0];
-	}
+protected:
+	abstract void run();
 
 	ubyte[] data;
-	File file;
 	Mutex mutex;
 	bool running;
 }
