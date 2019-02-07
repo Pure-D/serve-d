@@ -23,91 +23,93 @@ import io = std.stdio;
 @protocolMethod("served/listConfigurations")
 string[] listConfigurations()
 {
-	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+	if (!activeInstance || !activeInstance.has!DubComponent)
 		return null;
-	return backend.get!DubComponent(selectedWorkspaceRoot).configurations;
+	return activeInstance.get!DubComponent.configurations;
 }
 
 @protocolMethod("served/switchConfig")
 bool switchConfig(string value)
 {
-	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+	if (!activeInstance || !activeInstance.has!DubComponent)
 		return false;
-	return backend.get!DubComponent(selectedWorkspaceRoot).setConfiguration(value);
+	return activeInstance.get!DubComponent.setConfiguration(value);
 }
 
 @protocolMethod("served/getConfig")
 string getConfig(string value)
 {
-	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+	if (!activeInstance || !activeInstance.has!DubComponent)
 		return null;
-	return backend.get!DubComponent(selectedWorkspaceRoot).configuration;
+	return activeInstance.get!DubComponent.configuration;
 }
 
 @protocolMethod("served/listArchTypes")
 string[] listArchTypes()
 {
-	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+	if (!activeInstance || !activeInstance.has!DubComponent)
 		return null;
-	return backend.get!DubComponent(selectedWorkspaceRoot).archTypes;
+	return activeInstance.get!DubComponent.archTypes;
 }
 
 @protocolMethod("served/switchArchType")
 bool switchArchType(string value)
 {
-	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+	if (!activeInstance || !activeInstance.has!DubComponent)
 		return false;
-	return backend.get!DubComponent(selectedWorkspaceRoot)
-		.setArchType(JSONValue(["arch-type" : JSONValue(value)]));
+	return activeInstance.get!DubComponent.setArchType(JSONValue([
+				"arch-type": JSONValue(value)
+			]));
 }
 
 @protocolMethod("served/getArchType")
 string getArchType(string value)
 {
-	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+	if (!activeInstance || !activeInstance.has!DubComponent)
 		return null;
-	return backend.get!DubComponent(selectedWorkspaceRoot).archType;
+	return activeInstance.get!DubComponent.archType;
 }
 
 @protocolMethod("served/listBuildTypes")
 string[] listBuildTypes()
 {
-	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+	if (!activeInstance || !activeInstance.has!DubComponent)
 		return null;
-	return backend.get!DubComponent(selectedWorkspaceRoot).buildTypes;
+	return activeInstance.get!DubComponent.buildTypes;
 }
 
 @protocolMethod("served/switchBuildType")
 bool switchBuildType(string value)
 {
-	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+	if (!activeInstance || !activeInstance.has!DubComponent)
 		return false;
-	return backend.get!DubComponent(selectedWorkspaceRoot)
-		.setBuildType(JSONValue(["build-type" : JSONValue(value)]));
+	return activeInstance.get!DubComponent.setBuildType(JSONValue([
+				"build-type": JSONValue(value)
+			]));
 }
 
 @protocolMethod("served/getBuildType")
 string getBuildType()
 {
-	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+	if (!activeInstance || !activeInstance.has!DubComponent)
 		return null;
-	return backend.get!DubComponent(selectedWorkspaceRoot).buildType;
+	return activeInstance.get!DubComponent.buildType;
 }
 
 @protocolMethod("served/getCompiler")
 string getCompiler()
 {
-	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+	if (!activeInstance || !activeInstance.has!DubComponent)
 		return null;
-	return backend.get!DubComponent(selectedWorkspaceRoot).compiler;
+	return activeInstance.get!DubComponent.compiler;
 }
 
 @protocolMethod("served/switchCompiler")
 bool switchCompiler(string value)
 {
-	if (!backend.has!DubComponent(selectedWorkspaceRoot))
+	if (!activeInstance || !activeInstance.has!DubComponent)
 		return false;
-	return backend.get!DubComponent(selectedWorkspaceRoot).setCompiler(value);
+	return activeInstance.get!DubComponent.setCompiler(value);
 }
 
 @protocolMethod("served/addImport")
@@ -121,28 +123,28 @@ auto addImport(AddImportParams params)
 @protocolMethod("served/updateImports")
 bool updateImports()
 {
-	auto workspaceRoot = selectedWorkspaceRoot;
+	auto instance = activeInstance;
 	bool success;
-	if (backend.has!DubComponent(workspaceRoot))
+	if (instance.has!DubComponent)
 	{
-		success = backend.get!DubComponent(workspaceRoot).update.getYield;
+		success = instance.get!DubComponent.update.getYield;
 		if (success)
 			rpc.notifyMethod("coded/updateDubTree");
 	}
-	if (backend.has!DCDComponent(workspaceRoot))
-		backend.get!DCDComponent(workspaceRoot).refreshImports();
+	if (instance.has!DCDComponent)
+		instance.get!DCDComponent.refreshImports();
 	return success;
 }
 
 @protocolMethod("served/listDependencies")
 DubDependency[] listDependencies(string packageName)
 {
-	auto workspaceRoot = selectedWorkspaceRoot;
+	auto instance = activeInstance;
 	DubDependency[] ret;
-	auto allDeps = backend.get!DubComponent(workspaceRoot).dependencies;
+	auto allDeps = instance.get!DubComponent.dependencies;
 	if (!packageName.length)
 	{
-		auto deps = backend.get!DubComponent(workspaceRoot).rootDependencies;
+		auto deps = instance.get!DubComponent.rootDependencies;
 		foreach (dep; deps)
 		{
 			DubDependency r;
@@ -207,22 +209,28 @@ private string[] fixEmptyArgs(string[] args)
 Task[] provideBuildTasks()
 {
 	Task[] ret;
-	foreach (ref workspace; workspaces)
+	foreach (instance; backend.instances)
 	{
-		auto workspaceRoot = workspace.folder.uri.uriToFile;
-		if (!backend.has!DubComponent(workspaceRoot))
+		if (!instance.has!DubComponent)
 			continue;
-		auto dub = backend.get!DubComponent(workspaceRoot);
+		auto dub = instance.get!DubComponent;
+		auto workspace = .workspace(instance.cwd.uriFromFile, false);
 		{
 			Task t;
 			t.source = "dub";
-			t.definition = JSONValue(["type" : JSONValue("dub"), "run" : JSONValue(false),
-					"compiler" : JSONValue(dub.compiler), "archType" : JSONValue(dub.archType),
-					"buildType" : JSONValue(dub.buildType), "configuration" : JSONValue(dub.configuration)]);
+			t.definition = JSONValue([
+					"type": JSONValue("dub"),
+					"run": JSONValue(false),
+					"compiler": JSONValue(dub.compiler),
+					"archType": JSONValue(dub.archType),
+					"buildType": JSONValue(dub.buildType),
+					"configuration": JSONValue(dub.configuration)
+					]);
 			t.group = Task.Group.build;
-			t.exec = [workspace.config.d.dubPath.userPath, "build",
-				"--compiler=" ~ dub.compiler, "-a=" ~ dub.archType, "-b=" ~ dub.buildType,
-				"-c=" ~ dub.configuration].fixEmptyArgs;
+			t.exec = [
+				workspace.config.d.dubPath.userPath, "build", "--compiler=" ~ dub.compiler,
+				"-a=" ~ dub.archType, "-b=" ~ dub.buildType, "-c=" ~ dub.configuration
+			].fixEmptyArgs;
 			t.scope_ = workspace.folder.uri;
 			t.name = "Build " ~ dub.name;
 			ret ~= t;
@@ -230,13 +238,19 @@ Task[] provideBuildTasks()
 		{
 			Task t;
 			t.source = "dub";
-			t.definition = JSONValue(["type" : JSONValue("dub"), "run" : JSONValue(true),
-					"compiler" : JSONValue(dub.compiler), "archType" : JSONValue(dub.archType),
-					"buildType" : JSONValue(dub.buildType), "configuration" : JSONValue(dub.configuration)]);
+			t.definition = JSONValue([
+					"type": JSONValue("dub"),
+					"run": JSONValue(true),
+					"compiler": JSONValue(dub.compiler),
+					"archType": JSONValue(dub.archType),
+					"buildType": JSONValue(dub.buildType),
+					"configuration": JSONValue(dub.configuration)
+					]);
 			t.group = Task.Group.build;
-			t.exec = [workspace.config.d.dubPath.userPath, "run",
-				"--compiler=" ~ dub.compiler, "-a=" ~ dub.archType, "-b=" ~ dub.buildType,
-				"-c=" ~ dub.configuration].fixEmptyArgs;
+			t.exec = [
+				workspace.config.d.dubPath.userPath, "run", "--compiler=" ~ dub.compiler,
+				"-a=" ~ dub.archType, "-b=" ~ dub.buildType, "-c=" ~ dub.configuration
+			].fixEmptyArgs;
 			t.scope_ = workspace.folder.uri;
 			t.name = "Run " ~ dub.name;
 			ret ~= t;
@@ -244,14 +258,21 @@ Task[] provideBuildTasks()
 		{
 			Task t;
 			t.source = "dub";
-			t.definition = JSONValue(["type" : JSONValue("dub"), "run"
-					: JSONValue(false), "force" : JSONValue(true), "compiler" : JSONValue(dub.compiler),
-					"archType" : JSONValue(dub.archType), "buildType"
-					: JSONValue(dub.buildType), "configuration" : JSONValue(dub.configuration)]);
+			t.definition = JSONValue([
+					"type": JSONValue("dub"),
+					"run": JSONValue(false),
+					"force": JSONValue(true),
+					"compiler": JSONValue(dub.compiler),
+					"archType": JSONValue(dub.archType),
+					"buildType": JSONValue(dub.buildType),
+					"configuration": JSONValue(dub.configuration)
+					]);
 			t.group = Task.Group.rebuild;
-			t.exec = [workspace.config.d.dubPath.userPath, "build", "--force",
-				"--compiler=" ~ dub.compiler, "-a=" ~ dub.archType, "-b=" ~ dub.buildType,
-				"-c=" ~ dub.configuration].fixEmptyArgs;
+			t.exec = [
+				workspace.config.d.dubPath.userPath, "build", "--force",
+				"--compiler=" ~ dub.compiler, "-a=" ~ dub.archType,
+				"-b=" ~ dub.buildType, "-c=" ~ dub.configuration
+			].fixEmptyArgs;
 			t.scope_ = workspace.folder.uri;
 			t.name = "Rebuild " ~ dub.name;
 			ret ~= t;
@@ -259,13 +280,19 @@ Task[] provideBuildTasks()
 		{
 			Task t;
 			t.source = "dub";
-			t.definition = JSONValue(["type" : JSONValue("dub"), "test" : JSONValue(true),
-					"compiler" : JSONValue(dub.compiler), "archType" : JSONValue(dub.archType),
-					"buildType" : JSONValue(dub.buildType), "configuration" : JSONValue(dub.configuration)]);
+			t.definition = JSONValue([
+					"type": JSONValue("dub"),
+					"test": JSONValue(true),
+					"compiler": JSONValue(dub.compiler),
+					"archType": JSONValue(dub.archType),
+					"buildType": JSONValue(dub.buildType),
+					"configuration": JSONValue(dub.configuration)
+					]);
 			t.group = Task.Group.test;
-			t.exec = [workspace.config.d.dubPath.userPath, "test",
-				"--compiler=" ~ dub.compiler, "-a=" ~ dub.archType, "-b=" ~ dub.buildType,
-				"-c=" ~ dub.configuration].fixEmptyArgs;
+			t.exec = [
+				workspace.config.d.dubPath.userPath, "test", "--compiler=" ~ dub.compiler,
+				"-a=" ~ dub.archType, "-b=" ~ dub.buildType, "-c=" ~ dub.configuration
+			].fixEmptyArgs;
 			t.scope_ = workspace.folder.uri;
 			t.name = "Test " ~ dub.name;
 			ret ~= t;
@@ -296,9 +323,10 @@ void convertDubFormat(DubConvertRequest req)
 
 	auto document = documents[req.textDocument.uri];
 
-	auto result = execute([workspace(req.textDocument.uri)
-			.config.d.dubPath.userPath, "convert", "-f", req.newFormat, "-s"], null,
-			Config.stderrPassThrough, 1024 * 1024 * 4, file.dirName);
+	auto result = execute([
+			workspace(req.textDocument.uri).config.d.dubPath.userPath, "convert",
+			"-f", req.newFormat, "-s"
+			], null, Config.stderrPassThrough, 1024 * 1024 * 4, file.dirName);
 
 	if (result.status != 0)
 	{
@@ -311,13 +339,16 @@ void convertDubFormat(DubConvertRequest req)
 	WorkspaceEdit edit;
 	auto edits = [
 		TextEdit(TextRange(Position(0, 0),
-			document.offsetToPosition(document.text.length)), result.output)
+				document.offsetToPosition(document.text.length)), result.output)
 	];
 
 	if (capabilities.workspace.workspaceEdit.resourceOperations.canFind(ResourceOperationKind.rename))
 	{
-		edit.documentChanges = JSONValue([toJSON(RenameFile(req.textDocument.uri, newUri)),
-				toJSON(TextDocumentEdit(VersionedTextDocumentIdentifier(newUri, document.version_), edits))]);
+		edit.documentChanges = JSONValue([
+				toJSON(RenameFile(req.textDocument.uri, newUri)),
+				toJSON(TextDocumentEdit(VersionedTextDocumentIdentifier(newUri,
+					document.version_), edits))
+				]);
 	}
 	else
 		edit.changes[req.textDocument.uri] = edits;
@@ -327,12 +358,12 @@ void convertDubFormat(DubConvertRequest req)
 @protocolNotification("served/installDependency")
 void installDependency(InstallRequest req)
 {
-	auto workspaceRoot = selectedWorkspaceRoot;
-	injectDependency(workspaceRoot, req);
-	if (backend.has!DubComponent(workspaceRoot))
+	auto instance = activeInstance;
+	injectDependency(instance, req);
+	if (instance.has!DubComponent)
 	{
-		backend.get!DubComponent(workspaceRoot).upgrade();
-		backend.get!DubComponent(workspaceRoot).updateImportPaths(true);
+		instance.get!DubComponent.upgrade();
+		instance.get!DubComponent.updateImportPaths(true);
 	}
 	updateImports();
 }
@@ -340,13 +371,13 @@ void installDependency(InstallRequest req)
 @protocolNotification("served/updateDependency")
 void updateDependency(UpdateRequest req)
 {
-	auto workspaceRoot = selectedWorkspaceRoot;
-	if (changeDependency(workspaceRoot, req))
+	auto instance = activeInstance;
+	if (changeDependency(instance, req))
 	{
-		if (backend.has!DubComponent(workspaceRoot))
+		if (instance.has!DubComponent)
 		{
-			backend.get!DubComponent(workspaceRoot).upgrade();
-			backend.get!DubComponent(workspaceRoot).updateImportPaths(true);
+			instance.get!DubComponent.upgrade();
+			instance.get!DubComponent.updateImportPaths(true);
 		}
 		updateImports();
 	}
@@ -355,20 +386,20 @@ void updateDependency(UpdateRequest req)
 @protocolNotification("served/uninstallDependency")
 void uninstallDependency(UninstallRequest req)
 {
-	auto workspaceRoot = selectedWorkspaceRoot;
+	auto instance = activeInstance;
 	// TODO: add workspace argument
-	removeDependency(workspaceRoot, req.name);
-	if (backend.has!DubComponent(workspaceRoot))
+	removeDependency(instance, req.name);
+	if (instance.has!DubComponent)
 	{
-		backend.get!DubComponent(workspaceRoot).upgrade();
-		backend.get!DubComponent(workspaceRoot).updateImportPaths(true);
+		instance.get!DubComponent.upgrade();
+		instance.get!DubComponent.updateImportPaths(true);
 	}
 	updateImports();
 }
 
-void injectDependency(string workspaceRoot, InstallRequest req)
+void injectDependency(WorkspaceD.Instance instance, InstallRequest req)
 {
-	auto sdl = buildPath(workspaceRoot, "dub.sdl");
+	auto sdl = buildPath(instance.cwd, "dub.sdl");
 	if (fs.exists(sdl))
 	{
 		int depth = 0;
@@ -396,9 +427,9 @@ void injectDependency(string workspaceRoot, InstallRequest req)
 	}
 	else
 	{
-		auto json = buildPath(workspaceRoot, "dub.json");
+		auto json = buildPath(instance.cwd, "dub.json");
 		if (!fs.exists(json))
-			json = buildPath(workspaceRoot, "package.json");
+			json = buildPath(instance.cwd, "package.json");
 		if (!fs.exists(json))
 			return;
 		auto content = fs.readText(json).splitLines(KeepTerminator.yes);
@@ -470,9 +501,9 @@ void injectDependency(string workspaceRoot, InstallRequest req)
 	}
 }
 
-bool changeDependency(string workspaceRoot, UpdateRequest req)
+bool changeDependency(WorkspaceD.Instance instance, UpdateRequest req)
 {
-	auto sdl = buildPath(workspaceRoot, "dub.sdl");
+	auto sdl = buildPath(instance.cwd, "dub.sdl");
 	if (fs.exists(sdl))
 	{
 		int depth = 0;
@@ -506,9 +537,9 @@ bool changeDependency(string workspaceRoot, UpdateRequest req)
 	}
 	else
 	{
-		auto json = buildPath(workspaceRoot, "dub.json");
+		auto json = buildPath(instance.cwd, "dub.json");
 		if (!fs.exists(json))
-			json = buildPath(workspaceRoot, "package.json");
+			json = buildPath(instance.cwd, "package.json");
 		if (!fs.exists(json))
 			return false;
 		auto content = fs.readText(json);
@@ -521,9 +552,9 @@ bool changeDependency(string workspaceRoot, UpdateRequest req)
 	}
 }
 
-bool removeDependency(string workspaceRoot, string name)
+bool removeDependency(WorkspaceD.Instance instance, string name)
 {
-	auto sdl = buildPath(workspaceRoot, "dub.sdl");
+	auto sdl = buildPath(instance.cwd, "dub.sdl");
 	if (fs.exists(sdl))
 	{
 		int depth = 0;
@@ -546,9 +577,9 @@ bool removeDependency(string workspaceRoot, string name)
 	}
 	else
 	{
-		auto json = buildPath(workspaceRoot, "dub.json");
+		auto json = buildPath(instance.cwd, "dub.json");
 		if (!fs.exists(json))
-			json = buildPath(workspaceRoot, "package.json");
+			json = buildPath(instance.cwd, "package.json");
 		if (!fs.exists(json))
 			return false;
 		auto content = fs.readText(json);

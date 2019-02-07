@@ -39,12 +39,12 @@ package auto whitespace = regex(`\s*`);
 @protocolMethod("textDocument/codeAction")
 Command[] provideCodeActions(CodeActionParams params)
 {
-	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	auto document = documents[params.textDocument.uri];
-	if (document.languageId != "d")
+	auto instance = activeInstance = backend.getBestInstance(document.uri.uriToFile);
+	if (document.languageId != "d" || !instance)
 		return [];
 	Command[] ret;
-	if (backend.has!DCDExtComponent(workspaceRoot)) // check if extends
+	if (instance.has!DCDExtComponent) // check if extends
 	{
 		auto startIndex = document.positionToBytes(params.range.start);
 		ptrdiff_t idx = min(cast(ptrdiff_t) startIndex, cast(ptrdiff_t) document.text.length - 1);
@@ -53,8 +53,8 @@ Command[] provideCodeActions(CodeActionParams params)
 			if (document.text[idx] == ':')
 			{
 				// probably extends
-				if (backend.get!DCDExtComponent(workspaceRoot)
-						.implement(document.text, cast(int) startIndex).getYield.strip.length > 0)
+				if (instance.get!DCDExtComponent.implement(document.text,
+						cast(int) startIndex).getYield.strip.length > 0)
 					ret ~= Command("Implement base classes/interfaces", "code-d.implementMethods",
 							[JSONValue(document.positionToOffset(params.range.start))]);
 				break;
@@ -72,7 +72,10 @@ Command[] provideCodeActions(CodeActionParams params)
 			if (diagnostic.message.canFind("import ") && match)
 			{
 				ret ~= Command("Import " ~ match[1], "code-d.addImport",
-						[JSONValue(match[1]), JSONValue(document.positionToOffset(params.range[0]))]);
+						[
+							JSONValue(match[1]),
+							JSONValue(document.positionToOffset(params.range[0]))
+						]);
 			}
 			if (cast(bool)(match = diagnostic.message.matchFirst(undefinedIdentifier))
 					|| cast(bool)(match = diagnostic.message.matchFirst(undefinedTemplate))
@@ -82,12 +85,11 @@ Command[] provideCodeActions(CodeActionParams params)
 				string[] modules;
 				int lineNo;
 				joinAll({
-					files ~= backend.get!DscannerComponent(workspaceRoot)
-						.findSymbol(match[1]).getYield.map!"a.file".array;
+					files ~= instance.get!DscannerComponent.findSymbol(match[1])
+						.getYield.map!"a.file".array;
 				}, {
-					if (backend.has!DCDComponent(workspaceRoot))
-						files ~= backend.get!DCDComponent(workspaceRoot)
-							.searchSymbol(match[1]).getYield.map!"a.file".array;
+					if (instance.has!DCDComponent)
+						files ~= instance.get!DCDComponent.searchSymbol(match[1]).getYield.map!"a.file".array;
 				} /*, {
 					struct Symbol
 					{
@@ -120,7 +122,7 @@ Command[] provideCodeActions(CodeActionParams params)
 				foreach (file; files.sort().uniq)
 				{
 					if (!isAbsolute(file))
-						file = buildNormalizedPath(workspaceRoot, file);
+						file = buildNormalizedPath(instance.cwd, file);
 					if (!fs.exists(file))
 						continue;
 					lineNo = 0;
@@ -137,8 +139,10 @@ Command[] provideCodeActions(CodeActionParams params)
 					}
 				}
 				foreach (mod; modules.sort().uniq)
-					ret ~= Command("Import " ~ mod, "code-d.addImport", [JSONValue(mod),
-							JSONValue(document.positionToOffset(params.range[0]))]);
+					ret ~= Command("Import " ~ mod, "code-d.addImport", [
+							JSONValue(mod),
+							JSONValue(document.positionToOffset(params.range[0]))
+							]);
 			}
 		}
 		else if (diagnostic.source == DScannerDiagnosticSource)
@@ -159,7 +163,9 @@ Command[] provideCodeActions(CodeActionParams params)
 			{
 				if (key.startsWith("dscanner."))
 					key = key["dscanner.".length .. $];
-				ret ~= Command("Ignore " ~ key ~ " warnings", "code-d.ignoreDscannerKey", [diagnostic.code]);
+				ret ~= Command("Ignore " ~ key ~ " warnings", "code-d.ignoreDscannerKey", [
+						diagnostic.code
+						]);
 				ret ~= Command("Ignore " ~ key ~ " warnings (this line)",
 						"code-d.ignoreDscannerKey", [diagnostic.code, JSONValue("line")]);
 			}
@@ -193,12 +199,12 @@ TextEdit[] implementMethods(ImplementMethodsParams params)
 {
 	import std.ascii : isWhite;
 
-	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	auto document = documents[params.textDocument.uri];
+	string file = document.uri.uriToFile;
 	TextEdit[] ret;
 	auto location = document.offsetToBytes(params.location);
-	auto code = backend.get!DCDExtComponent(workspaceRoot)
-		.implement(document.text, cast(int) location).getYield.strip;
+	auto code = backend.best!DCDExtComponent(file).implement(document.text,
+			cast(int) location).getYield.strip;
 	if (!code.length)
 		return ret;
 	auto brace = document.text.indexOf('{', location);

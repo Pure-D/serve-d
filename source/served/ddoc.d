@@ -6,7 +6,6 @@ import std.string;
 import std.format;
 import ddoc;
 
-
 /**
  * A test function for checking `DDoc` parsing
  *
@@ -27,6 +26,7 @@ import ddoc;
 private int testFunction(string foo, int bar)
 {
 	import std.stdio : writeln;
+
 	writeln(foo, bar);
 	return 0;
 }
@@ -51,10 +51,11 @@ string ddocToMarkdown(string ddoc)
 	}
 
 	auto output = "";
-	foreach(Section section; comment.sections)
+	foreach (Section section; comment.sections)
 	{
 		import std.uni : toLower;
-		switch(section.name.toLower)
+
+		switch (section.name.toLower)
 		{
 		case "":
 		case "summary":
@@ -77,6 +78,7 @@ string ddocToMarkdown(string ddoc)
 			// Single line sections go on the same line as section titles. Multi
 			// line sections go on the line below.
 			import std.algorithm : canFind;
+
 			if (!section.content.chomp.canFind("\n"))
 			{
 				output ~= format!"**%s** — %s\n\n"(section.name, section.content.chomp());
@@ -257,6 +259,7 @@ unittest
 		assert(a == b, a.to!string ~ " is not equal to " ~ b.to!string);
 	}
 
+	//dfmt off
 	auto comment = "Quick example of a comment\n"
 		~ "&#36;(D something, else) is *a\n"
 		~ "------------\n"
@@ -279,6 +282,7 @@ unittest
 		~ "```\n\n"
 		~ "`a` **param**\n\n"
 		~ "*Returns* — nothing of consequence\n\n";
+	//dfmt on
 
 	assertEqual(ddocToMarkdown(comment), commentMarkdown);
 }

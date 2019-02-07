@@ -51,20 +51,20 @@ SignatureHelp convertDCDCalltips(string[] calltips,
 @protocolMethod("textDocument/signatureHelp")
 SignatureHelp provideSignatureHelp(TextDocumentPositionParams params)
 {
-	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	auto document = documents[params.textDocument.uri];
+	string file = document.uri.uriToFile;
 	if (document.languageId == "d")
-		return provideDSignatureHelp(params, workspaceRoot, document);
+		return provideDSignatureHelp(params, file, document);
 	else if (document.languageId == "diet")
-		return provideDietSignatureHelp(params, workspaceRoot, document);
+		return provideDietSignatureHelp(params, file, document);
 	else
 		return SignatureHelp.init;
 }
 
 SignatureHelp provideDSignatureHelp(TextDocumentPositionParams params,
-		string workspaceRoot, ref Document document)
+		string file, ref Document document)
 {
-	if (!backend.has!DCDComponent(workspaceRoot))
+	if (!backend.hasBest!DCDComponent(file))
 		return SignatureHelp.init;
 
 	auto currOffset = cast(int) document.positionToBytes(params.position);
@@ -73,16 +73,18 @@ SignatureHelp provideDSignatureHelp(TextDocumentPositionParams params,
 	// close bracket. Not as reliable as AST parsing but much faster and should
 	// work for 90%+ of cases.
 	import std.algorithm : countUntil;
-	import std.range: retro;
-	auto openBracketOffset = document.text[0..currOffset].retro().countUntil("(");
-	auto closeBracketOffset = document.text[0..currOffset].retro().countUntil(")");
-	auto nlBracketOffset = document.text[0..currOffset].retro().countUntil("\n");
+	import std.range : retro;
+
+	auto openBracketOffset = document.text[0 .. currOffset].retro().countUntil("(");
+	auto closeBracketOffset = document.text[0 .. currOffset].retro().countUntil(")");
+	auto nlBracketOffset = document.text[0 .. currOffset].retro().countUntil("\n");
 	if (openBracketOffset >= 0 && openBracketOffset < closeBracketOffset
-			&& openBracketOffset < nlBracketOffset) {
+			&& openBracketOffset < nlBracketOffset)
+	{
 		currOffset -= openBracketOffset;
 	}
 
-	DCDCompletions result = backend.get!DCDComponent(workspaceRoot)
+	DCDCompletions result = backend.best!DCDComponent(file)
 		.listCompletion(document.text, currOffset).getYield;
 	switch (result.type)
 	{
@@ -97,12 +99,12 @@ SignatureHelp provideDSignatureHelp(TextDocumentPositionParams params,
 }
 
 SignatureHelp provideDietSignatureHelp(TextDocumentPositionParams params,
-		string workspaceRoot, ref Document document)
+		string file, ref Document document)
 {
 	import served.diet;
 	import dc = dietc.complete;
 
-	auto completion = updateDietFile(document.uri.uriToFile, workspaceRoot, document.text);
+	auto completion = updateDietFile(file, document.text);
 
 	size_t offset = document.positionToBytes(params.position);
 	auto raw = completion.completeAt(offset);
@@ -112,10 +114,9 @@ SignatureHelp provideDietSignatureHelp(TextDocumentPositionParams params,
 	{
 		string code;
 		dc.extractD(completion, offset, code, offset);
-		if (offset <= code.length && backend.has!DCDComponent(workspaceRoot))
+		if (offset <= code.length && backend.hasBest!DCDComponent(file))
 		{
-			auto dcd = backend.get!DCDComponent(workspaceRoot).listCompletion(code,
-					cast(int) offset).getYield;
+			auto dcd = backend.best!DCDComponent(file).listCompletion(code, cast(int) offset).getYield;
 			if (dcd.type == DCDCompletions.Type.calltips)
 				return convertDCDCalltips(dcd.calltips, dcd.symbols, code[0 .. offset]);
 		}

@@ -352,6 +352,8 @@ ref Workspace selectedWorkspace()
 	return fallbackWorkspace;
 }
 
+WorkspaceD.Instance activeInstance;
+
 string workspaceRootFor(string uri)
 {
 	return workspace(uri).folder.uri.uriToFile;

@@ -20,8 +20,8 @@ enum DiagnosticSlot = 0;
 
 void lint(Document document)
 {
-	auto workspaceRoot = workspaceRootFor(document.uri);
-	if (!backend.has!DscannerComponent(workspaceRoot))
+	auto instance = activeInstance = backend.getBestInstance!DscannerComponent(document.uri.uriToFile);
+	if (!instance)
 		return;
 
 	auto fileConfig = config(document.uri);
@@ -30,11 +30,11 @@ void lint(Document document)
 
 	auto ignoredKeys = fileConfig.dscanner.ignoredKeys;
 
-	auto ini = buildPath(workspaceRoot, "dscanner.ini");
+	auto ini = buildPath(instance.cwd, "dscanner.ini");
 	if (!exists(ini))
 		ini = "dscanner.ini";
-	auto issues = backend.get!DscannerComponent(workspaceRoot)
-		.lint(document.uri.uriToFile, ini, document.text).getYield;
+	auto issues = instance.get!DscannerComponent.lint(document.uri.uriToFile,
+			ini, document.text).getYield;
 	Diagnostic[] result;
 
 	foreach (issue; issues)

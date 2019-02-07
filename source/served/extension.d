@@ -517,6 +517,8 @@ void doStartup(string workspaceUri)
 				"dmd": JSONValue(["path": JSONValue(proj.config.d.dmdPath.userPath)])
 				]);
 		auto instance = backend.addInstance(workspaceRoot, config);
+		if (!activeInstance)
+			activeInstance = instance;
 
 		bool disableDub = proj.config.d.neverUseDub || !root.useDub;
 		bool loadedDub;

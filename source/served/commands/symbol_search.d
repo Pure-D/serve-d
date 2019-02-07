@@ -75,8 +75,7 @@ SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParams params)
 	if (cached.length)
 		return cached;
 	auto document = documents.tryGet(params.textDocument.uri);
-	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
-	auto result = backend.get!DscannerComponent(workspaceRoot)
+	auto result = backend.best!DscannerComponent(params.textDocument.uri.uriToFile)
 		.listDefinitions(uriToFile(params.textDocument.uri), document.text).getYield;
 	SymbolInformationEx[] ret;
 	foreach (def; result)

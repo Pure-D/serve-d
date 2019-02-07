@@ -11,7 +11,7 @@ import std.path;
 
 DietComplete[string] dietFileCache;
 
-DietComplete updateDietFile(string file, string workspaceRoot, string content)
+DietComplete updateDietFile(string file, string content)
 {
 	if (auto existing = file in dietFileCache)
 	{

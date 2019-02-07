@@ -271,8 +271,10 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 {
 	import painlessjson : fromJSON;
 
-	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	Document document = documents[params.textDocument.uri];
+	auto instance = activeInstance = backend.getBestInstance(document.uri.uriToFile);
+	trace("Completing from instance ", instance ? instance.cwd : "null");
+
 	if (document.uri.toLower.endsWith("dscanner.ini"))
 	{
 		auto possibleFields = backend.get!DscannerComponent.listAllIniFields;
@@ -313,22 +315,25 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 	}
 	else
 	{
+		if (!instance)
+			return CompletionList.init;
+
 		if (document.languageId == "d")
-			return provideDSourceComplete(params, workspaceRoot, document);
+			return provideDSourceComplete(params, instance, document);
 		else if (document.languageId == "diet")
-			return provideDietSourceComplete(params, workspaceRoot, document);
+			return provideDietSourceComplete(params, instance, document);
 		else
 			return CompletionList.init;
 	}
 }
 
 CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
-		string workspaceRoot, ref Document document)
+		WorkspaceD.Instance instance, ref Document document)
 {
 	import served.diet;
 	import dc = dietc.complete;
 
-	auto completion = updateDietFile(document.uri.uriToFile, workspaceRoot, document.text);
+	auto completion = updateDietFile(document.uri.uriToFile, document.text);
 
 	size_t offset = document.positionToBytes(params.position);
 	auto raw = completion.completeAt(offset);
@@ -338,11 +343,10 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 	{
 		string code;
 		dc.extractD(completion, offset, code, offset);
-		if (offset <= code.length && backend.has!DCDComponent(workspaceRoot))
+		if (offset <= code.length && instance.has!DCDComponent)
 		{
 			info("DCD Completing Diet for ", code, " at ", offset);
-			auto dcd = backend.get!DCDComponent(workspaceRoot).listCompletion(code,
-					cast(int) offset).getYield;
+			auto dcd = instance.get!DCDComponent.listCompletion(code, cast(int) offset).getYield;
 			if (dcd.type == DCDCompletions.Type.identifiers)
 			{
 				auto d = workspace(params.textDocument.uri).config.d;
@@ -368,7 +372,7 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 }
 
 CompletionList provideDSourceComplete(TextDocumentPositionParams params,
-		string workspaceRoot, ref Document document)
+		WorkspaceD.Instance instance, ref Document document)
 {
 	string line = document.lineAt(params.position);
 	string prefix = line[0 .. min($, params.position.character)];
@@ -386,14 +390,13 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 	auto byteOff = cast(int) document.positionToBytes(params.position);
 	DCDCompletions result = DCDCompletions.empty;
 	joinAll({
-		if (backend.has!DCDComponent(workspaceRoot))
-			result = backend.get!DCDComponent(workspaceRoot)
-				.listCompletion(document.text, byteOff).getYield;
+		if (instance.has!DCDComponent)
+			result = instance.get!DCDComponent.listCompletion(document.text, byteOff).getYield;
 	}, {
 		if (!line.strip.length)
 		{
-			auto defs = backend.get!DscannerComponent(workspaceRoot)
-				.listDefinitions(uriToFile(params.textDocument.uri), document.text).getYield;
+			auto defs = instance.get!DscannerComponent.listDefinitions(uriToFile(params.textDocument.uri),
+				document.text).getYield;
 			ptrdiff_t di = -1;
 			FuncFinder: foreach (i, def; defs)
 			{

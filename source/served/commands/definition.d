@@ -16,15 +16,15 @@ import io = std.stdio;
 @protocolMethod("textDocument/definition")
 ArrayOrSingle!Location provideDefinition(TextDocumentPositionParams params)
 {
-	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
-	if (!backend.has!DCDComponent(workspaceRoot))
+	auto instance = activeInstance = backend.getBestInstance!DCDComponent(params.textDocument.uri.uriToFile);
+	if (!instance)
 		return ArrayOrSingle!Location.init;
 
 	auto document = documents[params.textDocument.uri];
 	if (document.languageId != "d")
 		return ArrayOrSingle!Location.init;
 
-	auto result = backend.get!DCDComponent(workspaceRoot).findDeclaration(document.text,
+	auto result = instance.get!DCDComponent.findDeclaration(document.text,
 			cast(int) document.positionToBytes(params.position)).getYield;
 	if (result == DCDDeclaration.init)
 		return ArrayOrSingle!Location.init;
@@ -46,7 +46,7 @@ ArrayOrSingle!Location provideDefinition(TextDocumentPositionParams params)
 	{
 		string abs = result.file;
 		if (!abs.isAbsolute)
-			abs = buildPath(workspaceRoot, abs);
+			abs = buildPath(instance.cwd, abs);
 		pos = Position.init;
 		size_t totalLen;
 		foreach (line; io.File(abs).byLine(io.KeepTerminator.yes))
@@ -64,16 +64,16 @@ ArrayOrSingle!Location provideDefinition(TextDocumentPositionParams params)
 @protocolMethod("textDocument/hover")
 Hover provideHover(TextDocumentPositionParams params)
 {
-	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
+	string file = params.textDocument.uri.uriToFile;
 
-	if (!backend.has!DCDComponent(workspaceRoot))
+	if (!backend.hasBest!DCDComponent(file))
 		return Hover.init;
 
 	auto document = documents[params.textDocument.uri];
 	if (document.languageId != "d")
 		return Hover.init;
 
-	auto docs = backend.get!DCDComponent(workspaceRoot).getDocumentation(document.text,
+	auto docs = backend.best!DCDComponent(file).getDocumentation(document.text,
 			cast(int) document.positionToBytes(params.position)).getYield;
 	Hover ret;
 	ret.contents = docs.ddocToMarked;

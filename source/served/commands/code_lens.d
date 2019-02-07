@@ -21,8 +21,8 @@ import std.datetime.systime : SysTime, Clock;
 @protocolMethod("textDocument/codeLens")
 CodeLens[] provideCodeLens(CodeLensParams params)
 {
-	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	auto document = documents[params.textDocument.uri];
+	string file = document.uri.uriToFile;
 	if (document.languageId != "d")
 		return [];
 	CodeLens[] ret;
@@ -31,9 +31,13 @@ CodeLens[] provideCodeLens(CodeLensParams params)
 		{
 			size_t index = match.pre.length;
 			auto pos = document.bytesToPosition(index);
-			ret ~= CodeLens(TextRange(pos), Optional!Command.init, JSONValue(["type"
-					: JSONValue("importcompilecheck"), "code" : JSONValue(match.hit),
-					"module" : JSONValue(match[1]), "workspace" : JSONValue(workspaceRoot)]));
+			ret ~= CodeLens(TextRange(pos), Optional!Command.init,
+					JSONValue([
+							"type": JSONValue("importcompilecheck"),
+							"code": JSONValue(match.hit),
+							"module": JSONValue(match[1]),
+							"file": JSONValue(file)
+						]));
 		}
 	return ret;
 }
@@ -57,12 +61,12 @@ CodeLens resolveCodeLens(CodeLens lens)
 			auto module_ = "module" in lens.data;
 			if (!module_ || module_.type != JSON_TYPE.STRING || !module_.str.length)
 				throw new Exception("No valid module provided");
-			auto workspace = "workspace" in lens.data;
-			if (!workspace || workspace.type != JSON_TYPE.STRING || !workspace.str.length)
-				throw new Exception("No valid workspace provided");
-			int decMs = getImportCompilationTime(code.str, module_.str, workspace.str);
-			lens.command = Command((decMs < 10 ? "no noticable effect"
-					: "~" ~ decMs.to!string ~ "ms") ~ " for importing this");
+			auto file = "file" in lens.data;
+			if (!file || file.type != JSON_TYPE.STRING || !file.str.length)
+				throw new Exception("No valid file provided");
+			int decMs = getImportCompilationTime(code.str, module_.str, file.str);
+			lens.command = Command((decMs < 10
+					? "no noticable effect" : "~" ~ decMs.to!string ~ "ms") ~ " for importing this");
 			return lens;
 		}
 		catch (Exception)
@@ -76,7 +80,7 @@ CodeLens resolveCodeLens(CodeLens lens)
 }
 
 bool importCompilationTimeRunning;
-int getImportCompilationTime(string code, string module_, string workspaceRoot)
+int getImportCompilationTime(string code, string module_, string file)
 {
 	import std.math : round;
 
@@ -111,7 +115,7 @@ int getImportCompilationTime(string code, string module_, string workspaceRoot)
 	scope (exit)
 		importCompilationTimeRunning = false;
 	// run blocking so we don't compute multiple in parallel
-	auto ret = backend.get!DMDComponent(workspaceRoot).measureSync(code, null, 20, 500);
+	auto ret = backend.best!DMDComponent(file).measureSync(code, null, 20, 500);
 	if (!ret.success)
 		throw new Exception("Compilation failed");
 	auto msecs = cast(int) round(ret.duration.total!"msecs" / 5.0) * 5;

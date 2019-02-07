@@ -72,19 +72,21 @@ DiagnosticSeverity mapDubLintType(ErrorType type)
 
 void lint(Document document)
 {
-	auto workspaceRoot = workspaceRootFor(document.uri);
+	auto instance = activeInstance = backend.getBestInstance!DubComponent(document.uri.uriToFile);
+	if (!instance)
+		return;
 
 	auto fileConfig = config(document.uri);
 	if (!fileConfig.d.enableLinting || !fileConfig.d.enableDubLinting)
 		return;
 
 	stderr.writeln("Running dub build");
-	auto imports = backend.get!DubComponent(workspaceRoot).stringImports;
-	auto issues = backend.get!DubComponent(workspaceRoot).build.getYield;
+	auto imports = instance.get!DubComponent.stringImports;
+	auto issues = instance.get!DubComponent.build.getYield;
 	PublishDiagnosticsParams[] result;
 	foreach (issue; issues)
 	{
-		auto uri = uriFromFile(fixPath(workspaceRoot, issue.file, imports));
+		auto uri = uriFromFile(fixPath(instance.cwd, issue.file, imports));
 		Diagnostic error;
 		error.range = TextRange(Position(issue.line - 1, issue.column - 1));
 		error.severity = mapDubLintType(issue.type);
