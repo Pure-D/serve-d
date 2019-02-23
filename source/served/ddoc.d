@@ -43,7 +43,7 @@ string ddocToMarkdown(string ddoc)
 	Comment comment;
 	try
 	{
-		comment = parseComment(prepareDDoc(ddoc), markdownMacros);
+		comment = parseComment(prepareDDoc(ddoc), markdownMacros, true);
 	}
 	catch (Exception e)
 	{
