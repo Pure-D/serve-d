@@ -140,6 +140,12 @@ struct Document
 		return cur;
 	}
 
+	TextRange wordRangeAt(Position position)
+	{
+		auto chars = wordInLine(lineAt(position), position.character);
+		return TextRange(Position(position.line, chars[0]), Position(position.line, chars[1]));
+	}
+
 	/// Returns the text of a line at the given position.
 	string lineAt(Position position)
 	{
@@ -349,4 +355,49 @@ struct PerDocumentCache(T)
 		}
 		entries ~= Entry(document, data);
 	}
+}
+
+/// Returns a range of the identifier/word at the given position.
+uint[2] wordInLine(string line, uint character)
+{
+	size_t index = 0;
+	uint offs = 0;
+
+	uint lastStart = character;
+	uint start = character, end = character + 1;
+	bool searchStart = true;
+
+	while (index < line.length)
+	{
+		const c = decode(line, index);
+		const l = cast(uint) c.codeLength!wchar;
+
+		if (searchStart)
+		{
+			if (isIdentifierSeparatingChar(c))
+				lastStart = offs + l;
+
+			if (offs + l >= character)
+			{
+				start = lastStart;
+				searchStart = false;
+			}
+
+			offs += l;
+		}
+		else
+		{
+			end = offs;
+			offs += l;
+			if (isIdentifierSeparatingChar(c))
+				break;
+		}
+	}
+	return [start, end];
+}
+
+bool isIdentifierSeparatingChar(dchar c)
+{
+	return c < 48 || (c > 57 && c < 65) || c == '[' || c == '\\' || c == ']'
+		|| c == '`' || (c > 122 && c < 128) || c == '\u2028' || c == '\u2029'; // line separators
 }

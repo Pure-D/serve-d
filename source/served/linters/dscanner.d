@@ -20,7 +20,8 @@ enum DiagnosticSlot = 0;
 
 void lint(Document document)
 {
-	auto instance = activeInstance = backend.getBestInstance!DscannerComponent(document.uri.uriToFile);
+	auto instance = activeInstance = backend.getBestInstance!DscannerComponent(
+			document.uri.uriToFile);
 	if (!instance)
 		return;
 
@@ -55,7 +56,7 @@ void lint(Document document)
 					s["Line is longer than ".length .. $ - " characters".length].to!uint),
 					Position(cast(uint) issue.line - 1, 1000));
 		else
-			d.range = TextRange(Position(cast(uint) issue.line - 1, cast(uint) issue.column - 1));
+			d.range = document.wordRangeAt(Position(cast(uint) issue.line - 1, cast(uint) issue.column - 1));
 		d.severity = issue.type ? DiagnosticSeverity.warning : DiagnosticSeverity.error;
 		d.source = DScannerDiagnosticSource;
 		d.message = issue.description;
