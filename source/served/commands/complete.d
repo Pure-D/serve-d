@@ -322,9 +322,71 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 			return provideDSourceComplete(params, instance, document);
 		else if (document.languageId == "diet")
 			return provideDietSourceComplete(params, instance, document);
+		else if (document.languageId == "dml")
+			return provideDMLSourceComplete(params, instance, document);
 		else
 			return CompletionList.init;
 	}
+}
+
+CompletionList provideDMLSourceComplete(TextDocumentPositionParams params,
+		WorkspaceD.Instance instance, ref Document document)
+{
+	import workspaced.com.dlangui : DlanguiComponent, CompletionType;
+
+	CompletionList ret;
+
+	auto items = backend.get!DlanguiComponent.complete(document.text,
+			cast(int) document.positionToBytes(params.position)).getYield();
+	ret.items.length = items.length;
+	foreach (i, item; items)
+	{
+		CompletionItem translated;
+
+		translated.label = item.value;
+		if (item.documentation.length)
+			translated.documentation = MarkupContent(item.documentation).opt;
+		if (item.enumName.length)
+			translated.detail = item.enumName.opt;
+
+		switch (item.type)
+		{
+		case CompletionType.Class:
+			translated.kind = CompletionItemKind.class_;
+			break;
+		case CompletionType.String:
+			translated.kind = CompletionItemKind.value;
+			break;
+		case CompletionType.Number:
+			translated.kind = CompletionItemKind.value;
+			break;
+		case CompletionType.Color:
+			translated.kind = CompletionItemKind.color;
+			break;
+		case CompletionType.EnumDefinition:
+			translated.kind = CompletionItemKind.enum_;
+			break;
+		case CompletionType.EnumValue:
+			translated.kind = CompletionItemKind.enumMember;
+			break;
+		case CompletionType.Rectangle:
+			translated.kind = CompletionItemKind.typeParameter;
+			break;
+		case CompletionType.Boolean:
+			translated.kind = CompletionItemKind.constant;
+			break;
+		case CompletionType.Keyword:
+			translated.kind = CompletionItemKind.keyword;
+			break;
+		default:
+		case CompletionType.Undefined:
+			break;
+		}
+
+		ret.items[i] = translated;
+	}
+
+	return ret;
 }
 
 CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
