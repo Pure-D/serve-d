@@ -343,6 +343,7 @@ CompletionList provideDMLSourceComplete(TextDocumentPositionParams params,
 	{
 		CompletionItem translated;
 
+		translated.sortText = ((item.type == CompletionType.Class ? "1." : "0.") ~ item.value).opt;
 		translated.label = item.value;
 		if (item.documentation.length)
 			translated.documentation = MarkupContent(item.documentation).opt;
