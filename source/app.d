@@ -15,9 +15,10 @@ import std.experimental.logger;
 
 import served.fibermanager;
 import served.filereader;
+import served.http_wrap;
 import served.jsonrpc;
-import served.types;
 import served.translate;
+import served.types;
 
 static import served.extension;
 
@@ -174,11 +175,13 @@ int main(string[] args)
 
 	bool printVer;
 	string[] features;
+	string[] provides;
 	string lang = "en";
 	bool wait;
 	//dfmt off
 	auto argInfo = args.getopt(
 		"r|require", "Adds a feature set that is required. Unknown feature sets will intentionally crash on startup", &features,
+		"p|provide", "Features to let the editor handle for better integration", &provides,
 		"v|version", "Print version of program", &printVer,
 		"lang", "Change the language of GUI messages", &lang,
 		"wait", "Wait for a second before starting (for debugging)", &wait);
@@ -209,6 +212,20 @@ int main(string[] args)
 		if (!IncludedFeatures.canFind(feature.toLower.strip))
 			throw new Exception("Feature set '" ~ feature ~ "' not in this version of serve-d");
 	trace("Features fulfilled");
+
+	foreach (provide; provides)
+	{
+		switch (provide)
+		{
+		case "http":
+			letEditorDownload = true;
+			trace("Interactive HTTP downloads handled via editor");
+			break;
+		default:
+			warningf("Unknown --provide flag '%s' provided. Maybe serve-d is outdated?", provide);
+			break;
+		}
+	}
 
 	version (Windows)
 		auto input = new WindowsStdinReader();

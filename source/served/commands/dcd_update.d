@@ -1,7 +1,8 @@
 module served.commands.dcd_update;
 
-import served.git_build;
 import served.extension;
+import served.git_build;
+import served.http_wrap;
 import served.types;
 
 import workspaced.api;
@@ -101,15 +102,17 @@ void updateDCD()
 		else
 			static assert(false);
 
-		import std.net.curl : download;
 		import std.process : pipeProcess, Redirect, Config, wait;
 		import std.zip : ZipArchive;
+		import core.thread : Fiber;
 
 		try
 		{
 			rpc.notifyMethod("coded/logInstall", "Downloading from " ~ url ~ " to " ~ outputFolder);
-			string destDir = buildPath(outputFolder, url.baseName);
-			download(url, destDir);
+			string destFile = buildPath(outputFolder, url.baseName);
+
+			downloadFile(url, "Downloading DCD...", destFile);
+
 			rpc.notifyMethod("coded/logInstall", "Extracting download...");
 			if (url.endsWith(".tar.gz"))
 			{
@@ -122,7 +125,7 @@ void updateDCD()
 			}
 			else if (url.endsWith(".zip"))
 			{
-				auto zip = new ZipArchive(fs.read(destDir));
+				auto zip = new ZipArchive(fs.read(destFile));
 				foreach (name, am; zip.directory)
 				{
 					if (name.isAbsolute)
