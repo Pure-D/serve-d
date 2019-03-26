@@ -106,12 +106,16 @@ void updateDCD()
 		import std.zip : ZipArchive;
 		import core.thread : Fiber;
 
+		string destFile = buildPath(outputFolder, url.baseName);
+
 		try
 		{
 			rpc.notifyMethod("coded/logInstall", "Downloading from " ~ url ~ " to " ~ outputFolder);
-			string destFile = buildPath(outputFolder, url.baseName);
 
-			downloadFile(url, "Downloading DCD...", destFile);
+			if (fs.exists(destFile))
+				rpc.notifyMethod("coded/logInstall", "Zip file already exists! Trying to install existing zip.");
+			else
+				downloadFile(url, "Downloading DCD...", destFile);
 
 			rpc.notifyMethod("coded/logInstall", "Extracting download...");
 			if (url.endsWith(".tar.gz"))
@@ -149,7 +153,10 @@ void updateDCD()
 		}
 		catch (Exception e)
 		{
-			rpc.notifyMethod("coded/logInstall", "Failed installing: " ~ e.toString);
+			rpc.notifyMethod("coded/logInstall", "Failed installing: " ~ e.toString ~ "\n\n");
+			rpc.notifyMethod("coded/logInstall",
+					"If you have troube downloading via code-d, try manually downloading the DCD archive and placing it in "
+					~ destFile ~ "!");
 			success = false;
 		}
 	}
