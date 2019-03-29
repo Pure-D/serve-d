@@ -2,6 +2,9 @@ module served.nothrow_fs;
 
 public import fs = std.file;
 
+import std.experimental.logger;
+import std.utf;
+
 auto tryDirEntries(string path, fs.SpanMode mode, bool followSymlink = true)
 {
 	try
@@ -48,6 +51,11 @@ public:
 		{
 			return crashed = true;
 		}
+		catch (UTFException e)
+		{
+			(() @trusted => error("Got malformed UTF string in dirIterator, something has probably corrupted. ", e))();
+			return crashed = true;
+		}
 	}
 
 	@property auto front()
@@ -59,8 +67,13 @@ public:
 		catch (fs.FileException)
 		{
 			crashed = true;
-			return fs.DirEntry.init;
 		}
+		catch (UTFException e)
+		{
+			(() @trusted => error("Got malformed UTF string in dirIterator, something has probably corrupted. ", e))();
+			crashed = true;
+		}
+		return fs.DirEntry.init;
 	}
 
 	void popFront()
@@ -71,6 +84,11 @@ public:
 		}
 		catch (fs.FileException)
 		{
+			crashed = true;
+		}
+		catch (UTFException e)
+		{
+			(() @trusted => error("Got malformed UTF string in dirIterator, something has probably corrupted. ", e))();
 			crashed = true;
 		}
 	}

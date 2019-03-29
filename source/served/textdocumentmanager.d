@@ -2,7 +2,7 @@ module served.textdocumentmanager;
 
 import std.algorithm;
 import std.json;
-import std.utf : decode, codeLength;
+import std.utf : decode, codeLength, UseReplacementDchar;
 
 import served.jsonrpc;
 import served.protocol;
@@ -38,7 +38,7 @@ struct Document
 		size_t index;
 		while (index < offset)
 		{
-			const c = decode(text, bytes);
+			const c = decode!(UseReplacementDchar.yes)(text, bytes);
 			index += c.codeLength!wchar;
 		}
 		return bytes;
@@ -50,7 +50,7 @@ struct Document
 		size_t index;
 		while (index < bytes)
 		{
-			const c = decode(text, index);
+			const c = decode!(UseReplacementDchar.yes)(text, index);
 			offset += c.codeLength!wchar;
 		}
 		return offset;
@@ -65,7 +65,7 @@ struct Document
 		{
 			if (position == cur)
 				return offset;
-			const c = decode(text, index);
+			const c = decode!(UseReplacementDchar.yes)(text, index);
 			offset += c.codeLength!wchar;
 			cur.character += c.codeLength!wchar;
 			if (c == '\n')
@@ -87,7 +87,7 @@ struct Document
 		{
 			if (position == cur)
 				return index;
-			const c = decode(text, index);
+			const c = decode!(UseReplacementDchar.yes)(text, index);
 			cur.character += c.codeLength!wchar;
 			if (c == '\n')
 			{
@@ -109,7 +109,7 @@ struct Document
 		{
 			if (offs >= offset)
 				return cur;
-			const c = decode(text, index);
+			const c = decode!(UseReplacementDchar.yes)(text, index);
 			offs += c.codeLength!wchar;
 			cur.character += c.codeLength!wchar;
 			if (c == '\n')
@@ -129,7 +129,7 @@ struct Document
 		{
 			if (index >= offset)
 				return cur;
-			const c = decode(text, index);
+			const c = decode!(UseReplacementDchar.yes)(text, index);
 			cur.character += c.codeLength!wchar;
 			if (c == '\n')
 			{
@@ -173,7 +173,7 @@ struct Document
 					break;
 			}
 			wasStart = false;
-			const c = decode(text, index);
+			const c = decode!(UseReplacementDchar.yes)(text, index);
 			cur.character += c.codeLength!wchar;
 			if (c == '\n')
 			{
@@ -219,7 +219,7 @@ you?`;
 		{
 			if (curLine > line)
 				return EolType.lf;
-			auto c = decode(text, index);
+			auto c = decode!(UseReplacementDchar.yes)(text, index);
 			if (c == '\n')
 			{
 				if (curLine == line)
