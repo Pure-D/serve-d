@@ -30,7 +30,7 @@ string[] searchFile(string query)
 
 	string[] ret;
 	string[] importFiles, importPaths;
-	importPaths = selectedWorkspace.config.stdlibPath();
+	importPaths = selectedWorkspace.stdlibPath();
 
 	foreach (instance; backend.instances)
 	{
@@ -87,7 +87,7 @@ string[] findFilesByModule(string module_)
 
 	string[] ret;
 	string[] importFiles, importPaths;
-	importPaths = selectedWorkspace.config.stdlibPath();
+	importPaths = selectedWorkspace.stdlibPath();
 
 	foreach (instance; backend.instances)
 	{

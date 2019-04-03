@@ -98,7 +98,7 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 		{
 		case "d.stdlibPath":
 			if (backend.has!DCDComponent(workspaceFs))
-				backend.get!DCDComponent(workspaceFs).addImports(config.stdlibPath);
+				backend.get!DCDComponent(workspaceFs).addImports(config.stdlibPath(workspaceFs));
 			break;
 		case "d.projectImportPaths":
 			if (backend.has!DCDComponent(workspaceFs))
@@ -639,8 +639,9 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 			.findAndSelectPort(cast(ushort) 9166).getYield;
 		trace("Setting port to ", port);
 		instance.config.set("dcd", "port", cast(int) port);
-		trace("startServer ", proj.config.stdlibPath);
-		backend.get!DCDComponent(instance.cwd).startServer(proj.config.stdlibPath);
+		auto stdlibPath = proj.stdlibPath;
+		trace("startServer ", stdlibPath);
+		backend.get!DCDComponent(instance.cwd).startServer(stdlibPath);
 		trace("refreshImports");
 		backend.get!DCDComponent(instance.cwd).refreshImports();
 	}

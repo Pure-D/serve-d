@@ -6,12 +6,20 @@ public import served.textdocumentmanager;
 
 import std.algorithm;
 import std.array;
+import std.ascii;
 import std.conv;
 import std.experimental.logger;
 import std.json;
 import std.meta;
 import std.path;
+import std.process : environment;
 import std.range;
+import std.string;
+import std.uni : sicmp;
+import std.utf;
+
+import fs = std.file;
+import io = std.stdio;
 
 import workspaced.api;
 
@@ -118,7 +126,7 @@ struct Configuration
 	Editor editor;
 	Git git;
 
-	string[] stdlibPath()
+	string[] stdlibPath(string cwd = null)
 	{
 		auto p = d.stdlibPath;
 		if (p.type == JSON_TYPE.ARRAY)
@@ -127,14 +135,68 @@ struct Configuration
 		{
 			if (p.type != JSON_TYPE.STRING || p.str == "auto")
 			{
+				string[] ret;
+				if (cwd.length && fs.exists(chainPath(cwd, "dmd.conf"))
+						&& parseDmdConfImports(buildPath(cwd, "dmd.conf"), ret))
+					return ret;
+
 				version (Windows)
+				{
+					auto dmdPath = searchPathFor("dmd.exe");
+					if (dmdPath.length)
+					{
+						auto dmdDir = dirName(dmdPath);
+						if (fs.exists(chainPath(dmdDir, "dmd.conf"))
+								&& parseDmdConfImports(buildPath(dmdDir, "dmd.conf"), ret))
+							return ret;
+
+						bool haveDRuntime = fs.exists(chainPath(dmdDir, "..", "..", "src",
+								"druntime", "import"));
+						bool havePhobos = fs.exists(chainPath(dmdDir, "..", "..", "src", "phobos"));
+						if (haveDRuntime && havePhobos)
+							return [
+								buildNormalizedPath(dmdDir, "..", "..", "src", "druntime",
+										"import"),
+								buildNormalizedPath(dmdDir, "..", "..", "src", "phobos")
+							];
+						else if (haveDRuntime)
+							return [
+								buildNormalizedPath(dmdDir, "..", "..", "src", "druntime", "import")
+							];
+						else if (havePhobos)
+							return [buildNormalizedPath(dmdDir, "..", "..", "src", "phobos")];
+					}
+
 					return [`C:\D\dmd2\src\druntime\import`, `C:\D\dmd2\src\phobos`];
-				else version (OSX)
-					return [
-						`/Library/D/dmd/src/druntime/import`, `/Library/D/dmd/src/phobos`
-					];
+				}
 				else version (Posix)
-					return [`/usr/include/dmd/druntime/import`, `/usr/include/dmd/phobos`];
+				{
+					string home = environment.get("HOME");
+					if (home.length && fs.exists(chainPath(home, "dmd.conf"))
+							&& parseDmdConfImports(buildPath(home, "dmd.conf"), ret))
+						return ret;
+
+					auto dmdPath = searchPathFor("dmd");
+					if (dmdPath.length)
+					{
+						auto dmdDir = dirName(dmdPath);
+						if (fs.exists(chainPath(dmdDir, "dmd.conf"))
+								&& parseDmdConfImports(buildPath(dmdDir, "dmd.conf"), ret))
+							return ret;
+					}
+
+					if (fs.exists("/etc/dmd.conf") && parseDmdConfImports("/etc/dmd.conf", ret))
+						return ret;
+
+					version (OSX)
+						return [
+							`/Library/D/dmd/src/druntime/import`, `/Library/D/dmd/src/phobos`
+						];
+					else
+						return [
+							`/usr/include/dmd/druntime/import`, `/usr/include/dmd/phobos`
+						];
+				}
 				else
 				{
 					pragma(msg,
@@ -219,6 +281,11 @@ struct Workspace
 		}
 		else
 			startupErrorNotifications[folder] = error;
+	}
+
+	string[] stdlibPath()
+	{
+		return config.stdlibPath(folder.uri.uriToFile);
 	}
 }
 
@@ -438,13 +505,13 @@ string uriToFile(DocumentUri uri)
 	testUri(`/home/pi/.bashrc`, `file:///home/pi/.bashrc`);
 	version (Windows)
 	{
-	// taken from vscode-uri
-	testUri(`c:\test with %\path`, `file:///c%3A/test%20with%20%25/path`);
-	testUri(`c:\test with %25\path`, `file:///c%3A/test%20with%20%2525/path`);
-	testUri(`c:\test with %25\c#code`, `file:///c%3A/test%20with%20%2525/c%23code`);
-	testUri(`\\shäres\path\c#\plugin.json`, `file://sh%C3%A4res/path/c%23/plugin.json`);
-	testUri(`\\localhost\c$\GitDevelopment\express`, `file://localhost/c%24/GitDevelopment/express`);
-}
+		// taken from vscode-uri
+		testUri(`c:\test with %\path`, `file:///c%3A/test%20with%20%25/path`);
+		testUri(`c:\test with %25\path`, `file:///c%3A/test%20with%20%2525/path`);
+		testUri(`c:\test with %25\c#code`, `file:///c%3A/test%20with%20%2525/c%23code`);
+		testUri(`\\shäres\path\c#\plugin.json`, `file://sh%C3%A4res/path/c%23/plugin.json`);
+		testUri(`\\localhost\c$\GitDevelopment\express`, `file://localhost/c%24/GitDevelopment/express`);
+	}
 }
 
 string userPath(string path)
@@ -503,4 +570,149 @@ ptrdiff_t binarySearch(alias sort = "a<b", T)(T[] arr, T value)
 		return cast(ptrdiff_t) sorted[0].length;
 	else
 		return ~cast(ptrdiff_t) sorted[0].length;
+}
+
+private string searchPathFor()(scope const(char)[] executable)
+{
+	auto path = environment.get("PATH");
+
+	version (Posix)
+		char separator = ':';
+	else version (Windows)
+		char separator = ';';
+	else
+		static assert(false, "No path separator character");
+
+	foreach (dir; path.splitter(separator))
+	{
+		auto execPath = buildPath(dir, executable);
+		if (fs.exists(execPath))
+			return execPath;
+	}
+
+	return null;
+}
+
+bool parseDmdConfImports(R)(R path, out string[] paths)
+{
+	enum Region
+	{
+		none,
+		env32,
+		env64
+	}
+
+	Region match, current;
+
+	foreach (line; io.File(path).byLine)
+	{
+		line = line.strip;
+		if (!line.length)
+			continue;
+
+		if (line.sicmp("[Environment32]") == 0)
+			current = Region.env32;
+		else if (line.sicmp("[Environment64]") == 0)
+			current = Region.env64;
+		else if (line.startsWith("DFLAGS=") && current >= match)
+		{
+			version (Windows)
+				paths = parseDflagsImports(line["DFLAGS=".length .. $].stripLeft, true);
+			else
+				paths = parseDflagsImports(line["DFLAGS=".length .. $].stripLeft, false);
+			match = current;
+		}
+	}
+
+	return match != Region.none || paths.length > 0;
+}
+
+string[] parseDflagsImports(scope const char[] options, bool windows)
+{
+	auto ret = appender!(string[]);
+	size_t i = options.indexOf("-I");
+	while (i != cast(size_t)-1)
+	{
+		if (i == 0 || options[i - 1] == '"' || options[i - 1] == '\'' || options[i - 1] == ' ')
+		{
+			dchar quote = i == 0 ? ' ' : options[i - 1];
+			i += "-I".length;
+			ret.put(parseArgumentWord(options, quote, i, windows));
+		}
+		else
+			i += "-I".length;
+
+		i = options.indexOf("-I", i);
+	}
+	return ret.data;
+}
+
+private string parseArgumentWord(const scope char[] data, dchar quote, ref size_t i, bool windows)
+{
+	bool allowEscapes = quote != '\'';
+	bool inEscape;
+	bool ending = quote == ' ';
+	auto part = appender!string;
+	while (i < data.length)
+	{
+		auto c = decode!(UseReplacementDchar.yes)(data, i);
+		if (inEscape)
+		{
+			part.put(c);
+			inEscape = false;
+		}
+		else if (ending)
+		{
+			// -I"abc"def
+			// or
+			// -I'abc'\''def'
+			if (c.isWhite)
+				break;
+			else if (c == '\\' && !windows)
+				inEscape = true;
+			else if (c == '\'')
+			{
+				quote = c;
+				allowEscapes = false;
+				ending = false;
+			}
+			else if (c == '"')
+			{
+				quote = c;
+				allowEscapes = true;
+				ending = false;
+			}
+			else
+				part.put(c);
+		}
+		else
+		{
+			if (c == quote)
+				ending = true;
+			else if (c == '\\' && allowEscapes && !windows)
+				inEscape = true;
+			else
+				part.put(c);
+		}
+	}
+	return part.data;
+}
+
+unittest
+{
+	void test(string input, string[] expect)
+	{
+		auto actual = parseDflagsImports(input, false);
+		assert(actual == expect, actual.to!string ~ " != " ~ expect.to!string);
+	}
+
+	test(`a`, []);
+	test(`-I`, [``]);
+	test(`-Iabc`, [`abc`]);
+	test(`-Iab\\cd -Ief`, [`ab\cd`, `ef`]);
+	test(`-Iab\ cd -Ief`, [`ab cd`, `ef`]);
+	test(`-I/usr/include/dmd/phobos -I/usr/include/dmd/druntime/import -L-L/usr/lib/x86_64-linux-gnu -L--export-dynamic -fPIC`,
+			[`/usr/include/dmd/phobos`, `/usr/include/dmd/druntime/import`]);
+	test(`-I/usr/include/dmd/phobos -L-L/usr/lib/x86_64-linux-gnu -I/usr/include/dmd/druntime/import -L--export-dynamic -fPIC`,
+			[`/usr/include/dmd/phobos`, `/usr/include/dmd/druntime/import`]);
 }
