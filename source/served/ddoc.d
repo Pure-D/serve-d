@@ -280,8 +280,9 @@ unittest
 		~ "/** this is some test code */\n"
 		~ "assert (whatever);\n"
 		~ "```\n\n"
+		~ "**Params**\n\n"
 		~ "`a` **param**\n\n"
-		~ "*Returns* — nothing of consequence\n\n";
+		~ "**Returns** — nothing of consequence\n\n";
 	//dfmt on
 
 	assertEqual(ddocToMarkdown(comment), commentMarkdown);

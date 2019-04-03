@@ -436,12 +436,15 @@ string uriToFile(DocumentUri uri)
 	}
 
 	testUri(`/home/pi/.bashrc`, `file:///home/pi/.bashrc`);
+	version (Windows)
+	{
 	// taken from vscode-uri
 	testUri(`c:\test with %\path`, `file:///c%3A/test%20with%20%25/path`);
 	testUri(`c:\test with %25\path`, `file:///c%3A/test%20with%20%2525/path`);
 	testUri(`c:\test with %25\c#code`, `file:///c%3A/test%20with%20%2525/c%23code`);
 	testUri(`\\shäres\path\c#\plugin.json`, `file://sh%C3%A4res/path/c%23/plugin.json`);
 	testUri(`\\localhost\c$\GitDevelopment\express`, `file://localhost/c%24/GitDevelopment/express`);
+}
 }
 
 string userPath(string path)
