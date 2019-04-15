@@ -793,7 +793,8 @@ int changeTimeout;
 @protocolNotification("textDocument/didChange")
 void onDidChangeDocument(DocumentLinkParams params)
 {
-	doDscanner(params);
+	if (config(params.textDocument.uri).d.lintOnFileOpen)
+		doDscanner(params);
 }
 
 @protocolNotification("coded/doDscanner")

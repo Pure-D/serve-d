@@ -91,6 +91,7 @@ struct Configuration
 		string[] extraRoots;
 		ManyProjectsAction manyProjectsAction = ManyProjectsAction.ask;
 		int manyProjectsThreshold = 4;
+		bool lintOnFileOpen = true;
 	}
 
 	struct DFmt
