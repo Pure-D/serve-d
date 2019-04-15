@@ -68,7 +68,8 @@ bool safe(alias fn, Args...)(Args args)
 	}
 }
 
-void changedConfig(string workspaceUri, string[] paths, served.types.Configuration config)
+void changedConfig(string workspaceUri, string[] paths,
+		served.types.Configuration config, bool allowFallback = false)
 {
 	StopWatch sw;
 	sw.start();
@@ -79,11 +80,18 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 		doGlobalStartup();
 	}
 	Workspace* proj = &workspace(workspaceUri);
-	if (proj is &fallbackWorkspace)
+	bool isFallback = proj is &fallbackWorkspace;
+	if (isFallback && !allowFallback)
 	{
 		error("Did not find workspace ", workspaceUri, " when updating config?");
 		return;
 	}
+	else if (isFallback)
+	{
+		trace("Updated fallback config (user settings) for sections ", paths);
+		return;
+	}
+
 	if (!proj.initialized)
 	{
 		doStartup(proj.folder.uri);
@@ -202,11 +210,14 @@ void processConfigChange(served.types.Configuration configuration)
 	if (capabilities.workspace.configuration && workspaces.length >= 2)
 	{
 		ConfigurationItem[] items;
+		foreach (section; configurationSections)
+			items ~= ConfigurationItem(Optional!string.init, opt(section)); // default workspace
+
 		foreach (workspace; workspaces)
 			foreach (section; configurationSections)
 				items ~= ConfigurationItem(opt(workspace.folder.uri), opt(section));
 		auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
-		if (res.result.type == JSON_TYPE.ARRAY)
+		if (res.result.type == JSON_TYPE.ARRAY && res.result.array.length >= 1)
 		{
 			JSONValue[] settings = res.result.array;
 			if (settings.length % configurationSections.length != 0)
@@ -217,12 +228,12 @@ void processConfigChange(served.types.Configuration configuration)
 			}
 			for (size_t i = 0; i < settings.length; i += configurationSections.length)
 			{
+				auto workspace = i == 0 ? &fallbackWorkspace : &workspaces[i / configurationSections.length];
 				string[] changed;
 				static foreach (n, section; configurationSections)
-					changed ~= workspaces[i / configurationSections.length].config.replaceSection!section(
+					changed ~= workspace.config.replaceSection!section(
 							settings[i + n].fromJSON!(configurationTypes[n]));
-				changedConfig(workspaces[i / configurationSections.length].folder.uri,
-						changed, workspaces[i / configurationSections.length].config);
+				changedConfig(workspace.folder.uri, changed, workspace.config, i == 0);
 			}
 		}
 	}
@@ -233,6 +244,7 @@ void processConfigChange(served.types.Configuration configuration)
 					"Client does not support configuration request, only applying config for first workspace.");
 		changedConfig(workspaces[0].folder.uri,
 				workspaces[0].config.replace(configuration), workspaces[0].config);
+		fallbackWorkspace.config = workspaces[0].config;
 	}
 }
 
@@ -243,15 +255,17 @@ bool syncConfiguration(string workspaceUri)
 	if (capabilities.workspace.configuration)
 	{
 		Workspace* proj = &workspace(workspaceUri);
-		if (proj is &fallbackWorkspace)
+		if (proj is &fallbackWorkspace && workspaceUri.length)
 		{
 			error("Did not find workspace ", workspaceUri, " when syncing config?");
 			return false;
 		}
 		ConfigurationItem[] items;
 		foreach (section; configurationSections)
-			items ~= ConfigurationItem(opt(proj.folder.uri), opt(section));
+			items ~= ConfigurationItem(workspaceUri.length
+					? opt(proj.folder.uri) : Optional!string.init, opt(section));
 		auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
+		trace("Sending workspace/configuration request for ", workspaceUri);
 		if (res.result.type == JSON_TYPE.ARRAY)
 		{
 			JSONValue[] settings = res.result.array;
@@ -265,7 +279,7 @@ bool syncConfiguration(string workspaceUri)
 			static foreach (n, section; configurationSections)
 				changed ~= proj.config.replaceSection!section(
 						settings[n].fromJSON!(configurationTypes[n]));
-			changedConfig(proj.folder.uri, changed, proj.config);
+			changedConfig(proj.folder.uri, changed, proj.config, workspaceUri.length == 0);
 			return true;
 		}
 		else
@@ -336,8 +350,13 @@ InitializeResult initialize(InitializeParams params)
 
 	setTimeout({
 		if (!syncedConfiguration && capabilities.workspace.configuration)
+		{
+			if (!syncConfiguration(null))
+				error("Syncing user configuration failed!");
+
 			foreach (ref workspace; workspaces)
 				syncConfiguration(workspace.folder.uri);
+		}
 	}, 1000);
 
 	return result;
@@ -787,14 +806,14 @@ void onDidOpenDocument(DidOpenTextDocumentParams params)
 	freshlyOpened[params.textDocument.uri] = FileOpenInfo(Clock.currTime);
 
 	if (config(params.textDocument.uri).d.lintOnFileOpen)
-	onDidChangeDocument(DocumentLinkParams(TextDocumentIdentifier(params.textDocument.uri)));
+		onDidChangeDocument(DocumentLinkParams(TextDocumentIdentifier(params.textDocument.uri)));
 }
 
 int changeTimeout;
 @protocolNotification("textDocument/didChange")
 void onDidChangeDocument(DocumentLinkParams params)
 {
-		doDscanner(params);
+	doDscanner(params);
 }
 
 @protocolNotification("coded/doDscanner")

@@ -380,6 +380,9 @@ ref Workspace handleThings(ref Workspace workspace, string uri, bool userExecute
 ref Workspace workspace(string uri, bool userExecuted = true,
 		string file = __FILE__, size_t line = __LINE__)
 {
+	if (!uri.length)
+		return fallbackWorkspace;
+
 	auto best = workspaceIndex(uri);
 	if (best == size_t.max)
 		return bestWorkspaceByDependency(uri).handleThings(uri, userExecuted, file, line);
