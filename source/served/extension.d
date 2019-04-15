@@ -813,7 +813,7 @@ void onDidOpenDocument(DidOpenTextDocumentParams params)
 void onDidCloseDocument(DidOpenTextDocumentParams params)
 {
 	// remove lint warnings for external projects
-	if (&workspace(params.textDocument.uri) is &fallbackWorkspace)
+	if (workspaceIndex(params.textDocument.uri) == size_t.max)
 	{
 		import served.linters.diagnosticmanager : diagnostics, updateDiagnostics;
 
