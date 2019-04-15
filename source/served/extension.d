@@ -809,6 +809,24 @@ void onDidOpenDocument(DidOpenTextDocumentParams params)
 		onDidChangeDocument(DocumentLinkParams(TextDocumentIdentifier(params.textDocument.uri)));
 }
 
+@protocolNotification("textDocument/didClose")
+void onDidCloseDocument(DidOpenTextDocumentParams params)
+{
+	// remove lint warnings for external projects
+	if (&workspace(params.textDocument.uri) is &fallbackWorkspace)
+	{
+		import served.linters.diagnosticmanager : diagnostics, updateDiagnostics;
+
+		foreach (ref coll; diagnostics)
+			foreach (ref diag; coll)
+				if (diag.uri == params.textDocument.uri)
+					diag.diagnostics = null;
+
+		updateDiagnostics(params.textDocument.uri);
+	}
+	// but keep warnings in local projects
+}
+
 int changeTimeout;
 @protocolNotification("textDocument/didChange")
 void onDidChangeDocument(DocumentLinkParams params)
