@@ -786,6 +786,7 @@ void onDidOpenDocument(DidOpenTextDocumentParams params)
 {
 	freshlyOpened[params.textDocument.uri] = FileOpenInfo(Clock.currTime);
 
+	if (config(params.textDocument.uri).d.lintOnFileOpen)
 	onDidChangeDocument(DocumentLinkParams(TextDocumentIdentifier(params.textDocument.uri)));
 }
 
@@ -793,7 +794,6 @@ int changeTimeout;
 @protocolNotification("textDocument/didChange")
 void onDidChangeDocument(DocumentLinkParams params)
 {
-	if (config(params.textDocument.uri).d.lintOnFileOpen)
 		doDscanner(params);
 }
 
