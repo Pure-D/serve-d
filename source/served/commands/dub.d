@@ -116,7 +116,7 @@ bool switchCompiler(string value)
 auto addImport(AddImportParams params)
 {
 	auto document = documents[params.textDocument.uri];
-	return backend.get!ImporterComponent.add(params.name.idup, document.text,
+	return backend.get!ImporterComponent.add(params.name.idup, document.rawText,
 			params.location, params.insertOutermost);
 }
 
@@ -338,8 +338,7 @@ void convertDubFormat(DubConvertRequest req)
 
 	WorkspaceEdit edit;
 	auto edits = [
-		TextEdit(TextRange(Position(0, 0),
-				document.offsetToPosition(document.text.length)), result.output)
+		TextEdit(TextRange(Position(0, 0), document.offsetToPosition(document.length)), result.output)
 	];
 
 	if (capabilities.workspace.workspaceEdit.resourceOperations.canFind(ResourceOperationKind.rename))

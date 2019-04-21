@@ -51,7 +51,8 @@ TextEdit[] provideFormatting(DocumentFormattingParams params)
 			];
 			//dfmt on
 	}
-	auto result = backend.get!DfmtComponent.format(document.text, args).getYield;
-	return [TextEdit(TextRange(Position(0, 0),
-			document.offsetToPosition(document.text.length)), result)];
+	auto result = backend.get!DfmtComponent.format(document.rawText, args).getYield;
+	return [
+		TextEdit(TextRange(Position(0, 0), document.offsetToPosition(document.length)), result)
+	];
 }

@@ -27,7 +27,7 @@ CodeLens[] provideCodeLens(CodeLensParams params)
 		return [];
 	CodeLens[] ret;
 	if (workspace(params.textDocument.uri).config.d.enableDMDImportTiming)
-		foreach (match; document.text.matchAll(importRegex))
+		foreach (match; document.rawText.matchAll(importRegex))
 		{
 			size_t index = match.pre.length;
 			auto pos = document.bytesToPosition(index);

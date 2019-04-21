@@ -19,7 +19,7 @@ import std.algorithm : max;
  *                      until the cursor
  */
 SignatureHelp convertDCDCalltips(string[] calltips,
-		DCDCompletions.Symbol[] symbols, string textTilCursor)
+		DCDCompletions.Symbol[] symbols, scope const(char)[] textTilCursor)
 {
 	SignatureInformation[] signatures;
 	int[] paramsCounts; // Number of params for each calltip
@@ -34,7 +34,7 @@ SignatureHelp convertDCDCalltips(string[] calltips,
 
 		paramsCounts ~= cast(int) funcParams.length - 1;
 		foreach (param; funcParams)
-			sig.parameters ~= ParameterInformation(param);
+			sig.parameters ~= ParameterInformation(param.idup);
 
 		help.signatures ~= sig;
 	}
@@ -75,22 +75,24 @@ SignatureHelp provideDSignatureHelp(TextDocumentPositionParams params,
 	import std.algorithm : countUntil;
 	import std.range : retro;
 
-	auto openBracketOffset = document.text[0 .. currOffset].retro().countUntil("(");
-	auto closeBracketOffset = document.text[0 .. currOffset].retro().countUntil(")");
-	auto nlBracketOffset = document.text[0 .. currOffset].retro().countUntil("\n");
+	auto openBracketOffset = document.rawText[0 .. currOffset].retro().countUntil("(");
+	auto closeBracketOffset = document.rawText[0 .. currOffset].retro().countUntil(")");
+	auto nlBracketOffset = document.rawText[0 .. currOffset].retro().countUntil("\n");
 	if (openBracketOffset >= 0 && openBracketOffset < closeBracketOffset
 			&& openBracketOffset < nlBracketOffset)
 	{
 		currOffset -= openBracketOffset;
 	}
 
+	scope codeText = document.rawText.idup;
+
 	DCDCompletions result = backend.best!DCDComponent(file)
-		.listCompletion(document.text, currOffset).getYield;
+		.listCompletion(codeText, currOffset).getYield;
 	switch (result.type)
 	{
 	case DCDCompletions.Type.calltips:
 		return convertDCDCalltips(result.calltips,
-				result.symbols, document.text[0 .. currOffset]);
+				result.symbols, codeText[0 .. currOffset]);
 	case DCDCompletions.Type.identifiers:
 		return SignatureHelp.init;
 	default:
@@ -104,7 +106,7 @@ SignatureHelp provideDietSignatureHelp(TextDocumentPositionParams params,
 	import served.diet;
 	import dc = dietc.complete;
 
-	auto completion = updateDietFile(file, document.text);
+	auto completion = updateDietFile(file, document.rawText.idup);
 
 	size_t offset = document.positionToBytes(params.position);
 	auto raw = completion.completeAt(offset);

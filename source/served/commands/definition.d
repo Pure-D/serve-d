@@ -24,7 +24,7 @@ ArrayOrSingle!Location provideDefinition(TextDocumentPositionParams params)
 	if (document.languageId != "d")
 		return ArrayOrSingle!Location.init;
 
-	auto result = instance.get!DCDComponent.findDeclaration(document.text,
+	auto result = instance.get!DCDComponent.findDeclaration(document.rawText,
 			cast(int) document.positionToBytes(params.position)).getYield;
 	if (result == DCDDeclaration.init)
 		return ArrayOrSingle!Location.init;
@@ -73,7 +73,7 @@ Hover provideHover(TextDocumentPositionParams params)
 	if (document.languageId != "d")
 		return Hover.init;
 
-	auto docs = backend.best!DCDComponent(file).getDocumentation(document.text,
+	auto docs = backend.best!DCDComponent(file).getDocumentation(document.rawText,
 			cast(int) document.positionToBytes(params.position)).getYield;
 	Hover ret;
 	ret.contents = docs.ddocToMarked;

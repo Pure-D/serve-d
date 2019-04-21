@@ -9,12 +9,12 @@ import workspaced.api;
 import workspaced.com.dcd;
 import workspaced.coms;
 
-import std.array : array;
-import std.algorithm : reverse, map, canFind, endsWith, min, filter, chunkBy, uniq, sort, any;
-import std.conv : to;
+import std.algorithm : any, canFind, chunkBy, endsWith, filter, map, min, reverse, sort, uniq;
+import std.array : appender, array;
+import std.conv : text, to;
 import std.experimental.logger;
-import std.regex : matchFirst, ctRegex;
-import std.string : toLower, lastIndexOf, strip, stripRight, indexOf, lineSplitter, join;
+import std.regex : ctRegex, matchFirst;
+import std.string : indexOf, join, lastIndexOf, lineSplitter, strip, stripRight, toLower;
 
 import fs = std.file;
 import io = std.stdio;
@@ -123,10 +123,10 @@ SymbolKind convertFromDscannerType(string type)
 	}
 }
 
-string substr(T)(string s, T start, T end)
+C[] substr(C, T)(C[] s, T start, T end)
 {
 	if (!s.length)
-		return "";
+		return s;
 	if (start < 0)
 		start = 0;
 	if (start >= s.length)
@@ -142,11 +142,11 @@ string substr(T)(string s, T start, T end)
 /// Params:
 ///   sig = the function signature such as `string[] example(string sig, bool exact = false)`
 ///   exact = set to true to make the returned values include the closing paren at the end (if exists)
-string[] extractFunctionParameters(string sig, bool exact = false)
+const(char)[][] extractFunctionParameters(scope const(char)[] sig, bool exact = false)
 {
 	if (!sig.length)
 		return [];
-	string[] params;
+	auto params = appender!(const(char)[][]);
 	ptrdiff_t i = sig.length - 1;
 
 	if (sig[i] == ')' && !exact)
@@ -198,7 +198,7 @@ string[] extractFunctionParameters(string sig, bool exact = false)
 		switch (sig[i])
 		{
 		case ',':
-			params ~= sig.substr(i + 1, paramEnd).strip;
+			params.put(sig.substr(i + 1, paramEnd).strip);
 			paramEnd = i;
 			i--;
 			break;
@@ -206,9 +206,10 @@ string[] extractFunctionParameters(string sig, bool exact = false)
 		case '(':
 			auto param = sig.substr(i + 1, paramEnd).strip;
 			if (param.length)
-				params ~= param;
-			reverse(params);
-			return params;
+				params.put(param);
+			auto ret = params.data;
+			reverse(ret);
+			return ret;
 		case ')':
 			skip('(', ')');
 			break;
@@ -227,8 +228,9 @@ string[] extractFunctionParameters(string sig, bool exact = false)
 			break;
 		}
 	}
-	reverse(params);
-	return params;
+	auto ret = params.data;
+	reverse(ret);
+	return ret;
 }
 
 unittest
@@ -336,7 +338,7 @@ CompletionList provideDMLSourceComplete(TextDocumentPositionParams params,
 
 	CompletionList ret;
 
-	auto items = backend.get!DlanguiComponent.complete(document.text,
+	auto items = backend.get!DlanguiComponent.complete(document.rawText,
 			cast(int) document.positionToBytes(params.position)).getYield();
 	ret.items.length = items.length;
 	foreach (i, item; items)
@@ -396,7 +398,7 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 	import served.diet;
 	import dc = dietc.complete;
 
-	auto completion = updateDietFile(document.uri.uriToFile, document.text);
+	auto completion = updateDietFile(document.uri.uriToFile, document.rawText.idup);
 
 	size_t offset = document.positionToBytes(params.position);
 	auto raw = completion.completeAt(offset);
@@ -454,12 +456,12 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 	DCDCompletions result = DCDCompletions.empty;
 	joinAll({
 		if (instance.has!DCDComponent)
-			result = instance.get!DCDComponent.listCompletion(document.text, byteOff).getYield;
+			result = instance.get!DCDComponent.listCompletion(document.rawText, byteOff).getYield;
 	}, {
 		if (!line.strip.length)
 		{
 			auto defs = instance.get!DscannerComponent.listDefinitions(uriToFile(params.textDocument.uri),
-				document.text).getYield;
+				document.rawText).getYield;
 			ptrdiff_t di = -1;
 			FuncFinder: foreach (i, def; defs)
 			{
@@ -504,12 +506,12 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 				auto space = arg.lastIndexOf(' ');
 				if (space == -1)
 					continue;
-				string identifier = arg[space + 1 .. $];
+				auto identifier = arg[space + 1 .. $];
 				if (!identifier.matchFirst(ctRegex!`[a-zA-Z_][a-zA-Z0-9_]*`))
 					continue;
 				if (argNo == 1)
 					docs ~= "Params:";
-				docs ~= "  " ~ identifier ~ " = $" ~ argNo.to!string;
+				docs ~= text("  ", identifier, " = $", argNo.to!string);
 				argNo++;
 			}
 			auto retAttr = "return" in def.attributes;

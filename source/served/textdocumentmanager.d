@@ -1,8 +1,10 @@
 module served.textdocumentmanager;
 
 import std.algorithm;
+import std.experimental.logger;
 import std.json;
-import std.utf : decode, codeLength, UseReplacementDchar;
+import std.string;
+import std.utf : codeLength, decode, UseReplacementDchar;
 
 import served.jsonrpc;
 import served.protocol;
@@ -14,14 +16,14 @@ struct Document
 	DocumentUri uri;
 	string languageId;
 	long version_;
-	string text;
+	private char[] text;
 
 	this(DocumentUri uri)
 	{
 		this.uri = uri;
 		languageId = "d";
 		version_ = 0;
-		text = "";
+		text = null;
 	}
 
 	this(TextDocumentItem doc)
@@ -29,7 +31,71 @@ struct Document
 		uri = doc.uri;
 		languageId = doc.languageId;
 		version_ = doc.version_;
-		text = doc.text;
+		text = doc.text.dup;
+	}
+
+	const(char)[] rawText()
+	{
+		return cast(const(char)[]) text;
+	}
+
+	size_t length() const @property
+	{
+		return text.length;
+	}
+
+	void setContent(scope const(char)[] newContent)
+	{
+		if (newContent.length <= text.length)
+		{
+			text[0 .. newContent.length] = newContent;
+			text.length = newContent.length;
+		}
+		else
+		{
+			text = text.assumeSafeAppend;
+			text.length = newContent.length;
+			text = text.assumeSafeAppend;
+			text[0 .. $] = newContent;
+		}
+	}
+
+	void applyChange(TextRange range, scope const(char)[] newContent)
+	{
+		auto start = positionToBytes(range[0]);
+		auto end = positionToBytes(range[1]);
+
+		if (start > end)
+			swap(start, end);
+
+		if (start == 0 && end == text.length)
+		{
+			setContent(newContent);
+			return;
+		}
+
+		auto addition = newContent.representation;
+		int removed = cast(int) end - cast(int) start;
+		int added = cast(int) addition.length - removed;
+		text = text.assumeSafeAppend;
+		if (added > 0)
+		{
+			text.length += added;
+			// text[end + added .. $] = text[end .. $ - added];
+			for (int i = cast(int) text.length - 1; i >= end + added; i--)
+				text[i] = text[i - added];
+		}
+		else if (added < 0)
+		{
+			for (size_t i = start; i < text.length + added; i++)
+				text[i] = text[i - added];
+
+			text = text[0 .. $ + added];
+		}
+		text = text.assumeSafeAppend;
+
+		foreach (i, c; addition)
+			text[start + i] = cast(char) c;
 	}
 
 	size_t offsetToBytes(size_t offset)
@@ -184,7 +250,7 @@ struct Document
 		}
 		if (!found)
 			return "";
-		return text[lineStart .. index];
+		return text[lineStart .. index].idup;
 	}
 
 	unittest
@@ -197,10 +263,10 @@ struct Document
 		}
 
 		Document doc;
-		doc.text = `abc
+		doc.setContent(`abc
 hellö world
 how åre
-you?`;
+you?`);
 		assertEqual(doc.lineAt(Position(0, 0)), "abc\n");
 		assertEqual(doc.lineAt(Position(0, 100)), "abc\n");
 		assertEqual(doc.lineAt(Position(1, 3)), "hellö world\n");
@@ -261,8 +327,6 @@ struct TextDocumentManager
 
 	bool process(RequestMessage msg)
 	{
-		import std.stdio;
-
 		if (msg.method == "textDocument/didOpen")
 		{
 			auto params = msg.params.fromJSON!DidOpenTextDocumentParams;
@@ -271,42 +335,40 @@ struct TextDocumentManager
 		}
 		else if (msg.method == "textDocument/didClose")
 		{
-			auto idx = documentStore.countUntil!(a => a.uri == msg.params["textDocument"]["uri"].str);
+			auto targetUri = msg.params["textDocument"]["uri"].str;
+			auto idx = documentStore.countUntil!(a => a.uri == targetUri);
 			if (idx >= 0)
 			{
 				documentStore[idx] = documentStore[$ - 1];
 				documentStore.length--;
 			}
+			else
+			{
+				warning("Received didClose notification for URI not in system: ", targetUri);
+				warning(
+						"This can be a potential memory leak if it was previously opened under a different name.");
+			}
 			return true;
 		}
 		else if (msg.method == "textDocument/didChange")
 		{
-			auto idx = documentStore.countUntil!(a => a.uri == msg.params["textDocument"]["uri"].str);
+			auto targetUri = msg.params["textDocument"]["uri"].str;
+			auto idx = documentStore.countUntil!(a => a.uri == targetUri);
 			if (idx >= 0)
 			{
 				documentStore[idx].version_ = msg.params["textDocument"]["version"].integer;
 				foreach (change; msg.params["contentChanges"].array)
 				{
-					auto rangePtr = "range" in change;
-					if (!rangePtr)
+					if (auto rangePtr = "range" in change)
 					{
-						documentStore[idx].text = change["text"].str;
-						break;
+						auto range = *rangePtr;
+						TextRange textRange = cast(Position[2])[
+							range["start"].fromJSON!Position, range["end"].fromJSON!Position
+						];
+						documentStore[idx].applyChange(textRange, change["text"].str);
 					}
-					auto range = *rangePtr;
-					TextRange textRange = [
-						range["start"].fromJSON!Position, range["end"].fromJSON!Position
-					];
-					auto start = documentStore[idx].positionToBytes(textRange[0]);
-					auto end = documentStore[idx].positionToBytes(textRange[1]);
-					if (start > end)
-					{
-						auto tmp = start;
-						start = end;
-						end = tmp;
-					}
-					documentStore[idx].text = documentStore[idx].text[0 .. start]
-						~ change["text"].str ~ documentStore[idx].text[end .. $];
+					else
+						documentStore[idx].setContent(change["text"].str);
 				}
 			}
 			return true;
@@ -400,4 +462,37 @@ bool isIdentifierSeparatingChar(dchar c)
 {
 	return c < 48 || (c > 57 && c < 65) || c == '[' || c == '\\' || c == ']'
 		|| c == '`' || (c > 122 && c < 128) || c == '\u2028' || c == '\u2029'; // line separators
+}
+
+unittest
+{
+	Document doc;
+	doc.text.reserve(16);
+	auto ptr = doc.text.ptr;
+	assert(doc.rawText.length == 0);
+	doc.setContent("Hello world");
+	assert(doc.rawText == "Hello world");
+	doc.setContent("foo");
+	assert(doc.rawText == "foo");
+	doc.setContent("foo bar baz baf");
+	assert(doc.rawText == "foo bar baz baf");
+	doc.applyChange(TextRange(0, 4, 0, 8), "");
+	assert(doc.rawText == "foo baz baf");
+	doc.applyChange(TextRange(0, 4, 0, 8), "bad");
+	assert(doc.rawText == "foo badbaf");
+	doc.applyChange(TextRange(0, 4, 0, 8), "bath");
+	assert(doc.rawText == "foo bathaf");
+	doc.applyChange(TextRange(0, 4, 0, 10), "bath");
+	assert(doc.rawText == "foo bath");
+	doc.applyChange(TextRange(0, 0, 0, 8), "bath");
+	assert(doc.rawText == "bath");
+	doc.applyChange(TextRange(0, 0, 0, 1), "par");
+	assert(doc.rawText == "parath", doc.rawText);
+	doc.applyChange(TextRange(0, 0, 0, 4), "");
+	assert(doc.rawText == "th");
+	doc.applyChange(TextRange(0, 2, 0, 2), "e");
+	assert(doc.rawText == "the");
+	doc.applyChange(TextRange(0, 0, 0, 0), "in");
+	assert(doc.rawText == "inthe");
+	assert(ptr is doc.text.ptr);
 }

@@ -35,7 +35,7 @@ void lint(Document document)
 	if (!exists(ini))
 		ini = "dscanner.ini";
 	auto issues = instance.get!DscannerComponent.lint(document.uri.uriToFile,
-			ini, document.text).getYield;
+			ini, document.rawText).getYield;
 	Diagnostic[] result;
 
 	foreach (issue; issues)

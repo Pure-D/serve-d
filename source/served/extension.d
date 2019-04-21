@@ -774,7 +774,7 @@ void onChangeFiles(DidChangeWatchedFilesParams params)
 				string workspace = workspaceRootFor(file);
 				// Sending applyEdit so it is undoable
 				auto patches = backend.get!ModulemanComponent(workspace)
-					.normalizeModules(file.uriToFile, document.text);
+					.normalizeModules(file.uriToFile, document.rawText);
 				if (patches.length)
 				{
 					WorkspaceEdit edit;
@@ -844,7 +844,7 @@ void doDscanner(DocumentLinkParams params)
 	if (!d.enableStaticLinting || !d.enableLinting)
 		return;
 
-	int delay = document.text.length > 50 * 1024 ? 1000 : 200; // be slower after 50KiB
+	int delay = document.length > 50 * 1024 ? 1000 : 200; // be slower after 50KiB
 	clearTimeout(changeTimeout);
 	changeTimeout = setTimeout({
 		import served.linters.dscanner;
@@ -996,6 +996,11 @@ shared static this()
 				"Failed to load component " ~ factory.info.name ~ " for workspace "
 				~ instance.cwd ~ "\n\nError: " ~ err.msg);
 	};
+}
+
+shared static ~this()
+{
+	backend.shutdown();
 }
 
 __gshared int timeoutID;

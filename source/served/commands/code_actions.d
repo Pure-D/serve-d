@@ -46,20 +46,21 @@ Command[] provideCodeActions(CodeActionParams params)
 	Command[] ret;
 	if (instance.has!DCDExtComponent) // check if extends
 	{
+		scope codeText = document.rawText.idup;
 		auto startIndex = document.positionToBytes(params.range.start);
-		ptrdiff_t idx = min(cast(ptrdiff_t) startIndex, cast(ptrdiff_t) document.text.length - 1);
+		ptrdiff_t idx = min(cast(ptrdiff_t) startIndex, cast(ptrdiff_t) codeText.length - 1);
 		while (idx > 0)
 		{
-			if (document.text[idx] == ':')
+			if (codeText[idx] == ':')
 			{
 				// probably extends
-				if (instance.get!DCDExtComponent.implement(document.text,
+				if (instance.get!DCDExtComponent.implement(codeText,
 						cast(int) startIndex).getYield.strip.length > 0)
 					ret ~= Command("Implement base classes/interfaces", "code-d.implementMethods",
 							[JSONValue(document.positionToOffset(params.range.start))]);
 				break;
 			}
-			if (document.text[idx] == ';' || document.text[idx] == '{' || document.text[idx] == '}')
+			if (codeText[idx] == ';' || codeText[idx] == '{' || codeText[idx] == '}')
 				break;
 			idx--;
 		}
@@ -179,7 +180,7 @@ TextEdit[] sortImports(SortImportsParams params)
 {
 	auto document = documents[params.textDocument.uri];
 	TextEdit[] ret;
-	auto sorted = backend.get!ImporterComponent.sortImports(document.text,
+	auto sorted = backend.get!ImporterComponent.sortImports(document.rawText,
 			cast(int) document.offsetToBytes(params.location));
 	if (sorted == ImportBlock.init)
 		return ret;
@@ -203,40 +204,41 @@ TextEdit[] implementMethods(ImplementMethodsParams params)
 	string file = document.uri.uriToFile;
 	TextEdit[] ret;
 	auto location = document.offsetToBytes(params.location);
-	auto code = backend.best!DCDExtComponent(file).implement(document.text,
+	scope codeText = document.rawText.idup;
+	auto code = backend.best!DCDExtComponent(file).implement(codeText,
 			cast(int) location).getYield.strip;
 	if (!code.length)
 		return ret;
-	auto brace = document.text.indexOf('{', location);
+	auto brace = codeText.indexOf('{', location);
 	auto fallback = brace;
 	if (brace == -1)
-		brace = document.text.length;
+		brace = codeText.length;
 	else
 	{
-		fallback = document.text.indexOf('\n', location);
-		brace = document.text.indexOfAny("}\n", brace);
+		fallback = codeText.indexOf('\n', location);
+		brace = codeText.indexOfAny("}\n", brace);
 		if (brace == -1)
-			brace = document.text.length;
+			brace = codeText.length;
 	}
 	code = "\n\t" ~ code.replace("\n", document.eolAt(0).toString ~ "\t") ~ "\n";
 	bool inIdentifier = true;
 	int depth = 0;
 	foreach (i; location .. brace)
 	{
-		if (document.text[i].isWhite)
+		if (codeText[i].isWhite)
 			inIdentifier = false;
-		else if (document.text[i] == '{')
+		else if (codeText[i] == '{')
 			break;
-		else if (document.text[i] == ',' || document.text[i] == '!')
+		else if (codeText[i] == ',' || codeText[i] == '!')
 			inIdentifier = true;
-		else if (document.text[i] == '(')
+		else if (codeText[i] == '(')
 			depth++;
 		else
 		{
 			if (depth > 0)
 			{
 				inIdentifier = true;
-				if (document.text[i] == ')')
+				if (codeText[i] == ')')
 					depth--;
 			}
 			else if (!inIdentifier)
