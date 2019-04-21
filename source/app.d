@@ -275,26 +275,26 @@ int main(string[] args)
 			auto before = GC.stats();
 			StopWatch gcSpeed;
 			gcSpeed.start();
+
 			GC.collect();
-			gcSpeed.stop();
-			auto after = GC.stats();
-			if (before != after)
-				tracef("GC run in %s. Freed %s bytes (%s bytes available)", gcSpeed.peek,
-						cast(long) before.usedSize - cast(long) after.usedSize, after.freeSize);
-			else
-				trace("GC run in ", gcSpeed.peek);
-			gcInterval.reset();
 
 			gcCollects++;
 			if (gcCollects > 5)
 			{
-				gcSpeed.reset();
-				gcSpeed.start();
 				GC.minimize();
-				gcSpeed.stop();
-				trace("GC minimized in ", gcSpeed.peek);
 				gcCollects = 0;
 			}
+
+			gcSpeed.stop();
+			auto after = GC.stats();
+
+			if (before != after)
+				tracef("GC run in %s. Freed %s bytes (%s bytes allocated, %s bytes available)", gcSpeed.peek,
+						cast(long) before.usedSize - cast(long) after.usedSize, after.usedSize, after.freeSize);
+			else
+				trace("GC run in ", gcSpeed.peek);
+
+			gcInterval.reset();
 		}
 	}
 
