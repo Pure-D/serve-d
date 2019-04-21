@@ -11,9 +11,7 @@ public import core.thread : Fiber, Thread;
 
 struct FiberManager
 {
-	Fiber[] fibers;
-
-	alias fibers this;
+	private Fiber[] fibers;
 
 	void call()
 	{
@@ -26,14 +24,33 @@ struct FiberManager
 				fiber.call();
 		}
 		foreach_reverse (i; toRemove)
+		{
+			destroy(fibers[i]);
 			fibers = fibers.remove(i);
+		}
+	}
+
+	size_t length() const @property
+	{
+		return fibers.length;
+	}
+
+	void opOpAssign(string op : "~")(Fiber fiber)
+	{
+		put(fiber);
+	}
+
+	void put(Fiber fiber)
+	{
+		fibers.assumeSafeAppend ~= fiber;
 	}
 }
 
 void joinAll(Fibers...)(Fibers fibers)
 {
 	FiberManager f;
-	Fiber[] converted;
+	int i;
+	Fiber[Fibers.length] converted;
 	foreach (fiber; fibers)
 	{
 		static if (isInputRange!(typeof(fiber)))
@@ -41,24 +58,24 @@ void joinAll(Fibers...)(Fibers fibers)
 			foreach (fib; fiber)
 			{
 				static if (is(typeof(fib) : Fiber))
-					converted ~= fib;
+					converted[i++] = fib;
 				else static if (is(typeof(fib) : Future!T, T))
-					converted ~= new Fiber(&fib.getYield, 4096 * 8);
+					converted[i++] = new Fiber(&fib.getYield, 4096 * 8);
 				else
-					converted ~= new Fiber(fib, 4096 * 8);
+					converted[i++] = new Fiber(fib, 4096 * 8);
 			}
 		}
 		else
 		{
 			static if (is(typeof(fiber) : Fiber))
-				converted ~= fiber;
+				converted[i++] = fiber;
 			else static if (is(typeof(fiber) : Future!T, T))
-				converted ~= new Fiber(&fiber.getYield, 4096 * 8);
+				converted[i++] = new Fiber(&fiber.getYield, 4096 * 8);
 			else
-				converted ~= new Fiber(fiber, 4096 * 8);
+				converted[i++] = new Fiber(fiber, 4096 * 8);
 		}
 	}
-	f.fibers = converted;
+	f.fibers = converted[];
 	while (f.length)
 	{
 		f.call();
