@@ -1,8 +1,11 @@
 module served.fibermanager;
 
+// debug = Fibers;
+
 import core.thread;
 
 import std.algorithm;
+import std.experimental.logger;
 import std.range;
 
 import workspaced.api : Future;
@@ -25,6 +28,7 @@ struct FiberManager
 		}
 		foreach_reverse (i; toRemove)
 		{
+			debug(Fibers) tracef("Releasing fiber %s", cast(void*) fibers[i]);
 			destroy(fibers[i]);
 			fibers = fibers.remove(i);
 		}
@@ -35,14 +39,18 @@ struct FiberManager
 		return fibers.length;
 	}
 
-	void opOpAssign(string op : "~")(Fiber fiber)
+	/// Makes a fiber call alongside other fibers with this manager. This transfers the full memory ownership to the manager.
+	/// Fibers should no longer be accessed when terminating.
+	void put(Fiber fiber, string file = __FILE__, int line = __LINE__)
 	{
-		put(fiber);
+		debug(Fibers) tracef("Putting fiber %s in %s:%s", cast(void*) fiber, file, line);
+		fibers.assumeSafeAppend ~= fiber;
 	}
 
-	void put(Fiber fiber)
+	/// ditto
+	void opOpAssign(string op : "~")(Fiber fiber, string file = __FILE__, int line = __LINE__)
 	{
-		fibers.assumeSafeAppend ~= fiber;
+		put(fiber, file, line);
 	}
 }
 

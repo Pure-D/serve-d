@@ -249,7 +249,7 @@ int main(string[] args)
 
 	fibers ~= rpc;
 
-	served.extension.spawnFiber = (&pushFiber!(void delegate())).toDelegate;
+	served.extension.spawnFiberImpl = (&pushFiber!(void delegate())).toDelegate;
 	pushFiber(&served.extension.parallelMain);
 
 	while (rpc.state != Fiber.State.TERM)
@@ -334,8 +334,8 @@ void delegate() gotNotify(RequestMessage msg)
 }
 
 __gshared Mutex fibersMutex;
-void pushFiber(T)(T callback)
+void pushFiber(T)(T callback, int pages = 20, string file = __FILE__, int line = __LINE__)
 {
 	synchronized (fibersMutex)
-		fibers ~= new Fiber(callback, 4096 * 24);
+		fibers.put(new Fiber(callback, 4096 * pages), file, line);
 }

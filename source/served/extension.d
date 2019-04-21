@@ -424,7 +424,7 @@ void doGlobalStartup()
 
 					if (res == action)
 						spawnFiber((&updateDCD).toDelegate);
-				});
+				}, 4);
 			}
 		}
 	}
@@ -976,11 +976,18 @@ void clearTimeout(int id)
 		}
 }
 
-__gshared void delegate(void delegate()) spawnFiber;
+__gshared void delegate(void delegate(), int pages, string file, int line) spawnFiberImpl;
+
+void spawnFiber(void delegate() cb, int pages = 20, string file = __FILE__, int line = __LINE__)
+{
+	if (spawnFiberImpl)
+		spawnFiberImpl(cb, pages, file, line);
+	else
+		setImmediate(cb);
+}
 
 shared static this()
 {
-	spawnFiber = (&setImmediate).toDelegate;
 	backend = new WorkspaceD();
 
 	backend.onBroadcast = (&handleBroadcast).toDelegate;
