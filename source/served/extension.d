@@ -9,14 +9,15 @@ import served.nothrow_fs;
 
 import core.time : Duration, msecs, seconds;
 
-import std.algorithm : map, endsWith, canFind, any;
+import std.algorithm : any, canFind, endsWith, map;
 import std.array : array;
 import std.conv : to;
 import std.datetime.stopwatch : StopWatch;
-import std.datetime.systime : SysTime, Clock;
+import std.datetime.systime : Clock, SysTime;
 import std.experimental.logger;
+import std.format : format;
 import std.functional : toDelegate;
-import std.json : JSONValue, JSON_TYPE, parseJSON;
+import std.json : JSON_TYPE, JSONValue, parseJSON;
 import std.meta : AliasSeq;
 import std.path : baseName, buildNormalizedPath, buildPath, chainPath, dirName,
 	globMatch, relativePath;
@@ -403,8 +404,12 @@ void doGlobalStartup()
 
 		if (!backend.has!DCDComponent || backend.get!DCDComponent.isOutdated)
 		{
-			info("DCD is outdated.");
+			auto installed = backend.has!DCDComponent
+				? backend.get!DCDComponent.clientInstalledVersion : "none";
+
 			dcdUpdating = true;
+			dcdUpdateReason = format!"DCD is outdated. Expected: %(%s.%), got %s"(
+					DCDComponent.latestKnownVersion, installed);
 			if (firstConfig.d.aggressiveUpdate)
 				spawnFiber((&updateDCD).toDelegate);
 			else
@@ -414,9 +419,6 @@ void doGlobalStartup()
 						auto action = translate!"d.ext.compileProgram"("DCD");
 					else
 						auto action = translate!"d.ext.downloadProgram"("DCD");
-
-					auto installed = backend.has!DCDComponent
-						? backend.get!DCDComponent.clientInstalledVersion : "none";
 
 					auto res = rpc.window.requestMessage(MessageType.error,
 						translate!"d.served.outdatedDCD"(DCDComponent.latestKnownVersion.to!(string[])

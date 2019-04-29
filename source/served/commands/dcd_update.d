@@ -18,14 +18,22 @@ import std.path : chainPath, buildPath, baseName, isAbsolute;
 import fs = std.file;
 import io = std.stdio;
 
+__gshared string dcdUpdateReason = null;
 __gshared bool dcdUpdating;
 @protocolNotification("served/updateDCD")
 void updateDCD()
 {
 	scope (exit)
+	{
 		dcdUpdating = false;
+		dcdUpdateReason = null;
+	}
 
-	rpc.notifyMethod("coded/logInstall", "Installing DCD");
+	if (dcdUpdateReason.length)
+		rpc.notifyMethod("coded/logInstall", "Installing DCD: " ~ dcdUpdateReason);
+	else
+		rpc.notifyMethod("coded/logInstall", "Installing DCD");
+
 	string outputFolder = determineOutputFolder;
 	if (fs.exists(outputFolder))
 	{
