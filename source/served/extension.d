@@ -208,35 +208,10 @@ void processConfigChange(served.types.Configuration configuration)
 {
 	import painlessjson : fromJSON;
 
+	fallbackWorkspace.config = workspaces[0].config;
 	if (capabilities.workspace.configuration && workspaces.length >= 2)
 	{
-		ConfigurationItem[] items;
-		foreach (section; configurationSections)
-			items ~= ConfigurationItem(Optional!string.init, opt(section)); // default workspace
-
-		foreach (workspace; workspaces)
-			foreach (section; configurationSections)
-				items ~= ConfigurationItem(opt(workspace.folder.uri), opt(section));
-		auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
-		if (res.result.type == JSON_TYPE.ARRAY && res.result.array.length >= 1)
-		{
-			JSONValue[] settings = res.result.array;
-			if (settings.length % configurationSections.length != 0)
-			{
-				error("Got invalid configuration response from language client.");
-				trace("Response: ", res);
-				return;
-			}
-			for (size_t i = 0; i < settings.length; i += configurationSections.length)
-			{
-				auto workspace = i == 0 ? &fallbackWorkspace : &workspaces[i / configurationSections.length];
-				string[] changed;
-				static foreach (n, section; configurationSections)
-					changed ~= workspace.config.replaceSection!section(
-							settings[i + n].fromJSON!(configurationTypes[n]));
-				changedConfig(workspace.folder.uri, changed, workspace.config, i == 0);
-			}
-		}
+		syncConfiguration();
 	}
 	else if (workspaces.length)
 	{
@@ -245,49 +220,90 @@ void processConfigChange(served.types.Configuration configuration)
 					"Client does not support configuration request, only applying config for first workspace.");
 		changedConfig(workspaces[0].folder.uri,
 				workspaces[0].config.replace(configuration), workspaces[0].config);
-		fallbackWorkspace.config = workspaces[0].config;
 	}
 }
 
-bool syncConfiguration(string workspaceUri)
+bool syncConfiguration(string[] workspaceUris = null)
 {
 	import painlessjson : fromJSON;
 
-	if (capabilities.workspace.configuration)
+	if (!capabilities.workspace.configuration)
+		return false;
+
+	if (workspaceUris.length == 0)
 	{
-		Workspace* proj = &workspace(workspaceUri);
+		workspaceUris = new string[1 + workspaces.length];
+		// first is null (global init)
+		foreach (i, ref workspace; workspaces)
+			workspaceUris[i + 1] = workspace.folder.uri;
+	}
+
+	bool[] ret = new bool[workspaceUris.length];
+	ret[] = true;
+	int effective;
+	scope auto projects = new Workspace*[workspaceUris.length];
+	foreach (i, ref proj; projects)
+	{
+		string workspaceUri = workspaceUris[i];
+		proj = &workspace(workspaceUri);
 		if (proj is &fallbackWorkspace && workspaceUri.length)
 		{
 			error("Did not find workspace ", workspaceUri, " when syncing config?");
-			return false;
-		}
-		ConfigurationItem[] items;
-		foreach (section; configurationSections)
-			items ~= ConfigurationItem(workspaceUri.length
-					? opt(proj.folder.uri) : Optional!string.init, opt(section));
-		auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
-		trace("Sending workspace/configuration request for ", workspaceUri);
-		if (res.result.type == JSON_TYPE.ARRAY)
-		{
-			JSONValue[] settings = res.result.array;
-			if (settings.length % configurationSections.length != 0)
-			{
-				error("Got invalid configuration response from language client.");
-				trace("Response: ", res);
-				return false;
-			}
-			string[] changed;
-			static foreach (n, section; configurationSections)
-				changed ~= proj.config.replaceSection!section(
-						settings[n].fromJSON!(configurationTypes[n]));
-			changedConfig(proj.folder.uri, changed, proj.config, workspaceUri.length == 0);
-			return true;
+			ret[i] = false;
 		}
 		else
-			return false;
+			effective++;
 	}
-	else
+
+	ConfigurationItem[] items;
+	foreach (i, ref proj; projects)
+		if (ret[i])
+			foreach (section; configurationSections)
+				items ~= ConfigurationItem(workspaceUris[i].length
+						? opt(proj.folder.uri) : Optional!string.init, opt(section));
+
+	auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
+	trace("Sending workspace/configuration request for ", workspaceUris);
+
+	if (res.result.type != JSON_TYPE.ARRAY)
+	{
+		error("Got invalid configuration response from language client.");
+		trace("Response: ", res);
 		return false;
+	}
+
+	auto settings = res.result.array;
+
+	if (settings.length % configurationSections.length != 0)
+	{
+		error("Got invalid configuration response from language client.");
+		trace("Response: ", res);
+		return false;
+	}
+
+	scope string[][] changes = new string[][effective];
+
+	// first sync all configuration
+	int offset;
+	foreach (i, ref proj; projects)
+		if (ret[i])
+		{
+			static foreach (n, section; configurationSections)
+				changes[offset] ~= proj.config.replaceSection!section(
+						settings[offset * configurationSections.length + n].fromJSON!(configurationTypes[n]));
+			offset++;
+		}
+
+	// then run change handlers and initialization
+	offset = 0;
+	foreach (i, ref proj; projects)
+		if (ret[i])
+		{
+			changedConfig(proj.folder.uri, changes[offset], proj.config, workspaceUris[i].length == 0);
+			offset++;
+		}
+
+	return effective > 0;
 }
 
 string[] getPossibleSourceRoots(string workspaceFolder)
@@ -311,6 +327,13 @@ __gshared bool syncedConfiguration = false;
 InitializeResult initialize(InitializeParams params)
 {
 	import std.file : chdir;
+
+	if (params.trace == "off") // spec says this should be default
+		globalLogLevel = LogLevel.warning;
+	else if (params.trace == "messages")
+		globalLogLevel = LogLevel.info;
+	else if (params.trace == "verbose" || !params.trace.length) // but we keep this default for a while
+		globalLogLevel = LogLevel.trace;
 
 	capabilities = params.capabilities;
 	trace("Set capabilities to ", params);
@@ -350,19 +373,62 @@ InitializeResult initialize(InitializeParams params)
 			opt(ServerWorkspaceCapabilities.WorkspaceFolders(opt(true), opt(true)))));
 
 	setTimeout({
-		if (!syncedConfiguration && capabilities.workspace.configuration)
-		{
-			if (!syncConfiguration(null))
-				error("Syncing user configuration failed!");
-
-			foreach (ref workspace; workspaces)
-				syncConfiguration(workspace.folder.uri);
-		}
+		// just in case server doesn't send this to us
+		initialized();
 	}, 1000);
 
 	return result;
 }
 
+__gshared bool didInitializationStartup;
+@protocolNotification("initialized")
+void initialized()
+{
+	if (didInitializationStartup)
+		return;
+	didInitializationStartup = true;
+
+	doGlobalStatelessStartup();
+
+	if (!syncedConfiguration && capabilities.workspace.configuration)
+	{
+		if (!syncConfiguration())
+			error("Syncing user configuration failed!");
+	}
+}
+
+/// Load things we don't need configuration for
+void doGlobalStatelessStartup()
+{
+	try
+	{
+		trace("Initializing serve-d for stateless global access");
+
+		trace("Registering dub");
+		backend.register!DubComponent(false);
+		trace("Registering fsworkspace");
+		backend.register!FSWorkspaceComponent(false);
+		trace("Starting dscanner");
+		backend.register!DscannerComponent;
+		trace("Starting dfmt");
+		backend.register!DfmtComponent;
+		trace("Starting dlangui");
+		backend.register!DlanguiComponent;
+		trace("Starting importer");
+		backend.register!ImporterComponent;
+		trace("Starting moduleman");
+		backend.register!ModulemanComponent;
+	}
+	catch (Exception e)
+	{
+		error("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+		error("Failed to fully globally initialize:");
+		error(e);
+		error("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+	}
+}
+
+/// Load things we need configuration for
 void doGlobalStartup()
 {
 	try
@@ -381,26 +447,12 @@ void doGlobalStartup()
 
 		trace("Setup global configuration as " ~ backend.globalConfiguration.base.toString);
 
-		trace("Registering dub");
-		backend.register!DubComponent(false);
-		trace("Registering fsworkspace");
-		backend.register!FSWorkspaceComponent(false);
 		trace("Registering dcd");
 		backend.register!DCDComponent(false);
 		trace("Registering dcdext");
 		backend.register!DCDExtComponent(false);
 		trace("Registering dmd");
 		backend.register!DMDComponent(false);
-		trace("Starting dscanner");
-		backend.register!DscannerComponent;
-		trace("Starting dfmt");
-		backend.register!DfmtComponent;
-		trace("Starting dlangui");
-		backend.register!DlanguiComponent;
-		trace("Starting importer");
-		backend.register!ImporterComponent;
-		trace("Starting moduleman");
-		backend.register!ModulemanComponent;
 
 		if (!backend.has!DCDComponent || backend.get!DCDComponent.isOutdated)
 		{
@@ -711,6 +763,8 @@ JSONValue shutdown()
 	shutdownRequested = true;
 	backend.shutdown();
 	backend.destroy();
+	backend = null;
+	rpc.stop();
 	served.extension.setTimeout({
 		throw new Error("RPC still running 1s after shutdown");
 	}, 1.seconds);
@@ -797,8 +851,11 @@ void didChangeWorkspaceFolders(DidChangeWorkspaceFoldersParams params)
 	foreach (toAdd; params.event.added)
 	{
 		workspaces ~= Workspace(toAdd);
-		syncConfiguration(toAdd.uri);
-		doStartup(toAdd.uri);
+		if (!syncConfiguration([toAdd.uri]))
+		{
+			error("Failed syncing configuration of ", toAdd.uri, ", starting up anyway.");
+			doStartup(toAdd.uri);
+		}
 	}
 }
 
@@ -1002,14 +1059,15 @@ shared static this()
 
 shared static ~this()
 {
-	backend.shutdown();
+	if (backend !is null)
+		backend.shutdown();
 }
 
 __gshared int timeoutID;
 __gshared Timeout[] timeouts;
 __gshared Mutex timeoutsMutex;
 
-// Called at most 100x per second
+// Called more or less 100x per second, should be called at least 10x per second
 void parallelMain()
 {
 	timeoutsMutex = new Mutex;

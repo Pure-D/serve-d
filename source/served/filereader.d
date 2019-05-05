@@ -4,6 +4,7 @@ import core.thread;
 import core.sync.mutex;
 
 import std.algorithm;
+import std.experimental.logger;
 import std.stdio;
 
 class StdFileReader : FileReader
@@ -21,8 +22,12 @@ class StdFileReader : FileReader
 
 	override void run()
 	{
+		running = true;
+		scope (exit)
+			running = false;
+
 		ubyte[1] buffer;
-		while (!file.eof)
+		while (file.isOpen && !file.eof)
 		{
 			auto chunk = file.rawRead(buffer[]);
 			synchronized (mutex)
@@ -51,11 +56,14 @@ version (Windows) class WindowsStdinReader : FileReader
 
 	override void run()
 	{
+		running = true;
+		scope (exit)
+			running = false;
+
 		auto stdin = GetStdHandle(STD_INPUT_HANDLE);
 		INPUT_RECORD inputRecord;
 		DWORD nbRead;
 		ubyte[4096] buffer;
-		running = true;
 		while (running)
 		{
 			switch (WaitForSingleObject(stdin, 1000))
@@ -98,6 +106,7 @@ version (Posix) class PosixStdinReader : FileReader
 	import core.sys.posix.sys.time;
 	import core.sys.posix.sys.types;
 	import core.sys.posix.unistd;
+	import core.sys.linux.errno : errno, EINTR;
 
 	override void stop()
 	{
@@ -106,9 +115,14 @@ version (Posix) class PosixStdinReader : FileReader
 
 	override void run()
 	{
+		running = true;
+		scope (exit)
+			running = false;
+
+		auto stdin = .stdin;
 
 		ubyte[4096] buffer;
-		while (!stdin.eof)
+		while (stdin.isOpen && !stdin.eof)
 		{
 			fd_set rfds;
 			timeval tv;
@@ -121,12 +135,20 @@ version (Posix) class PosixStdinReader : FileReader
 			auto ret = select(1, &rfds, null, null, &tv);
 
 			if (ret == -1)
-				stderr.writeln("PosixStdinReader error in select()");
+			{
+				auto err = errno();
+				if (err != EINTR)
+					errorf("PosixStdinReader error %s in select()", err);
+				Thread.sleep(100.usecs);
+			}
 			else if (ret)
 			{
 				auto len = read(0, buffer.ptr, buffer.length);
 				if (len == -1)
-					stderr.writeln("PosixStdinReader error in read()");
+				{
+					errorf("PosixStdinReader error %s in read()", errno());
+					Thread.sleep(100.usecs);
+				}
 				else
 					synchronized (mutex)
 						data ~= buffer[0 .. len];
@@ -143,11 +165,17 @@ abstract class FileReader : Thread
 		mutex = new Mutex();
 	}
 
+	void startReading()
+	{
+		running = true;
+		start();
+	}
+
 	string yieldLine()
 	{
 		ptrdiff_t index;
 		string ret;
-		while (true)
+		while (running)
 		{
 			synchronized (mutex)
 			{
@@ -166,7 +194,7 @@ abstract class FileReader : Thread
 
 	ubyte[] yieldData(size_t length)
 	{
-		while (true)
+		while (running)
 		{
 			synchronized (mutex)
 			{
@@ -179,16 +207,20 @@ abstract class FileReader : Thread
 			}
 			Fiber.yield();
 		}
+		auto ret = data.dup;
+		data = null;
+		return ret;
 	}
 
 	abstract void stop();
+
+	bool running;
 
 protected:
 	abstract void run();
 
 	ubyte[] data;
 	Mutex mutex;
-	bool running;
 }
 
 char[] readCodeWithBuffer(string file, ref ubyte[] buffer, size_t maxLen = 1024 * 50)

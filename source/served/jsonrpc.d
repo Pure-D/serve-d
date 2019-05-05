@@ -37,7 +37,7 @@ class RPCProcessor : Fiber
 
 	void send(ResponseMessage res)
 	{
-		auto msg = JSONValue(["jsonrpc" : JSONValue("2.0")]);
+		auto msg = JSONValue(["jsonrpc": JSONValue("2.0")]);
 		if (res.id.hasData)
 			msg["id"] = res.id.toJSON;
 		if (res.result.type != JSON_TYPE.NULL)
@@ -114,13 +114,16 @@ class RPCProcessor : Fiber
 
 	void log(MessageType type = MessageType.log, Args...)(Args args)
 	{
-		send(JSONValue(["jsonrpc" : JSONValue("2.0"), "method"
-				: JSONValue("window/logMessage"), "params" : args.toJSON]));
+		send(JSONValue([
+					"jsonrpc": JSONValue("2.0"),
+					"method": JSONValue("window/logMessage"),
+					"params": args.toJSON
+				]));
 	}
 
 	bool hasData()
 	{
-		return !messageQueue.empty;
+		return running && !messageQueue.empty;
 	}
 
 	RequestMessage poll()
@@ -132,7 +135,10 @@ class RPCProcessor : Fiber
 		return ret;
 	}
 
-	bool running = true;
+	bool running() @property const
+	{
+		return !stopped;
+	}
 
 	WindowFunctions window()
 	{
@@ -186,7 +192,10 @@ private:
 
 	void run()
 	{
-		while (!stopped)
+		scope (exit)
+			stopped = true;
+
+		while (!stopped && reader.running)
 		{
 			bool inHeader = true;
 			size_t contentLength = 0;
@@ -198,42 +207,20 @@ private:
 				else if (line.startsWith("Content-Length:"))
 					contentLength = line["Content-Length:".length .. $].strip.to!size_t;
 			}
-			while (inHeader);
+			while (inHeader && reader.running && !stopped);
+			if (!reader.running || stopped)
+				break;
+
 			assert(contentLength > 0);
 			auto content = cast(string) reader.yieldData(contentLength);
 			assert(content.length == contentLength);
 			RequestMessage request;
 			bool validRequest = false;
+			JSONValue json;
 			try
 			{
-				auto json = parseJSON(content);
-				auto id = "id" in json;
-				bool isResponse = false;
-				if (id)
-				{
-					auto tok = RequestToken(id);
-					foreach (ref waiting; responseTokens)
-					{
-						if (!waiting.got && waiting.token == tok)
-						{
-							waiting.got = true;
-							waiting.ret.id = tok;
-							auto res = "result" in json;
-							auto err = "error" in json;
-							if (res)
-								waiting.ret.result = *res;
-							if (err)
-								waiting.ret.error = (*err).fromJSON!ResponseError;
-							isResponse = true;
-							break;
-						}
-					}
-				}
-				if (!isResponse)
-				{
-					request = RequestMessage(json);
-					validRequest = true;
-				}
+				json = parseJSON(content);
+				validRequest = true;
 			}
 			catch (Exception e)
 			{
@@ -255,13 +242,55 @@ private:
 					errorf("Got invalid request '%s'!", content);
 					trace(e);
 				}
+				validRequest = false;
 			}
-			if (validRequest)
+
+			try
 			{
-				onData(request);
-				Fiber.yield();
+				if (validRequest && !handleJson(json))
+				{
+					onData(RequestMessage(json));
+					Fiber.yield();
+				}
+			}
+			catch (JSONException e)
+			{
+				send(ResponseMessage(RequestToken("id" in json), ResponseError(ErrorCode.invalidParams)));
 			}
 		}
+	}
+
+	/// Returns: true if the request/response was already handled
+	bool handleJson(JSONValue json)
+	{
+		auto id = "id" in json;
+		bool alreadyHandled = false;
+		if (id)
+		{
+			auto tok = RequestToken(id);
+			foreach (ref waiting; responseTokens)
+			{
+				if (!waiting.got && waiting.token == tok)
+				{
+					waiting.got = true;
+					waiting.ret.id = tok;
+					auto res = "result" in json;
+					auto err = "error" in json;
+					if (res)
+						waiting.ret.result = *res;
+					if (err)
+						waiting.ret.error = (*err).fromJSON!ResponseError;
+					alreadyHandled = true;
+					break;
+				}
+			}
+			if ("method" !in json && !alreadyHandled)
+			{
+				error("Ignoring RPC response which we don't have any listener for with id ", tok);
+				alreadyHandled = true;
+			}
+		}
+		return alreadyHandled;
 	}
 }
 

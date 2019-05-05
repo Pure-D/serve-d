@@ -1,0 +1,3 @@
+name "serve-d-tester"
+
+dependency "serve-d" path=".."

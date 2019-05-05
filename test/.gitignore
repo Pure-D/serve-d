@@ -1,0 +1,6 @@
+/dcd-client
+/dcd-server
+dub.selections.json
+/serve-d-tester*
+logs.txt
+

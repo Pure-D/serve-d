@@ -173,6 +173,7 @@ __gshared FiberManager fibers;
 int main(string[] args)
 {
 	debug globalLogLevel = LogLevel.trace;
+	else globalLogLevel = LogLevel.info;
 
 	bool printVer;
 	string[] features;
@@ -234,7 +235,7 @@ int main(string[] args)
 		auto input = new PosixStdinReader();
 	else
 		auto input = new StdFileReader(stdin);
-	input.start();
+	input.startReading();
 	scope (exit)
 		input.stop();
 	trace("Started reading from stdin");
@@ -252,7 +253,7 @@ int main(string[] args)
 	served.extension.spawnFiberImpl = (&pushFiber!(void delegate())).toDelegate;
 	pushFiber(&served.extension.parallelMain);
 
-	while (rpc.state != Fiber.State.TERM)
+	while (rpc !is null && rpc.state != Fiber.State.TERM && rpc.running)
 	{
 		while (rpc.hasData)
 		{
@@ -264,9 +265,19 @@ int main(string[] args)
 			else
 				pushFiber(gotNotify(msg));
 		}
-		Thread.sleep(10.msecs);
+		Thread.sleep(5.msecs);
+		StopWatch stepTimer;
+		stepTimer.start();
 		synchronized (fibersMutex)
-			fibers.call();
+		{
+			int stepsDone = 0;
+			while (stepsDone < 10 && stepTimer.peek < 5.msecs)
+			{
+				fibers.call();
+				stepsDone++;
+				Thread.sleep(300.usecs);
+			}
+		}
 
 		if (gcInterval.peek > 30.seconds)
 		{
@@ -298,6 +309,7 @@ int main(string[] args)
 		}
 	}
 
+	info("Quitting serve-d ", served.extension.shutdownRequested ? "normally" : "unexpectedly");
 	return served.extension.shutdownRequested ? 0 : 1;
 }
 
