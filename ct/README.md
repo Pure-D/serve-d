@@ -1,0 +1,1 @@
+This module is basically a cache of very rarely changed templates and compile time constructs.

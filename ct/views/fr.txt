@@ -1,0 +1,168 @@
+d.switchConfiguration: code-d: Changer la configuration
+d.action.switchConfiguration: Changer la configuration
+d.switchArchType: code-d: Changer l'architecture cible
+d.action.switchArchType: Changer l'architecture cible
+d.switchBuildType: code-d: Changer le type de construction
+d.action.switchBuildType: Changer le type de construction
+d.switchCompiler: code-d: Changer le compilateur
+d.action.switchCompiler: Changer le compilateur
+d.killServer: code-d: Tuer le serveur DCD
+d.action.killServer: Tuer le serveur DCD
+d.restartServer: code-d: Redémarrer le serveur DCD
+d.action.restartServer: Redémarrer le serveur DCD
+d.reloadImports: code-d: Recharger les chemins d'import
+d.action.reloadImports: Recharger les chemins d'import
+d.run: code-d: Lancer le projet
+d.action.run: Lancer le projet
+d.build: code-d: Construire le projet
+d.action.build: Construire le projet
+d.stop: code-d: Arrêter le projet
+d.action.stop: Arrêter le projet
+d.debug: code-d: Déboguer le projet
+d.action.debug: Déboguer le projet
+d.uploadSelection: code-d: Téléverser la sélection sur dpaste.com
+d.action.uploadSelection: Téléverser la sélection sur dpaste.com
+d.insertDscanner: code-d: Insérer le contenu de dscanner.ini par défaut
+d.action.insertDscanner: Insérer le contenu de dscanner.ini par défaut
+d.rdmdCurrent: Lancer le document avec rdmd
+d.generateCoverageReport: code-d: Générer un rapport de couverture
+d.action.generateCoverageReport: Générer un rapport de couverture
+d.showGCCalls: code-d: Montrer les appels du GC de profilegc.log
+d.action.showGCCalls: Montrer les appels du GC de profilegc.log
+dub.openSettingsEditor: code-d/dub: Ouvrir les paramètres du projet
+dub.action.openSettingsEditor: Ouvrir les paramètres du projet
+dub.closeSettingsEditor: code-d/dub: Fermer les paramètres du projet
+dub.action.closeSettingsEditor: Fermer les paramètres du projet
+d.createProject: code-d: Créer un nouveau projet
+d.action.createProject: Créer un nouveau projet
+
+d.config.workspacedPath: Chemin vers l'exécutable workspace-d. Peut être omis si présent dans $PATH ou installé par code-d
+d.config.stdlibPath: Tableau de chemins vers phobos et l'environement d'exécution D pour les inclure dans l'auto-complétion
+d.config.dcdClientPath: Chemin vers l'exécutable dcd-client. Peut être omis si présent dans $PATH ou installé par code-d
+d.config.dcdServerPath: Chemin vers l'exécutable dcd-server. Peut être omis si présent dans $PATH ou installé par code-d
+d.config.dscannerPath: Chemin vers l'exécutable dscanner. Peut être omis si présent dans $PATH ou installé par code-d
+d.config.dfmtPath: Chemin vers l'exécutable dfmt. Peut être omis si présent dans $PATH ou installé par code-d
+d.config.dubPath: Chemin vers l'exécutable dub. Peut être omis si présent dans $PATH ou installé par code-d
+d.config.enableLinting: Si code-d devrait observer les sauvegardes de fichier et faire de l'analyse statique de code. Peut interférer avec d'autres extension d'analyse de code ou d'autres paramètres.
+d.config.enableSDLLinting: Si code-d devrait reporter les erreurs dans les fichiers dub.sdl.
+d.config.enableDubLinting: Si code-d devrait compiler lors des sauvegardes pour vérifier les erreurs.
+d.config.enableAutoComplete: Démarrer dcd-server au démarrage et compléter avec dcd-client.
+d.config.neverUseDub: Si vrai alors un espace de travail personalisé avec des chemins d'import définis manuellement sera utilisé à la place de dub. Voir d.projectImportPaths pour importer des chemins. Cette option est déconseillée car elle n'est pas compatible avec la plupart des fonctionnalités telles que les paquets, la compilation et l'analyse de code par compilation. Si le projet n'a pas de dépendance et utilise un système de compilation particulier, alors cette option devrait être activée.
+d.config.projectImportPaths: Option pour les chemins d'import si le projet n'utilise pas dub. Ils remplaceront les autres chemins. Il est recommendé de définir cette option dans les paramètres de l'espace de travail et non dans les paramètres globaux pour séparer les imports en fonction de chaque projet.
+d.config.dubConfiguration: Définit la configuration par défaut à utiliser au démarrage
+d.config.dubArchType: Définit l'architecture par défaut à utiliser au démarrage
+d.config.dubBuildType: Définit le type de construction par défaut à utiliser au démarrage
+d.config.dubCompiler: Définit le compilateur par défaut à utiliser au démarrage
+d.config.disableWorkspaceD: Désactive la plupart des fonctionnalités de code-d. Destiné au déboguage/développement de nouvelles fonctionnalités, ce qui implique de nombreux redémarrages de VSCode
+d.config.overrideDfmtEditorconfig: Utilise les options de configuration de dfmt à la place de .editorconfig car dfmt n'a pas l'air de bien fonctionner avec.
+d.config.dfmt.alignSwitchStatements: Par encore implémenté (par dfmt)
+d.config.dfmt.braceStyle: Voir Wikipedia https://fr.wikipedia.org/wiki/Style_d%27indentation
+d.config.dfmt.outdentAttributes: Par encore implémenté (par dfmt)
+d.config.dfmt.spaceAfterCast: Insérer un espace après la parenthèse fermante d'un cast.
+d.config.dfmt.splitOperatorAtLineEnd: Placer les opérateurs à la fin de la ligne précédente lorsqu'elles sont séparées en deux parties.
+d.config.dfmt.selectiveImportSpace: Insérer un espace après le nom de module et avant le : pour les imports sélectifs.
+d.config.dfmt.compactLabeledStatements: Placer les labels sur la même ligne que le switch, for, foreach, ou while labelé.
+d.config.dfmt.templateConstraintStyle: Controlle le formattage des contraintes de template.
+
+d.ext.openUserSettings: Ouvrir les paramètres utilisateur
+d.ext.workspacedENOENT: workspace-d n'est pas installé ou pointe vers un répertoire
+d.ext.workspacedENOENT.retry: Réessayer
+d.ext.workspacedENOENT.install: Installer workspace-d
+d.ext.workspacedCrash: workspace-d a planté. Veuillez tuez dcd-server si nécesaire !
+d.ext.workspaced.restart: Redémarrer
+d.ext.importModule: Importer {0}
+d.ext.noImportPaths.project: Aucun chemin d'import disponible pour ce projet. L'autocomplétion peut ne pas fonctionner !
+d.ext.noImportPaths.buildType: Aucun chemin d'import disponible pour ce type de construction. L'autocomplétion peut ne pas fonctionner !
+d.ext.noConfigurations.project: Aucune configuration disponible pour ce projet. L'autocomplétion peut ne pas fonctionner !
+d.ext.compilerFail: Le compilateur n'a pas pu être changé
+d.ext.archFail: L'architecture n'a pas pu être changée
+d.ext.ultimateArchFail: Échec du changement d'architecture. Voir la console pour plus de détails.
+d.ext.dcdUpdateFail: DCD n'a pas pu être mis à jour. Veuillez redémarrer DCD s'il ne fonctionne pas correctement
+d.ext.workspacedUnresponsive: workspace-d ne répond pas. L'autocomplétion peut ne pas fonctionner !
+d.ext.workspacedUnkillable: workspace-d n'a pas pu être tué. Veuillez le tuer manuellement ! PID: {0}
+d.ext.workspacedOutdated.major: workspace-d est obsolète ! Veuillez le mettre à jour pour continuer à utiliser ce plugin. (cible={0}, workspaced={1})
+d.ext.workspacedOutdated.minor: workspace-d pourrait être obsolète ! Veuillez le mettre à jour si tout ne fonctionne pas comme il se devrait. (cible={0}, workspaced={1})
+d.ext.workspacedOutdated.patch: workspace-d a une nouvelle mise à jour disponible ! Veuillez le mettre à jour avant de soumettre un rapport de bogue. (cible={0}, workspaced={1})
+d.ext.workspacedOutdated.unknown: La version de workspace-d n'a pas pu être identifiée. Veuillez mettre à jour workspace-d !
+d.ext.workspacedOutdated.install: Installer la dernière version
+d.ext.config.invalid.configuration: La configuration '{0}' spécifiée dans la configuration n'est pas disponible !
+d.ext.config.invalid.archType: L'architecture '{0}' spécifiée dans la configuration n'est pas disponible !
+d.ext.config.invalid.buildType: Le type de construction '{0}' spécifié dans la configuration n'est pas disponible !
+d.ext.config.invalid.compiler: Le compilateur '{0}' spécifié dans la configuration n'est pas disponible !
+d.ext.dubFail : Dub n'a pas pu être initialisé pour {0}. Vous n'aurez pas accès à toutes les fonctionnalités.
+d.ext.fsworkspaceFail:  Dub n'a pas pu être initialisé fsworkspace pour {0}. Regardez votre console pour plus de détails
+d.ext.dcdFail: DCD n'a pas pu être initialisé pour l'espace de travail {0}.{1}
+d.ext.gcLens: {0} octets alloués / {1} allocations
+d.ext.stdlibNoPhobosNoDRuntime: Le d.stdlibPath configuré ne contient pas de chemin vers phobos ou druntime. L'autocomplétion pourra manquer certains symboles !
+d.ext.stdlibNoPhobos: Le d.stdlibPath configuré ne contient pas de chemin vers phobos. L'autocomplétion pourra manquer certains symboles !
+d.ext.stdlibNoDRuntime: Le d.stdlibPath configuré ne contient pas de chemin vers druntime. L'autocomplétion pourra manquer certains symboles !
+d.ext.stdlibInvalidPath: A path in Le d.stdlibPath configuré exist. L'autocomplétion pourra manquer certains symboles !
+d.ext.exeIsDir: {0} pointe vers un répertoire
+d.ext.exeENOENT: {0} n'est pas installé ou n'a pas été trouvé
+d.ext.compileProgram: Compiler {0}
+d.ext.downloadProgram: Télécharcher {0}
+d.ext.dubUpgradeFail: Le projet dub n'a pas pu être mis à jour
+d.ext.dubImportFail: Les chemins d'imports n'ont pas pu être mis à jour. Veuillez vérifier les paramètres de construction dans la barre de status.
+d.ext.configSwitchFail: Échec du changement de configuration. Voir la console pour plus de détails.
+d.ext.archSwitchFail: Échec du changement d'architecture. Voir la console pour plus de détails.
+d.ext.buildTypeSwitchFail: Échec du changement de type de construction. Voir la console pour plus de détails.
+d.ext.compilerPrompt: Entrez l'identifiant du compilateur. (dmd, ldc2, gdc...)
+d.ext.compilerSwitchFail: Échec du changement de compilateur. Voir la console pour plus de détails.
+d.ext.dcd.restart: Redémarrer
+d.ext.dcdKillFail: Échec de la tentative pour tuer DCD-Server. Voir la console pour plus de détails.
+d.ext.dcdRestarted: DCD-Server redémarré
+d.ext.importsReloaded: Chemins d'imports rechargés avec succès
+d.ext.importsEmpty: Les chemins d'imports sont vides !
+d.ext.manualReloadFail: Les imports n'ont pas pu être mis à jour. Dub peut ne pas être encore initialisé !
+d.ext.workspacedNotReady: workspace-d n'est pas encore prêt
+d.ext.importAddFail: L'import n'a pas pu être ajouté
+d.ext.rdmdTitle: Sortie de rdmd
+d.ext.uploader.noCode: Pas de code sélectionné
+d.ext.uploader.success: Code copié sur {0}
+d.ext.uploader.fail: Échec de téléversement de la sélection. Voir la console pour plus de détails.
+
+d.projects.readFail: Échec de la lecture de la liste de modèles
+d.projects.selectFolderInstruction: Sélectionner un répertoire vide dans lequel créer le projet
+d.projects.selectFolder: Sélectionner le répertoire
+d.projects.selectOtherFolder: Sélectionner un autre répertoire
+d.projects.mergeFolder: Fusionner dans le répertoire
+d.projects.folderNotEmpty: Le répertoire actuel n'est pas vide !
+d.projects.reloadFail: Échec du rechargement. Rechargez manuellement ou lancer une commande de code-d !
+d.projects.copyFail: Échec de la copie de modèle
+d.projects.dubFail: Échec de la génération de dub.json
+
+d.installer.noPrebuiltWorkspaced: Pas de binaire workspace-d précompilé pour cette plateforme/architecture
+d.installer.noPrebuiltDub: Dub n'est pas disponible pour cette plateforme
+d.installer.compileFromSource: Compiler depuis les sources
+d.installer.title: Progès d'installation de {0}
+d.installer.installingInto: Installation dans {0}
+d.installer.downloadingFrom: Téléchargement de {0} dans {1}
+d.installer.downloadProgress: {0}% téléchargé {1}
+d.installer.extracting: Extraction de {0}
+d.installer.deleting: Suppression de {0}
+d.installer.success: {0} installé avec succès
+d.installer.reload: Recharger
+d.installer.extractTarXzFail: Échec de l'extraction de l'archive .tar.xz
+d.installer.extractTarGzFail: Échec de l'extraction de l'archive .tar.gz
+d.installer.error: Échec de l'installation de {0} (Code d'erreur {1})
+d.installer.compileDone: Compilation terminée
+d.installer.removingOld: Suppression de la version précédente
+d.installer.removedOld: Version précédente supprimée
+d.installer.restoreFail: Échec de la restoration après le rechargement ! Veuillez réinstaller code-d en cas de problème avant de rapporter un bogue !
+
+d.dub.notFound: Paquet non trouvé
+d.dub.noVersions: Aucune version trouvée
+d.dub.packageRelease: Sorti le {0}
+d.dub.docDirty: Veuillez sauvegarder ou fermer toutes les instances de ce fichier dub.json et réessayez
+d.dub.dubJsonFail: dub.json n'est pas un fichier JSON valide
+d.dub.generateFail: Échec de la génération de dub.json
+d.dub.updateFail: Échec de la mise à jour de dub.json
+d.dub.override: Écraser sans sauvegarde
+
+d.coverage.statusText: {0}% Couverture
+d.coverage.tooltip: Couverture dans ce fichier générée à partir du fichier .lst associé
+
+d.served.failDCD: DCD n'a pas pu être démarré. (racine={0}, chemin={1}, {2})
+d.served.failDscanner: DScanner n'a pas pu être démarré. (racine={0}, chemin={1})
+
+d.served.outdatedDCD: DCD est obsolète ! (cible={0}, dcd={1})
