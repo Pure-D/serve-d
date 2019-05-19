@@ -4,6 +4,7 @@ import served.commands.code_actions;
 
 import served.extension;
 import served.fibermanager;
+import served.regexes;
 import served.types;
 
 import workspaced.api;

@@ -10,12 +10,18 @@
 		"rm-rf": "~>0.1.0",
 		"diet-complete": "~>0.0.1",
 		"emsi_containers": "0.8.0-alpha.11",
-		"serve-d:http": "*"
+		"serve-d:http": "*",
+		"serve-d:jsonrpc": "*",
+		"serve-d:ct": "*",
+		"serve-d:logger": "*"
 	},
 	"stringImportPaths": [
 		"views"
 	],
 	"subPackages": [
-		"http"
+		"http",
+		"jsonrpc",
+		"ct",
+		"logger"
 	]
 }

@@ -2,6 +2,9 @@ module served.http_wrap;
 
 import served.http;
 import served.types;
+import served.lsputils;
+
+import painlessjson : toJSON;
 
 import std.json : JSON_TYPE;
 
@@ -19,13 +22,13 @@ void downloadFile(string url, string title, string into)
 	if (letEditorDownload)
 	{
 		if (rpc.sendRequest("coded/interactiveDownload", InteractiveDownload(url,
-				title, into)).result.type != JSON_TYPE.TRUE)
+				title, into).toJSON).result.type != JSON_TYPE.TRUE)
 			throw new Exception("The download has failed.");
 	}
 	else
 	{
 		downloadFileManual(url, title, into, (msg) {
-			rpc.notifyMethod("coded/logInstall", msg);
+			rpc.window.logInstall(msg);
 		});
 	}
 }

@@ -4,6 +4,7 @@ import served.extension;
 import served.git_build;
 import served.http_wrap;
 import served.types;
+import served.lsputils;
 
 import workspaced.api;
 import workspaced.coms;
@@ -30,9 +31,9 @@ void updateDCD()
 	}
 
 	if (dcdUpdateReason.length)
-		rpc.notifyMethod("coded/logInstall", "Installing DCD: " ~ dcdUpdateReason);
+		rpc.window.logInstall("Installing DCD: " ~ dcdUpdateReason);
 	else
-		rpc.notifyMethod("coded/logInstall", "Installing DCD");
+		rpc.window.logInstall("Installing DCD");
 
 	string outputFolder = determineOutputFolder;
 	if (fs.exists(outputFolder))
@@ -118,21 +119,21 @@ void updateDCD()
 
 		try
 		{
-			rpc.notifyMethod("coded/logInstall", "Downloading from " ~ url ~ " to " ~ outputFolder);
+			rpc.window.logInstall("Downloading from " ~ url ~ " to " ~ outputFolder);
 
 			if (fs.exists(destFile))
-				rpc.notifyMethod("coded/logInstall", "Zip file already exists! Trying to install existing zip.");
+				rpc.window.logInstall("Zip file already exists! Trying to install existing zip.");
 			else
 				downloadFile(url, "Downloading DCD...", destFile);
 
-			rpc.notifyMethod("coded/logInstall", "Extracting download...");
+			rpc.window.logInstall("Extracting download...");
 			if (url.endsWith(".tar.gz"))
 			{
-				rpc.notifyMethod("coded/logInstall", "> tar xvfz " ~ url.baseName);
+				rpc.window.logInstall("> tar xvfz " ~ url.baseName);
 				auto proc = pipeProcess(["tar", "xvfz", url.baseName],
 						Redirect.stdout | Redirect.stderrToStdout, null, Config.none, outputFolder);
 				foreach (line; proc.stdout.byLineCopy)
-					rpc.notifyMethod("coded/logInstall", line);
+					rpc.window.logInstall(line);
 				proc.pid.wait;
 			}
 			else if (url.endsWith(".zip"))
@@ -161,8 +162,8 @@ void updateDCD()
 		}
 		catch (Exception e)
 		{
-			rpc.notifyMethod("coded/logInstall", "Failed installing: " ~ e.toString ~ "\n\n");
-			rpc.notifyMethod("coded/logInstall",
+			rpc.window.logInstall("Failed installing: " ~ e.toString ~ "\n\n");
+			rpc.window.logInstall(
 					"If you have troube downloading via code-d, try manually downloading the DCD archive and placing it in "
 					~ destFile ~ "!");
 			success = false;
@@ -171,13 +172,13 @@ void updateDCD()
 
 	if (success && (!fs.exists(finalDestinationClient) || !fs.exists(finalDestinationServer)))
 	{
-		rpc.notifyMethod("coded/logInstall",
+		rpc.window.logInstall(
 				"Successfully downloaded DCD, but could not find the executables.");
-		rpc.notifyMethod("coded/logInstall",
+		rpc.window.logInstall(
 				"Please open your user settings and insert the paths for dcd-client and dcd-server manually.");
-		rpc.notifyMethod("coded/logInstall", "Download base location: " ~ outputFolder);
-		rpc.notifyMethod("coded/logInstall", "");
-		rpc.notifyMethod("coded/logInstall", format("Tried %(%s, %)", triedPaths));
+		rpc.window.logInstall("Download base location: " ~ outputFolder);
+		rpc.window.logInstall("");
+		rpc.window.logInstall(format("Tried %(%s, %)", triedPaths));
 
 		finalDestinationClient = "dcd-client";
 		finalDestinationServer = "dcd-server";
@@ -194,15 +195,15 @@ void updateDCD()
 			workspace.config.d.dcdServerPath = finalDestinationServer;
 		}
 		rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("dcdClientPath",
-				JSONValue(finalDestinationClient), true));
+				JSONValue(finalDestinationClient), true)._toJSON);
 		rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("dcdServerPath",
-				JSONValue(finalDestinationServer), true));
-		rpc.notifyMethod("coded/logInstall", "Successfully installed DCD");
+				JSONValue(finalDestinationServer), true)._toJSON);
+		rpc.window.logInstall("Successfully installed DCD");
 		foreach (ref workspace; workspaces)
 		{
 			auto instance = backend.getInstance(workspace.folder.uri.uriToFile);
 			if (instance is null)
-				rpc.notifyMethod("coded/logInstall",
+				rpc.window.logInstall(
 						"Failed to find workspace to start DCD for " ~ workspace.folder.uri);
 			else
 			{

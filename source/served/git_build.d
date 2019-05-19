@@ -1,6 +1,7 @@
 module served.git_build;
 
 import served.types;
+import served.lsputils;
 
 import std.conv : to;
 import std.path : buildPath;
@@ -18,7 +19,7 @@ bool compileDependency(string cwd, string name, string gitURI, string[][] comman
 	{
 		import core.thread : Thread, Fiber;
 
-		rpc.notifyMethod("coded/logInstall", "> " ~ cmd.join(" "));
+		rpc.window.logInstall("> " ~ cmd.join(" "));
 		auto stdin = pipe();
 		auto stdout = pipe();
 		auto pid = spawnProcess(cmd, stdin.readEnd, stdout.writeEnd,
@@ -37,27 +38,27 @@ bool compileDependency(string cwd, string name, string gitURI, string[][] comman
 		{
 			if (i < lines.length)
 			{
-				rpc.notifyMethod("coded/logInstall", lines[i++]);
+				rpc.window.logInstall(lines[i++]);
 			}
 			Fiber.yield();
 		}
 		return pid.wait;
 	}
 
-	rpc.notifyMethod("coded/logInstall", "Installing into " ~ cwd);
+	rpc.window.logInstall("Installing into " ~ cwd);
 	try
 	{
 		auto newCwd = buildPath(cwd, name);
 		if (fs.exists(newCwd))
 		{
-			rpc.notifyMethod("coded/logInstall", "Deleting old installation from " ~ newCwd);
+			rpc.window.logInstall("Deleting old installation from " ~ newCwd);
 			try
 			{
 				rmdirRecurseForce(newCwd);
 			}
 			catch (Exception)
 			{
-				rpc.notifyMethod("coded/logInstall", "WARNING: Failed to delete " ~ newCwd);
+				rpc.window.logInstall("WARNING: Failed to delete " ~ newCwd);
 			}
 		}
 		auto ret = run([firstConfig.git.path.userPath, "clone", "--recursive",
@@ -70,8 +71,8 @@ bool compileDependency(string cwd, string name, string gitURI, string[][] comman
 	}
 	catch (Exception e)
 	{
-		rpc.notifyMethod("coded/logInstall", "Failed to install " ~ name);
-		rpc.notifyMethod("coded/logInstall", e.toString);
+		rpc.window.logInstall("Failed to install " ~ name);
+		rpc.window.logInstall(e.toString);
 		return false;
 	}
 }

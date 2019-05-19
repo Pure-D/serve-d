@@ -3,6 +3,7 @@ module served.protoext;
 import served.protocol;
 
 import std.json;
+
 import painlessjson;
 
 struct AddImportParams
@@ -30,6 +31,16 @@ struct UpdateSettingParams
 	string section;
 	JSONValue value;
 	bool global;
+
+	const JSONValue _toJSON()
+	{
+		JSONValue[string] ret = [
+			"section": JSONValue(section),
+			"value": value,
+			"global": JSONValue(global)
+		];
+		return JSONValue(ret);
+	}
 }
 
 struct DubDependency

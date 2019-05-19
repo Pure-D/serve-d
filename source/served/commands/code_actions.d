@@ -2,7 +2,9 @@ module served.commands.code_actions;
 
 import served.extension;
 import served.fibermanager;
+import served.regexes;
 import served.types;
+import served.logger;
 
 import workspaced.api;
 import workspaced.com.importer;
@@ -11,30 +13,16 @@ import workspaced.coms;
 import served.linters.dub : DubDiagnosticSource;
 import served.linters.dscanner : DScannerDiagnosticSource;
 
+import std.algorithm : canFind, map, min, sort, startsWith, uniq;
 import std.array : array;
-import std.conv : to;
-import std.regex : regex, matchFirst, replaceAll;
-import std.algorithm : min, canFind, sort, startsWith, uniq, map;
-import std.path : isAbsolute, buildNormalizedPath;
-import std.experimental.logger;
-import std.string : strip, indexOf, replace, join, indexOfAny;
-import std.json : JSONValue, JSON_TYPE;
+import std.conv : text, to;
+import std.json : JSON_TYPE, JSONValue;
+import std.path : buildNormalizedPath, isAbsolute;
+import std.regex : matchFirst, replaceAll;
+import std.string : indexOf, indexOfAny, join, replace, strip;
 
 import fs = std.file;
 import io = std.stdio;
-
-package auto importRegex = regex(`import\s+(?:[a-zA-Z_]+\s*=\s*)?([a-zA-Z_]\w*(?:\.\w*[a-zA-Z_]\w*)*)?(\s*\:\s*(?:[a-zA-Z_,\s=]*(?://.*?[\r\n]|/\*.*?\*/|/\+.*?\+/)?)+)?;?`);
-package static immutable regexQuoteChars = "['\"`]?";
-package auto undefinedIdentifier = regex(`^undefined identifier ` ~ regexQuoteChars ~ `(\w+)`
-		~ regexQuoteChars ~ `(?:, did you mean .*? ` ~ regexQuoteChars ~ `(\w+)`
-		~ regexQuoteChars ~ `\?)?$`);
-package auto undefinedTemplate = regex(
-		`template ` ~ regexQuoteChars ~ `(\w+)` ~ regexQuoteChars ~ ` is not defined`);
-package auto noProperty = regex(`^no property ` ~ regexQuoteChars ~ `(\w+)`
-		~ regexQuoteChars ~ `(?: for type ` ~ regexQuoteChars ~ `.*?` ~ regexQuoteChars ~ `)?$`);
-package auto moduleRegex = regex(
-		`(?<!//.*)\bmodule\s+([a-zA-Z_]\w*\s*(?:\s*\.\s*[a-zA-Z_]\w*)*)\s*;`);
-package auto whitespace = regex(`\s*`);
 
 @protocolMethod("textDocument/codeAction")
 Command[] provideCodeActions(CodeActionParams params)
@@ -119,7 +107,7 @@ Command[] provideCodeActions(CodeActionParams params)
 						ret ~= Command("Import " ~ v.package_ ~ " from dub package " ~ v.project);
 				}*/
 				);
-				info("Files: ", files);
+				info(text("Files: ", files));
 				foreach (file; files.sort().uniq)
 				{
 					if (!isAbsolute(file))
@@ -152,7 +140,7 @@ Command[] provideCodeActions(CodeActionParams params)
 
 			string key = diagnostic.code.type == JSON_TYPE.STRING ? diagnostic.code.str : null;
 
-			info("Diagnostic: ", diagnostic);
+			info(text("Diagnostic: ", diagnostic));
 
 			if (key == ImportSortednessCheck.KEY)
 			{

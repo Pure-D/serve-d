@@ -2,19 +2,20 @@ module served.extension;
 
 import core.sync.mutex : Mutex;
 
-import served.types;
-import served.translate;
 import served.fibermanager;
+import served.lsputils;
 import served.nothrow_fs;
+import served.translate;
+import served.types;
+import served.logger;
 
 import core.time : Duration, msecs, seconds;
 
 import std.algorithm : any, canFind, endsWith, map;
 import std.array : array;
-import std.conv : to;
+import std.conv : text, to;
 import std.datetime.stopwatch : StopWatch;
 import std.datetime.systime : Clock, SysTime;
-import std.experimental.logger;
 import std.format : format;
 import std.functional : toDelegate;
 import std.json : JSON_TYPE, JSONValue, parseJSON;
@@ -84,12 +85,12 @@ void changedConfig(string workspaceUri, string[] paths,
 	bool isFallback = proj is &fallbackWorkspace;
 	if (isFallback && !allowFallback)
 	{
-		error("Did not find workspace ", workspaceUri, " when updating config?");
+		error("Did not find workspace " ~ workspaceUri ~ " when updating config?");
 		return;
 	}
 	else if (isFallback)
 	{
-		trace("Updated fallback config (user settings) for sections ", paths);
+		trace(text("Updated fallback config (user settings) for sections ", paths));
 		return;
 	}
 
@@ -200,8 +201,8 @@ void changedConfig(string workspaceUri, string[] paths,
 		}
 	}
 
-	trace("Finished config change of ", workspaceUri, " with ", paths.length,
-			" changes in ", sw.peek, ".");
+	trace(text("Finished config change of ", workspaceUri, " with ", paths.length,
+			" changes in ", sw.peek, "."));
 }
 
 void processConfigChange(served.types.Configuration configuration)
@@ -248,7 +249,7 @@ bool syncConfiguration(string[] workspaceUris = null)
 		proj = &workspace(workspaceUri);
 		if (proj is &fallbackWorkspace && workspaceUri.length)
 		{
-			error("Did not find workspace ", workspaceUri, " when syncing config?");
+			error(text("Did not find workspace ", workspaceUri, " when syncing config?"));
 			ret[i] = false;
 		}
 		else
@@ -262,13 +263,13 @@ bool syncConfiguration(string[] workspaceUris = null)
 				items ~= ConfigurationItem(workspaceUris[i].length
 						? opt(proj.folder.uri) : Optional!string.init, opt(section));
 
-	auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
-	trace("Sending workspace/configuration request for ", workspaceUris);
+	auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items)._toJSON);
+	trace(text("Sending workspace/configuration request for ", workspaceUris));
 
 	if (res.result.type != JSON_TYPE.ARRAY)
 	{
 		error("Got invalid configuration response from language client.");
-		trace("Response: ", res);
+		trace(text("Response: ", res));
 		return false;
 	}
 
@@ -277,7 +278,7 @@ bool syncConfiguration(string[] workspaceUris = null)
 	if (settings.length % configurationSections.length != 0)
 	{
 		error("Got invalid configuration response from language client.");
-		trace("Response: ", res);
+		trace(text("Response: ", res));
 		return false;
 	}
 
@@ -336,7 +337,7 @@ InitializeResult initialize(InitializeParams params)
 		globalLogLevel = LogLevel.trace;
 
 	capabilities = params.capabilities;
-	trace("Set capabilities to ", params);
+	trace(text("Set capabilities to ", params));
 
 	if (params.workspaceFolders.length)
 		workspaces = params.workspaceFolders.map!(a => Workspace(a,
@@ -547,7 +548,7 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 		case ManyProjectsAction.load:
 			break;
 		default:
-			error("Ignoring invalid manyProjectsAction value ", manyAction, ", defaulting to skip");
+			error(text("Ignoring invalid manyProjectsAction value ", manyAction, ", defaulting to skip"));
 			goto case;
 		case ManyProjectsAction.skip:
 			ret = ret[0 .. manyThreshold];
@@ -561,7 +562,7 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 			ret ~= RootSuggestion(p, fs.exists(chainPath(p, "dub.json"))
 					|| fs.exists(chainPath(p, "dub.sdl")));
 	}
-	info("Root Suggestions: ", ret);
+	info(text("Root Suggestions: ", ret));
 	return ret;
 }
 
@@ -570,7 +571,7 @@ void doStartup(string workspaceUri)
 	Workspace* proj = &workspace(workspaceUri);
 	if (proj is &fallbackWorkspace)
 	{
-		error("Trying to do startup on unknown workspace ", workspaceUri, "?");
+		error("Trying to do startup on unknown workspace " ~ workspaceUri ~ "?");
 		return;
 	}
 	trace("Initializing serve-d for " ~ workspaceUri);
@@ -612,13 +613,13 @@ void doStartup(string workspaceUri)
 			}
 
 			if (!loadedDub)
-				error("Exception starting dub: ", err);
+				error("Exception starting dub: " ~ err.toString);
 		}
 		if (!loadedDub)
 		{
 			if (!disableDub)
 			{
-				error("Failed starting dub in ", root, " - falling back to fsworkspace");
+				error(text("Failed starting dub in ", root, " - falling back to fsworkspace"));
 				proj.startupError(workspaceRoot, translate!"d.ext.dubFail"(instance.cwd));
 			}
 			try
@@ -639,15 +640,15 @@ void doStartup(string workspaceUri)
 		else
 			setTimeout({ rpc.notifyMethod("coded/initDubTree"); }, 50);
 
-		trace("Started files provider for root ", root);
+		trace(text("Started files provider for root ", root));
 
 		trace("Attaching dmd");
 		if (!backend.attach(instance, "dmd", err))
-			error("Failed to attach DMD component to ", workspaceUri, "\n", err.msg);
+			error("Failed to attach DMD component to " ~ workspaceUri ~ "\n" ~ err.msg);
 		startDCD(instance, workspaceUri);
 
-		trace("Loaded Components for ", instance.cwd, ": ",
-				instance.instanceComponents.map!"a.info.name");
+		trace(text("Loaded Components for ", instance.cwd, ": ",
+				instance.instanceComponents.map!"a.info.name"));
 	}
 }
 
@@ -679,7 +680,7 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 	Workspace* proj = &workspace(workspaceUri, false);
 	if (proj is &fallbackWorkspace)
 	{
-		error("Trying to start DCD on unknown workspace ", workspaceUri, "?");
+		error(text("Trying to start DCD on unknown workspace ", workspaceUri, "?"));
 		return;
 	}
 	if (!proj.config.d.enableAutoComplete)
@@ -692,7 +693,7 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 	trace("Starting dcd");
 	if (!backend.attach(instance, "dcd", err))
 	{
-		error("Failed to attach DCD component to ", instance.cwd, ": ", err.msg);
+		error("Failed to attach DCD component to " ~ instance.cwd ~ ": " ~ err.msg);
 		if (dcdUpdating)
 			return;
 		else
@@ -701,7 +702,7 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 	trace("Starting dcdext");
 	if (!backend.attach(instance, "dcdext", err))
 	{
-		error("Failed to attach DCDExt component to ", instance.cwd, ": ", err.msg);
+		error("Failed to attach DCDExt component to " ~ instance.cwd ~ ": " ~ err.msg);
 		startupError ~= "\n" ~ err.msg;
 	}
 	trace("Running DCD setup");
@@ -710,10 +711,10 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 		trace("findAndSelectPort 9166");
 		auto port = backend.get!DCDComponent(instance.cwd)
 			.findAndSelectPort(cast(ushort) 9166).getYield;
-		trace("Setting port to ", port);
+		trace(text("Setting port to ", port));
 		instance.config.set("dcd", "port", cast(int) port);
 		auto stdlibPath = proj.stdlibPath;
-		trace("startServer ", stdlibPath);
+		trace(text("startServer ", stdlibPath));
 		backend.get!DCDComponent(instance.cwd).startServer(stdlibPath);
 		trace("refreshImports");
 		backend.get!DCDComponent(instance.cwd).refreshImports();
@@ -722,10 +723,10 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 	{
 		rpc.window.showErrorMessage(translate!"d.ext.dcdFail"(instance.cwd, startupError));
 		error(e);
-		trace("Instance Config: ", instance.config);
+		trace(text("Instance Config: ", instance.config));
 		return;
 	}
-	info("Imports for ", instance.cwd, ": ", backend.getInstance(instance.cwd).importPaths);
+	info(text("Imports for ", instance.cwd, ": ", backend.getInstance(instance.cwd).importPaths));
 
 	auto globalDCD = backend.has!DCDComponent ? backend.get!DCDComponent : null;
 	if (globalDCD && !globalDCD.isActive)
@@ -836,7 +837,7 @@ void onChangeFiles(DidChangeWatchedFilesParams params)
 					WorkspaceEdit edit;
 					edit.changes[file] = patches.map!(a => TextEdit(TextRange(document.bytesToPosition(a.range[0]),
 							document.bytesToPosition(a.range[1])), a.content)).array;
-					rpc.sendMethod("workspace/applyEdit", ApplyWorkspaceEditParams(edit));
+					rpc.sendMethod("workspace/applyEdit", ApplyWorkspaceEditParams(edit)._toJSON);
 				}
 			}
 		}
@@ -853,7 +854,7 @@ void didChangeWorkspaceFolders(DidChangeWorkspaceFoldersParams params)
 		workspaces ~= Workspace(toAdd);
 		if (!syncConfiguration([toAdd.uri]))
 		{
-			error("Failed syncing configuration of ", toAdd.uri, ", starting up anyway.");
+			error(text("Failed syncing configuration of ", toAdd.uri, ", starting up anyway."));
 			doStartup(toAdd.uri);
 		}
 	}
@@ -1006,7 +1007,7 @@ void setImmediate(void delegate() callback)
 
 int setTimeout(void delegate() callback, Duration timeout)
 {
-	trace("Setting timeout for ", timeout);
+	trace(text("Setting timeout for ", timeout));
 	Timeout to;
 	to.timeout = timeout;
 	to.callback = callback;

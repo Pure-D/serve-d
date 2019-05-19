@@ -1,8 +1,9 @@
 module served.nothrow_fs;
 
+import served.logger;
+
 public import fs = std.file;
 
-import std.experimental.logger;
 import std.utf;
 
 auto tryDirEntries(string path, fs.SpanMode mode, bool followSymlink = true)
@@ -53,7 +54,7 @@ public:
 		}
 		catch (UTFException e)
 		{
-			(() @trusted => error("Got malformed UTF string in dirIterator, something has probably corrupted. ", e))();
+			(() @trusted => error("Got malformed UTF string in dirIterator, something has probably corrupted. " ~ e.toString))();
 			return crashed = true;
 		}
 	}
@@ -70,7 +71,7 @@ public:
 		}
 		catch (UTFException e)
 		{
-			(() @trusted => error("Got malformed UTF string in dirIterator, something has probably corrupted. ", e))();
+			(() @trusted => error("Got malformed UTF string in dirIterator, something has probably corrupted. " ~ e.toString))();
 			crashed = true;
 		}
 		return fs.DirEntry.init;
@@ -88,7 +89,7 @@ public:
 		}
 		catch (UTFException e)
 		{
-			(() @trusted => error("Got malformed UTF string in dirIterator, something has probably corrupted. ", e))();
+			(() @trusted => error("Got malformed UTF string in dirIterator, something has probably corrupted. " ~ e.toString))();
 			crashed = true;
 		}
 	}

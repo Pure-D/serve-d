@@ -8,7 +8,6 @@ import std.algorithm;
 import std.array;
 import std.ascii;
 import std.conv;
-import std.experimental.logger;
 import std.json;
 import std.meta;
 import std.path;
@@ -24,6 +23,8 @@ import io = std.stdio;
 import workspaced.api;
 
 import served.jsonrpc;
+import served.logger;
+import served.lsputils;
 
 struct protocolMethod
 {
@@ -338,7 +339,7 @@ size_t workspaceIndex(string uri)
 	return best;
 }
 
-ref Workspace handleThings(ref Workspace workspace, string uri, bool userExecuted,
+ref Workspace handleThings(return ref Workspace workspace, string uri, bool userExecuted,
 		string file = __FILE__, size_t line = __LINE__)
 {
 	if (userExecuted)
@@ -372,7 +373,7 @@ ref Workspace handleThings(ref Workspace workspace, string uri, bool userExecute
 		}
 		workspace.selected = true;
 		if (notifyChange || !changedOne)
-			rpc.notifyMethod("coded/changedSelectedWorkspace", workspace.folder);
+			rpc.notifyMethod("coded/changedSelectedWorkspace", workspace.folder._toJSON);
 	}
 	return workspace;
 }
@@ -442,7 +443,7 @@ ref Configuration config(string uri, bool userExecuted = true,
 		string file = __FILE__, size_t line = __LINE__)
 out (result)
 {
-	trace("Config for ", uri, ": ", result);
+	trace(text("Config for ", uri, ": ", result));
 }
 do
 {

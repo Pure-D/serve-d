@@ -3,7 +3,9 @@ module served.commands.complete;
 import served.ddoc;
 import served.extension;
 import served.fibermanager;
+import served.regexes;
 import served.types;
+import served.logger;
 
 import workspaced.api;
 import workspaced.com.dcd;
@@ -12,7 +14,6 @@ import workspaced.coms;
 import std.algorithm : any, canFind, chunkBy, endsWith, filter, map, min, reverse, sort, uniq;
 import std.array : appender, array;
 import std.conv : text, to;
-import std.experimental.logger;
 import std.regex : ctRegex, matchFirst;
 import std.string : indexOf, join, lastIndexOf, lineSplitter, strip, stripRight, toLower;
 
@@ -275,7 +276,7 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 
 	Document document = documents[params.textDocument.uri];
 	auto instance = activeInstance = backend.getBestInstance(document.uri.uriToFile);
-	trace("Completing from instance ", instance ? instance.cwd : "null");
+	trace("Completing from instance " ~ (instance ? instance.cwd : "null"));
 
 	if (document.uri.toLower.endsWith("dscanner.ini"))
 	{
@@ -410,7 +411,7 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 		dc.extractD(completion, offset, code, offset);
 		if (offset <= code.length && instance.has!DCDComponent)
 		{
-			info("DCD Completing Diet for ", code, " at ", offset);
+			info(text("DCD Completing Diet for ", code, " at ", offset));
 			auto dcd = instance.get!DCDComponent.listCompletion(code, cast(int) offset).getYield;
 			if (dcd.type == DCDCompletions.Type.identifiers)
 			{
@@ -492,11 +493,11 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 			}
 			auto funcArgs = extractFunctionParameters(*sig);
 			string[] docs;
-			if (def.name.matchFirst(ctRegex!`^[Gg]et([^a-z]|$)`))
+			if (def.name.matchFirst(ddocGetsRegex))
 				docs ~= "Gets $0";
-			else if (def.name.matchFirst(ctRegex!`^[Ss]et([^a-z]|$)`))
+			else if (def.name.matchFirst(ddocSetsRegex))
 				docs ~= "Sets $0";
-			else if (def.name.matchFirst(ctRegex!`^[Ii]s([^a-z]|$)`))
+			else if (def.name.matchFirst(ddocIsRegex))
 				docs ~= "Checks if $0";
 			else
 				docs ~= "$0";
@@ -507,7 +508,7 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 				if (space == -1)
 					continue;
 				auto identifier = arg[space + 1 .. $];
-				if (!identifier.matchFirst(ctRegex!`[a-zA-Z_][a-zA-Z0-9_]*`))
+				if (!identifier.matchFirst(identifierRegex))
 					continue;
 				if (argNo == 1)
 					docs ~= "Params:";

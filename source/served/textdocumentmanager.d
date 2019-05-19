@@ -1,12 +1,12 @@
 module served.textdocumentmanager;
 
 import std.algorithm;
-import std.experimental.logger;
 import std.json;
 import std.string;
 import std.utf : codeLength, decode, UseReplacementDchar;
 
 import served.jsonrpc;
+import served.logger;
 import served.protocol;
 
 import painlessjson;
@@ -344,7 +344,7 @@ struct TextDocumentManager
 			}
 			else
 			{
-				warning("Received didClose notification for URI not in system: ", targetUri);
+				warning("Received didClose notification for URI not in system: " ~ targetUri);
 				warning(
 						"This can be a potential memory leak if it was previously opened under a different name.");
 			}

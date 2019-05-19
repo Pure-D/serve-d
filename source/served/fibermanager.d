@@ -5,7 +5,6 @@ module served.fibermanager;
 import core.thread;
 
 import std.algorithm;
-import std.experimental.logger;
 import std.range;
 
 import workspaced.api : Future;

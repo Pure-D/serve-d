@@ -1,8 +1,10 @@
 module served.commands.dub;
 
 import served.extension;
-import served.types;
+import served.lsputils;
 import served.translate;
+import served.types;
+import served.logger;
 
 import workspaced.api;
 import workspaced.coms;
@@ -11,7 +13,6 @@ import painlessjson : toJSON;
 
 import std.array : array;
 import std.algorithm : map, count, startsWith, endsWith, among, canFind, remove;
-import std.experimental.logger;
 import std.json : JSONValue;
 import std.path : buildPath, dirName, baseName, setExtension;
 import std.regex : regex, replaceFirst;
@@ -351,7 +352,7 @@ void convertDubFormat(DubConvertRequest req)
 	}
 	else
 		edit.changes[req.textDocument.uri] = edits;
-	rpc.sendMethod("workspace/applyEdit", ApplyWorkspaceEditParams(edit));
+	rpc.sendMethod("workspace/applyEdit", ApplyWorkspaceEditParams(edit).toJSON);
 }
 
 @protocolNotification("served/installDependency")

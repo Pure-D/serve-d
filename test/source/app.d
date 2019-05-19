@@ -10,7 +10,6 @@ import core.thread;
 import core.time;
 
 import std.algorithm;
-import std.experimental.logger;
 import std.file;
 import std.json;
 import std.path;

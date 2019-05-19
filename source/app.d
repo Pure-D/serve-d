@@ -4,15 +4,15 @@ import core.sync.mutex;
 import io = std.stdio;
 import fs = std.file;
 import std.getopt;
-import std.functional;
 import std.algorithm;
 import std.datetime.stopwatch;
+import std.format;
+import std.functional;
 import std.string;
 import std.json;
 import std.path;
 import std.conv;
 import std.traits;
-import std.experimental.logger;
 
 import served.fibermanager;
 import served.filereader;
@@ -20,6 +20,7 @@ import served.http_wrap;
 import served.jsonrpc;
 import served.translate;
 import served.types;
+import served.logger;
 
 static import served.extension;
 
@@ -61,26 +62,25 @@ ResponseMessage processRequest(RequestMessage msg)
 		res.error = ResponseError(ErrorCode.serverNotInitialized);
 		return res;
 	}
-	foreach (name; served.extension.members)
+	static foreach (name; served.extension.members)
 	{
 		static if (__traits(compiles, __traits(getMember, served.extension, name)))
 		{
-			alias symbol = Identity!(__traits(getMember, served.extension, name));
-			static if (symbol.length == 1 && hasUDA!(symbol, protocolMethod))
+			static if (name != "members" && hasUDA!(__traits(getMember, served.extension, name), protocolMethod))
 			{
-				static if (isSomeFunction!symbol && __traits(getProtection, symbol[0]) == "public")
+				static if (__traits(getProtection, __traits(getMember, served.extension, name)) == "public"
+					&& isSomeFunction!(__traits(getMember, served.extension, name)))
 				{
-					enum method = getUDAs!(symbol, protocolMethod)[0];
-					if (msg.method == method.method)
+					if (msg.method == getUDAs!(__traits(getMember, served.extension, name), protocolMethod)[0].method)
 					{
-						alias params = Parameters!symbol;
+						alias params = Parameters!(__traits(getMember, served.extension, name));
 						try
 						{
 							trace("Calling " ~ name);
 							static if (params.length == 0)
-								res.result = symbol[0]().toJSON;
+								res.result = __traits(getMember, served.extension, name)().toJSON;
 							else static if (params.length == 1)
-								res.result = symbol[0](fromJSON!(Parameters!symbol[0])(msg.params)).toJSON;
+								res.result = __traits(getMember, served.extension, name)(fromJSON!params(msg.params)).toJSON;
 							else
 								static assert(0, "Can't have more than one argument");
 							return res;
@@ -144,7 +144,7 @@ void processNotify(RequestMessage msg)
 						}
 						catch (MethodException e)
 						{
-							error("Failed notify: ", e);
+							error("Failed notify: " ~ e.toString);
 						}
 					}
 				}
@@ -172,6 +172,8 @@ void printVersion()
 __gshared FiberManager fibers;
 int main(string[] args)
 {
+	resetLogTime();
+
 	debug globalLogLevel = LogLevel.trace;
 	else globalLogLevel = LogLevel.info;
 
@@ -206,7 +208,7 @@ int main(string[] args)
 	if (lang.length >= 2) // ja-JP -> ja, en-GB -> en, etc
 		currentLanguage = lang[0 .. 2];
 	if (currentLanguage != "en")
-		info("Setting language to ", currentLanguage);
+		info("Setting language to " ~ currentLanguage);
 
 	fibersMutex = new Mutex();
 
@@ -224,7 +226,7 @@ int main(string[] args)
 			trace("Interactive HTTP downloads handled via editor");
 			break;
 		default:
-			warningf("Unknown --provide flag '%s' provided. Maybe serve-d is outdated?", provide);
+			warning(format("Unknown --provide flag '%s' provided. Maybe serve-d is outdated?", provide));
 			break;
 		}
 	}
@@ -300,16 +302,16 @@ int main(string[] args)
 			auto after = GC.stats();
 
 			if (before != after)
-				tracef("GC run in %s. Freed %s bytes (%s bytes allocated, %s bytes available)", gcSpeed.peek,
-						cast(long) before.usedSize - cast(long) after.usedSize, after.usedSize, after.freeSize);
+				trace(format("GC run in %s. Freed %s bytes (%s bytes allocated, %s bytes available)", gcSpeed.peek,
+						cast(long) before.usedSize - cast(long) after.usedSize, after.usedSize, after.freeSize));
 			else
-				trace("GC run in ", gcSpeed.peek);
+				trace(text("GC run in ", gcSpeed.peek));
 
 			gcInterval.reset();
 		}
 	}
 
-	info("Quitting serve-d ", served.extension.shutdownRequested ? "normally" : "unexpectedly");
+	info("Quitting serve-d " ~ (served.extension.shutdownRequested ? "normally" : "unexpectedly"));
 	return served.extension.shutdownRequested ? 0 : 1;
 }
 
@@ -325,7 +327,7 @@ void delegate() gotRequest(RequestMessage msg)
 		{
 			res.error = ResponseError(e);
 			res.error.code = ErrorCode.internalError;
-			error("Failed processing request: ", e);
+			error("Failed processing request: " ~ e.toString);
 		}
 		rpc.send(res);
 	};
@@ -340,7 +342,7 @@ void delegate() gotNotify(RequestMessage msg)
 		}
 		catch (Throwable e)
 		{
-			error("Failed processing notification: ", e);
+			error("Failed processing notification: " ~ e.toString);
 		}
 	};
 }
