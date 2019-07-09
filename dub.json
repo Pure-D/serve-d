@@ -3,13 +3,13 @@
 	"description": "Microsoft Language Server Protocol implementation using workspace-d",
 	"license": "MIT",
 	"dependencies": {
-		"workspace-d": "3.4.0-pre5",
+		"workspace-d": "3.4.0-pre6",
 		"eventsystem": "~>1.2.0",
 		"painlessjson": "~>1.3.9",
 		"libddoc": "0.6.1",
 		"rm-rf": "~>0.1.0",
 		"diet-complete": "~>0.0.1",
-		"emsi_containers": "0.8.0-alpha.11",
+		"emsi_containers": "0.8.0-alpha.15",
 		"serve-d:http": "*"
 	},
 	"stringImportPaths": [

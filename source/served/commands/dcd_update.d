@@ -59,13 +59,24 @@ void updateDCD()
 
 	bool success;
 
-	enum bundledDCDVersion = "v0.10.2";
+	enum bundledDCDVersion = "v0.11.1";
 
 	bool compileFromSource = false;
 	version (DCDFromSource)
 		compileFromSource = true;
 	else
 	{
+		version (Windows)
+		{
+			// needed to check for 64 bit process compatibility on 32 bit binaries because of WoW64
+			import core.sys.windows.windows : GetNativeSystemInfo, SYSTEM_INFO, PROCESSOR_ARCHITECTURE_INTEL;
+
+			SYSTEM_INFO sysInfo;
+			GetNativeSystemInfo(&sysInfo);
+			if (sysInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL) // only 64 bit releases
+				compileFromSource = true;
+		}
+
 		if (!checkVersion(bundledDCDVersion, DCDComponent.latestKnownVersion))
 			compileFromSource = true;
 	}
@@ -104,9 +115,7 @@ void updateDCD()
 		enum commonPrefix = "https://github.com/dlang-community/DCD/releases/download/"
 			~ bundledDCDVersion ~ "/dcd-" ~ bundledDCDVersion;
 
-		version (Win32)
-			url = commonPrefix ~ "-windows-x86.zip";
-		else version (Win64)
+		version (Windows)
 			url = commonPrefix ~ "-windows-x86_64.zip";
 		else version (linux)
 			url = commonPrefix ~ "-linux-x86_64.tar.gz";
