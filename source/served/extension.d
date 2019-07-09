@@ -292,6 +292,7 @@ bool syncConfiguration(string workspaceUri)
 
 string[] getPossibleSourceRoots(string workspaceFolder)
 {
+	import std.path : isAbsolute;
 	import std.file;
 
 	auto confPaths = config(workspaceFolder.uriFromFile, false).d.projectImportPaths.map!(
