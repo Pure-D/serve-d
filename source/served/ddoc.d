@@ -2,9 +2,9 @@ module served.ddoc;
 
 import served.protocol;
 
-import std.string;
-import std.format;
 import ddoc;
+import std.format;
+import std.string;
 
 /**
  * A test function for checking `DDoc` parsing

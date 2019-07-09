@@ -1,7 +1,7 @@
 module served.jsonrpc;
 
-import core.thread;
 import core.exception;
+import core.thread;
 
 import painlessjson;
 
@@ -13,8 +13,8 @@ import std.stdio;
 import std.string;
 import std.typecons;
 
-import served.protocol;
 import served.filereader;
+import served.protocol;
 
 import tinyevent;
 
@@ -37,10 +37,10 @@ class RPCProcessor : Fiber
 
 	void send(ResponseMessage res)
 	{
-		auto msg = JSONValue(["jsonrpc" : JSONValue("2.0")]);
+		auto msg = JSONValue(["jsonrpc": JSONValue("2.0")]);
 		if (res.id.hasData)
 			msg["id"] = res.id.toJSON;
-		if (res.result.type != JSON_TYPE.NULL)
+		if (res.result.type != JSONType.null_)
 			msg["result"] = res.result;
 		if (!res.error.isNull)
 		{
@@ -114,8 +114,11 @@ class RPCProcessor : Fiber
 
 	void log(MessageType type = MessageType.log, Args...)(Args args)
 	{
-		send(JSONValue(["jsonrpc" : JSONValue("2.0"), "method"
-				: JSONValue("window/logMessage"), "params" : args.toJSON]));
+		send(JSONValue([
+					"jsonrpc": JSONValue("2.0"),
+					"method": JSONValue("window/logMessage"),
+					"params": args.toJSON
+				]));
 	}
 
 	bool hasData()

@@ -2,8 +2,8 @@ module served.protocol;
 
 import std.conv;
 import std.json;
-import std.traits;
 import std.meta;
+import std.traits;
 
 import painlessjson;
 
@@ -148,7 +148,7 @@ struct ArrayOrSingle(T)
 	static ArrayOrSingle!T fromJSON(JSONValue val)
 	{
 		ArrayOrSingle!T ret;
-		if (val.type == JSON_TYPE.ARRAY)
+		if (val.type == JSONType.array)
 			ret.value = val.fromJSON!(T[]);
 		else
 			ret.value = [val.fromJSON!T];
@@ -168,12 +168,12 @@ struct RequestToken
 			return;
 		}
 		hasData = true;
-		if (val.type == JSON_TYPE.STRING)
+		if (val.type == JSONType.string)
 		{
 			isString = true;
 			str = val.str;
 		}
-		else if (val.type == JSON_TYPE.INTEGER)
+		else if (val.type == JSONType.integer)
 		{
 			isString = false;
 			num = val.integer;
@@ -1073,7 +1073,7 @@ struct MarkedString
 	static MarkedString fromJSON(JSONValue val)
 	{
 		MarkedString ret;
-		if (val.type == JSON_TYPE.STRING)
+		if (val.type == JSONType.string)
 			ret.value = val.str;
 		else
 		{

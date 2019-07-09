@@ -28,7 +28,8 @@ struct FiberManager
 		}
 		foreach_reverse (i; toRemove)
 		{
-			debug(Fibers) tracef("Releasing fiber %s", cast(void*) fibers[i]);
+			debug (Fibers)
+				tracef("Releasing fiber %s", cast(void*) fibers[i]);
 			destroy(fibers[i]);
 			fibers = fibers.remove(i);
 		}
@@ -43,7 +44,8 @@ struct FiberManager
 	/// Fibers should no longer be accessed when terminating.
 	void put(Fiber fiber, string file = __FILE__, int line = __LINE__)
 	{
-		debug(Fibers) tracef("Putting fiber %s in %s:%s", cast(void*) fiber, file, line);
+		debug (Fibers)
+			tracef("Putting fiber %s in %s:%s", cast(void*) fiber, file, line);
 		fibers.assumeSafeAppend ~= fiber;
 	}
 

@@ -8,17 +8,17 @@ import workspaced.api;
 import workspaced.com.importer;
 import workspaced.coms;
 
-import served.linters.dub : DubDiagnosticSource;
 import served.linters.dscanner : DScannerDiagnosticSource;
+import served.linters.dub : DubDiagnosticSource;
 
+import std.algorithm : canFind, map, min, sort, startsWith, uniq;
 import std.array : array;
 import std.conv : to;
-import std.regex : regex, matchFirst, replaceAll;
-import std.algorithm : min, canFind, sort, startsWith, uniq, map;
-import std.path : isAbsolute, buildNormalizedPath;
 import std.experimental.logger;
-import std.string : strip, indexOf, replace, join, indexOfAny;
-import std.json : JSONValue, JSON_TYPE;
+import std.json : JSONType, JSONValue;
+import std.path : buildNormalizedPath, isAbsolute;
+import std.regex : matchFirst, regex, replaceAll;
+import std.string : indexOf, indexOfAny, join, replace, strip;
 
 import fs = std.file;
 import io = std.stdio;
@@ -150,7 +150,7 @@ Command[] provideCodeActions(CodeActionParams params)
 		{
 			import dscanner.analysis.imports_sortedness : ImportSortednessCheck;
 
-			string key = diagnostic.code.type == JSON_TYPE.STRING ? diagnostic.code.str : null;
+			string key = diagnostic.code.type == JSONType.string ? diagnostic.code.str : null;
 
 			info("Diagnostic: ", diagnostic);
 

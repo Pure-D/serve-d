@@ -1,21 +1,21 @@
 module served.commands.dub;
 
 import served.extension;
-import served.types;
 import served.translate;
+import served.types;
 
 import workspaced.api;
 import workspaced.coms;
 
 import painlessjson : toJSON;
 
+import std.algorithm : among, canFind, count, endsWith, map, remove, startsWith;
 import std.array : array;
-import std.algorithm : map, count, startsWith, endsWith, among, canFind, remove;
 import std.experimental.logger;
 import std.json : JSONValue;
-import std.path : buildPath, dirName, baseName, setExtension;
+import std.path : baseName, buildPath, dirName, setExtension;
 import std.regex : regex, replaceFirst;
-import std.string : splitLines, KeepTerminator, strip, stripLeft, stripRight, indexOf, join;
+import std.string : indexOf, join, KeepTerminator, splitLines, strip, stripLeft, stripRight;
 
 import fs = std.file;
 import io = std.stdio;

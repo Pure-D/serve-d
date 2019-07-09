@@ -130,11 +130,11 @@ struct Configuration
 	string[] stdlibPath(string cwd = null)
 	{
 		auto p = d.stdlibPath;
-		if (p.type == JSON_TYPE.ARRAY)
+		if (p.type == JSONType.array)
 			return p.array.map!(a => a.str.userPath).array;
 		else
 		{
-			if (p.type != JSON_TYPE.STRING || p.str == "auto")
+			if (p.type != JSONType.string || p.str == "auto")
 			{
 				string[] ret;
 				if (cwd.length && fs.exists(chainPath(cwd, "dmd.conf"))
@@ -531,7 +531,7 @@ DocumentUri uri(string scheme, string authority, string path, string query, stri
 
 int toInt(JSONValue value)
 {
-	if (value.type == JSON_TYPE.UINTEGER)
+	if (value.type == JSONType.uinteger)
 		return cast(int) value.uinteger;
 	else
 		return cast(int) value.integer;

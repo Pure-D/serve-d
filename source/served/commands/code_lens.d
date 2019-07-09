@@ -9,14 +9,14 @@ import served.types;
 import workspaced.api;
 import workspaced.coms;
 
-import core.time : msecs, minutes;
+import core.time : minutes, msecs;
 
 import std.algorithm : startsWith;
 import std.conv : to;
-import std.regex : matchAll;
-import std.json : JSONValue, JSON_TYPE;
 import std.datetime.stopwatch : StopWatch;
-import std.datetime.systime : SysTime, Clock;
+import std.datetime.systime : Clock, SysTime;
+import std.json : JSONType, JSONValue;
+import std.regex : matchAll;
 
 @protocolMethod("textDocument/codeLens")
 CodeLens[] provideCodeLens(CodeLensParams params)
@@ -45,7 +45,7 @@ CodeLens[] provideCodeLens(CodeLensParams params)
 @protocolMethod("codeLens/resolve")
 CodeLens resolveCodeLens(CodeLens lens)
 {
-	if (lens.data.type != JSON_TYPE.OBJECT)
+	if (lens.data.type != JSONType.object)
 		throw new Exception("Invalid Lens Object");
 	auto type = "type" in lens.data;
 	if (!type)
@@ -56,13 +56,13 @@ CodeLens resolveCodeLens(CodeLens lens)
 		try
 		{
 			auto code = "code" in lens.data;
-			if (!code || code.type != JSON_TYPE.STRING || !code.str.length)
+			if (!code || code.type != JSONType.string || !code.str.length)
 				throw new Exception("No valid code provided");
 			auto module_ = "module" in lens.data;
-			if (!module_ || module_.type != JSON_TYPE.STRING || !module_.str.length)
+			if (!module_ || module_.type != JSONType.string || !module_.str.length)
 				throw new Exception("No valid module provided");
 			auto file = "file" in lens.data;
-			if (!file || file.type != JSON_TYPE.STRING || !file.str.length)
+			if (!file || file.type != JSONType.string || !file.str.length)
 				throw new Exception("No valid file provided");
 			int decMs = getImportCompilationTime(code.str, module_.str, file.str);
 			lens.command = Command((decMs < 10

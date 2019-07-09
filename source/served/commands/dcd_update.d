@@ -13,7 +13,7 @@ import rm.rf;
 import std.algorithm : endsWith;
 import std.format : format;
 import std.json : JSONValue;
-import std.path : chainPath, buildPath, baseName, isAbsolute;
+import std.path : baseName, buildPath, chainPath, isAbsolute;
 
 import fs = std.file;
 import io = std.stdio;
@@ -78,10 +78,13 @@ void updateDCD()
 		version (Windows)
 			platformOptions = ["--arch=x86_mscoff"];
 		success = compileDependency(outputFolder, "DCD",
-				"https://github.com/Hackerpilot/DCD.git", [[firstConfig.git.path.userPath,
-				"submodule", "update", "--init", "--recursive"], ["dub", "build",
-				"--config=client"] ~ platformOptions, ["dub", "build",
-				"--config=server"] ~ platformOptions]);
+				"https://github.com/Hackerpilot/DCD.git", [
+					[
+						firstConfig.git.path.userPath, "submodule", "update", "--init",
+						"--recursive"
+					], ["dub", "build", "--config=client"] ~ platformOptions,
+					["dub", "build", "--config=server"] ~ platformOptions
+				]);
 		finalDestinationClient = buildPath(outputFolder, "DCD", "dcd-client" ~ ext);
 		if (!fs.exists(finalDestinationClient))
 			finalDestinationClient = buildPath(outputFolder, "DCD", "bin", "dcd-client" ~ ext);
@@ -89,8 +92,10 @@ void updateDCD()
 		if (!fs.exists(finalDestinationServer))
 			finalDestinationServer = buildPath(outputFolder, "DCD", "bin", "dcd-server" ~ ext);
 
-		triedPaths = ["DCD/dcd-client" ~ ext, "DCD/dcd-server" ~ ext,
-			"DCD/bin/dcd-client" ~ ext, "DCD/bin/dcd-server" ~ ext];
+		triedPaths = [
+			"DCD/dcd-client" ~ ext, "DCD/dcd-server" ~ ext, "DCD/bin/dcd-client" ~ ext,
+			"DCD/bin/dcd-server" ~ ext
+		];
 	}
 	else
 	{
@@ -121,7 +126,8 @@ void updateDCD()
 			rpc.notifyMethod("coded/logInstall", "Downloading from " ~ url ~ " to " ~ outputFolder);
 
 			if (fs.exists(destFile))
-				rpc.notifyMethod("coded/logInstall", "Zip file already exists! Trying to install existing zip.");
+				rpc.notifyMethod("coded/logInstall",
+						"Zip file already exists! Trying to install existing zip.");
 			else
 				downloadFile(url, "Downloading DCD...", destFile);
 
@@ -156,8 +162,10 @@ void updateDCD()
 			if (!fs.exists(finalDestinationServer))
 				finalDestinationServer = buildPath(outputFolder, "bin", "dcd-client" ~ ext);
 
-			triedPaths = ["dcd-client" ~ ext, "dcd-server" ~ ext,
-				"bin/dcd-client" ~ ext, "bin/dcd-server" ~ ext];
+			triedPaths = [
+				"dcd-client" ~ ext, "dcd-server" ~ ext, "bin/dcd-client" ~ ext,
+				"bin/dcd-server" ~ ext
+			];
 		}
 		catch (Exception e)
 		{

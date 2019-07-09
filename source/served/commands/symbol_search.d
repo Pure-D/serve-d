@@ -6,11 +6,11 @@ import served.types;
 import workspaced.api;
 import workspaced.coms;
 
-import std.algorithm : startsWith, map, filter, canFind;
+import std.algorithm : canFind, filter, map, startsWith;
 import std.array : array;
-import std.string : toLower;
-import std.path : extension, isAbsolute;
 import std.json : JSONValue;
+import std.path : extension, isAbsolute;
+import std.string : toLower;
 
 import fs = std.file;
 import io = std.stdio;

@@ -2,10 +2,10 @@ module served.extension;
 
 import core.sync.mutex : Mutex;
 
-import served.types;
-import served.translate;
 import served.fibermanager;
 import served.nothrow_fs;
+import served.translate;
+import served.types;
 
 import core.time : Duration, msecs, seconds;
 
@@ -17,7 +17,7 @@ import std.datetime.systime : Clock, SysTime;
 import std.experimental.logger;
 import std.format : format;
 import std.functional : toDelegate;
-import std.json : JSON_TYPE, JSONValue, parseJSON;
+import std.json : JSONType, JSONValue, parseJSON;
 import std.meta : AliasSeq;
 import std.path : baseName, buildNormalizedPath, buildPath, chainPath, dirName,
 	globMatch, relativePath;
@@ -218,7 +218,7 @@ void processConfigChange(served.types.Configuration configuration)
 			foreach (section; configurationSections)
 				items ~= ConfigurationItem(opt(workspace.folder.uri), opt(section));
 		auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
-		if (res.result.type == JSON_TYPE.ARRAY && res.result.array.length >= 1)
+		if (res.result.type == JSONType.array && res.result.array.length >= 1)
 		{
 			JSONValue[] settings = res.result.array;
 			if (settings.length % configurationSections.length != 0)
@@ -267,7 +267,7 @@ bool syncConfiguration(string workspaceUri)
 					? opt(proj.folder.uri) : Optional!string.init, opt(section));
 		auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
 		trace("Sending workspace/configuration request for ", workspaceUri);
-		if (res.result.type == JSON_TYPE.ARRAY)
+		if (res.result.type == JSONType.array)
 		{
 			JSONValue[] settings = res.result.array;
 			if (settings.length % configurationSections.length != 0)
@@ -614,7 +614,7 @@ void handleBroadcast(WorkspaceD workspaced, WorkspaceD.Instance instance, JSONVa
 	if (!instance)
 		return;
 	auto type = "type" in data;
-	if (type && type.type == JSON_TYPE.STRING && type.str == "crash")
+	if (type && type.type == JSONType.string && type.str == "crash")
 	{
 		if (data["component"].str == "dcd")
 			spawnFiber(() => startDCD(instance, instance.cwd.uriFromFile));

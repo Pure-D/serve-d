@@ -8,7 +8,7 @@ import workspaced.api;
 import workspaced.com.dcd;
 import workspaced.coms;
 
-import std.path : isAbsolute, buildPath;
+import std.path : buildPath, isAbsolute;
 
 import fs = std.file;
 import io = std.stdio;
@@ -16,7 +16,8 @@ import io = std.stdio;
 @protocolMethod("textDocument/definition")
 ArrayOrSingle!Location provideDefinition(TextDocumentPositionParams params)
 {
-	auto instance = activeInstance = backend.getBestInstance!DCDComponent(params.textDocument.uri.uriToFile);
+	auto instance = activeInstance = backend.getBestInstance!DCDComponent(
+			params.textDocument.uri.uriToFile);
 	if (!instance)
 		return ArrayOrSingle!Location.init;
 

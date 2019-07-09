@@ -1,15 +1,15 @@
 module served.commands.file_search;
 
 import served.extension;
-import served.types;
 import served.filereader;
+import served.types;
 
 import workspaced.api;
 import workspaced.coms;
 
-import std.algorithm : sort, uniq, startsWith, endsWith;
-import std.path : isAbsolute, buildPath, buildNormalizedPath, stripExtension, baseName;
-import std.string : translate, makeTransTable;
+import std.algorithm : endsWith, sort, startsWith, uniq;
+import std.path : baseName, buildNormalizedPath, buildPath, isAbsolute, stripExtension;
+import std.string : makeTransTable, translate;
 
 import fs = std.file;
 import io = std.stdio;

@@ -3,7 +3,7 @@ module served.http_wrap;
 import served.http;
 import served.types;
 
-import std.json : JSON_TYPE;
+import std.json : JSONType;
 
 __gshared bool letEditorDownload;
 
@@ -19,7 +19,7 @@ void downloadFile(string url, string title, string into)
 	if (letEditorDownload)
 	{
 		if (rpc.sendRequest("coded/interactiveDownload", InteractiveDownload(url,
-				title, into)).result.type != JSON_TYPE.TRUE)
+				title, into)).result.type != JSONType.true_)
 			throw new Exception("The download has failed.");
 	}
 	else

@@ -3,13 +3,13 @@ module served.linters.dscanner;
 import std.algorithm;
 import std.conv;
 import std.file;
+import std.json;
 import std.path;
 import std.string;
-import std.json;
 
-import served.types;
-import served.linters.diagnosticmanager;
 import served.extension;
+import served.linters.diagnosticmanager;
+import served.types;
 
 import workspaced.api;
 import workspaced.coms;

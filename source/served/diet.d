@@ -1,7 +1,7 @@
 module served.diet;
 
-import dietc.lexer;
 import dietc.complete;
+import dietc.lexer;
 
 import vscode = served.protocol;
 

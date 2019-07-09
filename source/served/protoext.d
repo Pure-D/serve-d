@@ -2,8 +2,8 @@ module served.protoext;
 
 import served.protocol;
 
-import std.json;
 import painlessjson;
+import std.json;
 
 struct AddImportParams
 {
