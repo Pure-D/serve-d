@@ -92,6 +92,7 @@ struct Configuration
 		ManyProjectsAction manyProjectsAction = ManyProjectsAction.ask;
 		int manyProjectsThreshold = 4;
 		bool lintOnFileOpen = true;
+		bool dietContextCompletion = false;
 	}
 
 	struct DFmt

@@ -406,15 +406,15 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 
 	if (raw is dc.Completion.completeD)
 	{
+		auto d = workspace(params.textDocument.uri).config.d;
 		string code;
-		dc.extractD(completion, offset, code, offset);
+		contextExtractD(completion, offset, code, offset, d.dietContextCompletion);
 		if (offset <= code.length && instance.has!DCDComponent)
 		{
 			info("DCD Completing Diet for ", code, " at ", offset);
 			auto dcd = instance.get!DCDComponent.listCompletion(code, cast(int) offset).getYield;
 			if (dcd.type == DCDCompletions.Type.identifiers)
 			{
-				auto d = workspace(params.textDocument.uri).config.d;
 				ret = dcd.identifiers.convertDCDIdentifiers(d.argumentSnippets, d.completeNoDupes);
 			}
 		}
