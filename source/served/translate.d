@@ -17,7 +17,8 @@ shared static this()
 		"en": parseTranslation!(import("en.txt")),
 		"de": parseTranslation!(import("de.txt")),
 		"fr": parseTranslation!(import("fr.txt")),
-		"ja": parseTranslation!(import("ja.txt"))
+		"ja": parseTranslation!(import("ja.txt")),
+		"ru": parseTranslation!(import("ru.txt")),
 	];
 }
 

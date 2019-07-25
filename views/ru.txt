@@ -1,0 +1,173 @@
+d.switchConfiguration: code-d: Изменить Конфигурацию
+d.action.switchConfiguration: Изменить Конфигурацию
+d.switchArchType: code-d: Изменить тип архитектуры 
+d.action.switchArchType: Изменить тип архитектуры
+d.switchBuildType: code-d: Изменить тип сборки
+d.action.switchBuildType: Изменить тип сборки 
+d.switchCompiler: code-d: Изменить компилятор
+d.action.switchCompiler: Изменить компилятор
+d.killServer: code-d: Остановить DCD сервер 
+d.action.killServer: Остановить DCD сервер 
+d.restartServer: code-d: Перезапустить DCD сервер
+d.action.restartServer: Перезапустить DCD сервер
+d.reloadImports: code-d: Перезагрузить пути импорта
+d.action.reloadImports: Перезагрузить пути импорта
+d.run: code-d: Запустить проект
+d.action.run: Запустить проект
+d.build: code-d: Собрать проект
+d.action.build: Собрать проект
+d.stop: code-d: Остановить проект
+d.action.stop: Остановить проект
+d.debug: code-d: Отладка проекта
+d.action.debug: Отладка проекта
+d.uploadSelection: code-d: Загрузить выделенное на dpaste.com
+d.action.uploadSelection: Загрузить выделенное на dpaste.com
+d.insertDscanner: code-d: Вставить стандартный dscanner.ini
+d.action.insertDscanner: Вставить стандартный dscanner.ini
+d.rdmdCurrent: Запустить документ используя rdmd
+d.generateCoverageReport: code-d: Сгенерировать отчет о покрытии
+d.action.generateCoverageReport: Сгенерировать отчет о покрытии
+d.showGCCalls: code-d: Показать вызовы GC из profilegc.log
+d.action.showGCCalls: Показать вызовы GC из profilegc.log
+dub.openSettingsEditor: code-d/dub: Открыть настройки проекта
+dub.action.openSettingsEditor: Открыть настройки проекта
+dub.closeSettingsEditor: code-d/dub: Закрыть настройки проекта
+dub.action.closeSettingsEditor: Закрыть настройки проекта
+d.createProject: code-d: Создать новый проект
+d.action.createProject: Создать новый проект
+
+d.config.workspacedPath: Путь к исполняемому файлу workspace-d. Может не использоваться, если находится в $PATH или установлен используя code-d
+d.config.stdlibPath: Лист путей к phobos и Druntime для автоматического  заполнения
+d.config.dcdClientPath: Путь к исполняемому файлу dcd-client. Может не использоваться, если находится в $PATH или установлен используя code-d
+d.config.dcdServerPath: Путь к исполняемому файлу dcd-server. Может не использоваться, если находится в $PATH или установлен используя code-d
+d.config.dscannerPath: Путь к исполняемому файлу dscanner. Может не использоваться, если находится в $PATH или установлен используя code-d
+d.config.dfmtPath: Путь к исполняемому файлу dfmt. Может не использоваться, если находится в $PATH или установлен используя code-d
+d.config.dubPath: Путь к исполняемому файлу dub. Может не использоваться, если находится в $PATH или установлен используя code-d
+d.config.enableLinting: Поиск сохраненных файлов и создание отчетов о статическом анализе. Может мешать другим плагинам диагностики
+d.config.enableSDLLinting: Создавать отчеты об ошибках в dub.sdl
+d.config.enableDubLinting: Если включено, d-code будет собирать проект для проверки ошибок компилятора.
+d.config.enableAutoComplete: Включить программы для автозаполнения (DCD-Server & DCD-Client)
+d.config.neverUseDub: Если включено, то вместо дублирования всегда будет использоваться пользовательское рабочее пространство, в котором Вы вручную указываете пути импорта. См. d.projectImportPaths для установки путей импорта. Не рекомендуется, т.к. удаляет большинство функций, таких как пакеты, компоновка и компоновка компилятора. Если это автономный проект без внешних зависимостей с пользовательской системой сборки, то должно быть включено.
+d.config.projectImportPaths: Настройка путей импорта в Вашем рабочем пространстве, если Вы не используете dub. Это заменит другие пути. Рекомендуется установить это в настройках вашего рабочего пространства, а не в пользовательских, чтобы сохранить его отдельно для каждого проекта. 
+d.config.dubConfiguration: Устанавливает конфигурацию по умолчанию при запуске 
+d.config.dubArchType: Устанавливает тип архитектуры по умолчанию при запуске 
+d.config.dubBuildType: Устанавливает тип сборки по умолчанию при запуске 
+d.config.dubCompiler: Устанавливает компилятор по умолчанию при запуске
+d.config.disableWorkspaceD: Отключает большинство функций code-d. Предназначен для отладки/работы с новыми функциями с большим количеством перезапусков VSCode
+d.config.overrideDfmtEditorconfig: Использует опции конфигурации dfmt и конфигурацию vscode вместо .editorconfig, потому что dfmt, кажется, довольно баганутый с ними.
+d.config.dfmt.alignSwitchStatements: Еще не добавлено (со стороны dfmt)
+d.config.dfmt.braceStyle: Информация на Wikipedia https://en.wikipedia.org/wiki/Brace_style
+d.config.dfmt.outdentAttributes: Еще не добавлено (со стороны dfmt)
+d.config.dfmt.spaceAfterCast: Вставить пробел после закрывающей части приведенного выражения.
+d.config.dfmt.splitOperatorAtLineEnd: Поместить операторы в конец предыдущей строки при рабиении строк.
+d.config.dfmt.selectiveImportSpace: Вставить пробел после имени модуля и перед : для выборочного импорта.
+d.config.dfmt.compactLabeledStatements: Поместить метки в ту же строку с меткой switch, for, foreach или while.
+d.config.dfmt.templateConstraintStyle: Управление форматированием шаблонных ограничений.
+
+d.ext.openUserSettings: Открыть пользовательские настройки
+d.ext.workspacedENOENT: workspace-d не установлен или ведет к папке
+d.ext.workspacedENOENT.retry: Попробовать заново
+d.ext.workspacedENOENT.install: Установить workspace-d
+d.ext.workspacedCrash: workspace-d остановился неожиданно. Пожалуйста, при необходимости остановите DCD-server!
+d.ext.workspaced.restart: Перезапустить
+d.ext.importModule: Импорт {0}
+d.ext.noImportPaths.project: Нет доступных путей импорта для этого проекта. Автозаполнение может не работать!
+d.ext.noImportPaths.buildType: Нет доступных путей импорта для этого типа сборки Build Type. Автозаполнение может не работать!
+d.ext.noConfigurations.project: Нет доступных конфигураций для этого проекта. Автозаполнение может не работать!
+d.ext.compilerFail:Не удалось сменить компилятор
+d.ext.archFail: Не удалось сменить тип архитектуры
+d.ext.ultimateArchFail: Не удалось сменить тип архитектуры. Проверьте консоль для информации.
+d.ext.dcdUpdateFail: Не удалось обновить DCD. Пожалуйста, перезапустите DCD, если он работает неправильно.
+d.ext.workspacedUnresponsive: workspace-d не отвечает. Автозаполнение может не работать!
+d.ext.workspacedUnkillable: Не удалось остановить workspace-d. Пожалуйста, остановите его вручную! PID: {0}
+d.ext.workspacedOutdated.major: workspace-d устарел! Пожалуйста, обновите чтобы продолжить использование этого плагина. (target={0}, workspaced={1})
+d.ext.workspacedOutdated.minor: workspace-d может быть устаревшим! Пожалуйста, обновите если что-то работает неправильно. (target={0}, workspaced={1})
+d.ext.workspacedOutdated.patch: workspace-d имеет новое, дополнительное обновление! Пожалуйста, обновите прежде чем сообщать об ошибках. (target={0}, workspaced={1})
+d.ext.workspacedOutdated.unknown: Не удалось определить версию workspace-d. Пожалуйста, обновите workspace-d!
+d.ext.workspacedOutdated.install: Установить новейшую версию
+d.ext.config.invalid.configuration: Конфигурация '{0}', указанная в конфигурации, недоступен!
+d.ext.config.invalid.archType: Тип архитектуры '{0}', указанный в конфигурации, недоступен!
+d.ext.config.invalid.buildType: Тип сборки '{0}', указанный в конфигурации, недоступен!
+d.ext.config.invalid.compiler: Компилятор '{0}', указанный в конфигурации, недоступен!
+d.ext.dubFail: Невозможно было инициализировать dub для {0}. Возвращение к режиму ограниченной функциональности!
+d.ext.fsworkspaceFail: Не удалось инициализировать fsworkspace для {0}. Проверьте консоль для информации!
+d.ext.dcdFail: Невозможно было инициализировать DCD для {0}.{1}
+d.ext.gcLens: {0} байтов выделено / {1} распределений
+d.ext.stdlibNoPhobosNoDRuntime: Ваш параметр d.stdlibPath не содержит пути к phobos или druntime. Автозаполнению может не хватать символов!
+d.ext.stdlibNoPhobos: Ваш параметр d.stdlibPath не содержит пути к phobos. Автозаполнению может не хватать символов!
+d.ext.stdlibNoDRuntime: Ваш параметр d.stdlibPath не содержит пути к druntime. Автозаполнению может не хватать символов!
+d.ext.stdlibInvalidPath: Путь в настройке d.stdlibPath не существует. Автозаполнению может не хватать символов!
+d.ext.exeIsDir: {0} указывает на директорию
+d.ext.exeENOENT: {0} Не установлен или не найден
+d.ext.compileProgram: Скомпилировать {0}
+d.ext.downloadProgram: Загрузить {0}
+d.ext.dubRecipeMaybeBroken: Не удалось запустить Dub. Ваш пакет dub.json / dub.sdl может быть поврежден! Исправьте и сохраните файл заново.
+d.ext.dubUpgradeFail: Не удалось обновить проект dub
+d.ext.dubImportFail: Не удалось обновить пути импорта. Пожалуйста, проверьте настройки сборки в строке состояния.
+d.ext.configSwitchFail: Не удалось сменить конфигурацию. Проверьте консоль для информации.
+d.ext.archSwitchFail: Не удалось сменить тип архитектуры. Проверьте консоль для информации.
+d.ext.buildTypeSwitchFail: Не удалось сменить тип сборки. Проверьте консоль для информации.
+d.ext.compilerPrompt: Введите идентификатор компилятора. (например dmd, ldc2, gdc)
+d.ext.compilerSwitchFail: Не удалось сменить компилятор. Проверьте консоль для информации.
+d.ext.dcd.restart: Перезапустить
+d.ext.dcdKillFail: Не удалось остановить DCD-Server. Проверьте консоль для информации.
+d.ext.dcdRestarted: DCD-Server Перезапущен
+d.ext.importsReloaded: Успешно загружены пути импорта
+d.ext.importsEmpty: Пути импорта пусты!
+d.ext.manualReloadFail: Не удалось обновить импорт. возможно, dub еще не инициализирован!
+d.ext.workspacedNotReady: workspace-d еще не готов
+d.ext.importAddFail: Не удалось добавить импорт
+d.ext.rdmdTitle: Вывод rdmd
+d.ext.uploader.noCode: Код не выбран
+d.ext.uploader.success: Код вставлен на {0}
+d.ext.uploader.fail: Не удалось загрузить выделенное. Проверьте консоль для информации.
+
+d.projects.readFail: Не удалось прочитать список шаблонов
+d.projects.selectFolderInstruction: Выберите пустую папку для создания проекта 
+d.projects.selectFolder: Выбрать папку
+d.projects.selectOtherFolder: Выбрать другую папку
+d.projects.mergeFolder: Объединить в папку
+d.projects.folderNotEmpty: Текущая рабочая среда не пустая!
+d.projects.reloadFail: Не удалось перезагрузить. Перезагрузите вручную и попробуйте запустить какую-нибудь команду code-d!
+d.projects.copyFail: Не удалось скопировать шаблон
+d.projects.dubFail: Не удалось сгенерировать dub.json
+
+d.installer.noPrebuiltWorkspaced: Нет предкомпилированного workspace-d для этой платформы/архитектуры
+d.installer.noPrebuiltDub: dub недоступен для Вашей платформы
+d.installer.compileFromSource: Скомпилировать из источника
+d.installer.title: {0} прогресс установки
+d.installer.installingInto: Установка в {0}
+d.installer.downloadingFrom: Загружается из {0} в {1}
+d.installer.downloadProgress: Загружено {0}% {1}
+d.installer.extracting: Извлечение {0}
+d.installer.deleting: Удаление {0}
+d.installer.success: {0} успешно установлен
+d.installer.reload: Перезагрузить
+d.installer.extractTarXzFail: Не удалось извлечь .tar.xz 
+d.installer.extractTarGzFail: Не удалось извлечь .tar.gz 
+d.installer.error: Не удалось установить {0} (Код ошибки {1})
+d.installer.compileDone: Компиляция закончена
+d.installer.removingOld: Удаление старой версии
+d.installer.removedOld: Старая версия удалена
+d.installer.restoreFail: Не удалось восстановить после перезагрузки! Пожалуйста, прежде чем сообщать, переустановите code-d, если появятся проблемы!
+
+d.dub.notFound: Пакет не найден
+d.dub.noVersions: Версии не найдены
+d.dub.packageRelease: Выпущен {0}
+d.dub.docDirty: Пожалуйста, сохраните или закройте все dub.json и попробуйте заново.
+d.dub.dubJsonFail: dub.json не является корректным файлом json. 
+d.dub.generateFail: Не удалось сгенерировать dub.json
+d.dub.updateFail: Не удалось обновить dub.json
+d.dub.override: Перезаписать без резервной копии
+d.dub.notRecipeFile: Формат преобразования dub работает только с пакетами с названиями dub.json, dub.sdl, package.json
+d.dub.convertFailed: Команда преобразования dub не смогла выполниться.
+
+d.coverage.statusText: {0}% Покрытие
+d.coverage.tooltip: Покрытие в этом файле было сгенерировано из файла .lst
+
+d.served.failDCD: Не удалось запустить DCD. (root={0}, path={1}, {2})
+d.served.outdatedDCD: DCD устарел. (target={0}, installed={1})
+d.served.failDscanner: Не удалось запустить DScanner. (root={0}, path={1})
+d.served.tooManySubprojects: В этом проекте слишком много субпроектов в соответствии с d.manyProjectsThreshold\n\nХотите-ли вы загрузить все дополнительные проекты? Их {0}.
+d.served.tooManySubprojects.load: Загрузить все проекты
+d.served.tooManySubprojects.skip: Пропустить оставшиеся проекты
