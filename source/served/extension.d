@@ -408,6 +408,9 @@ void doGlobalStartup()
 			auto installed = backend.has!DCDComponent
 				? backend.get!DCDComponent.clientInstalledVersion : "none";
 
+			string outdatedMessage = translate!"d.served.outdatedDCD"(
+					DCDComponent.latestKnownVersion.to!(string[]).join("."), installed);
+
 			dcdUpdating = true;
 			dcdUpdateReason = format!"DCD is outdated. Expected: %(%s.%), got %s"(
 					DCDComponent.latestKnownVersion, installed);
@@ -421,9 +424,9 @@ void doGlobalStartup()
 					else
 						auto action = translate!"d.ext.downloadProgram"("DCD");
 
-					auto res = rpc.window.requestMessage(MessageType.error,
-						translate!"d.served.outdatedDCD"(DCDComponent.latestKnownVersion.to!(string[])
-						.join("."), installed), [action]);
+					auto res = rpc.window.requestMessage(MessageType.error, outdatedMessage, [
+							action
+						]);
 
 					if (res == action)
 						spawnFiber((&updateDCD).toDelegate);
@@ -486,11 +489,12 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 		{
 		case ManyProjectsAction.ask:
 			// TODO: translate
-			auto res = rpc.window.requestMessage(MessageType.warning, "There are too many subprojects in this project according to d.manyProjectsThreshold\n\nDo you want to load additional " ~ (
-					ret.length - manyThreshold + 1).to!string ~ " total projects?", [
-					"Load", "Skip"
-					]);
-			if (res != "Load")
+			auto loadButton = translate!"d.served.tooManySubprojects.load";
+			auto skipButton = translate!"d.served.tooManySubprojects.skip";
+			auto res = rpc.window.requestMessage(MessageType.warning,
+					translate!"d.served.tooManySubprojects"(ret.length - manyThreshold + 1),
+					[loadButton, skipButton]);
+			if (res != loadButton)
 				ret = ret[0 .. manyThreshold];
 			break;
 		case ManyProjectsAction.load:
