@@ -289,6 +289,23 @@ struct Workspace
 	{
 		return config.stdlibPath(folder.uri.uriToFile);
 	}
+
+	auto describeState() const @property
+	{
+		static struct WorkspaceState
+		{
+			string uri, name;
+			bool initialized;
+			bool selected;
+		}
+
+		WorkspaceState state;
+		state.uri = folder.uri;
+		state.name = folder.name;
+		state.initialized = initialized;
+		state.selected = selected;
+		return state;
+	}
 }
 
 deprecated string workspaceRoot() @property
@@ -373,7 +390,7 @@ ref Workspace handleThings(ref Workspace workspace, string uri, bool userExecute
 		}
 		workspace.selected = true;
 		if (notifyChange || !changedOne)
-			rpc.notifyMethod("coded/changedSelectedWorkspace", workspace.folder);
+			rpc.notifyMethod("coded/changedSelectedWorkspace", workspace.describeState);
 	}
 	return workspace;
 }
