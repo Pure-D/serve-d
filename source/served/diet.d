@@ -65,7 +65,14 @@ void contextExtractD(DietComplete completion, size_t offset, out string code,
 	string prefix;
 	if (completion.parser.root.children.length > 0)
 	{
-		if (auto comment = cast(HiddenComment) completion.parser.root.children[0])
+		int i = 0;
+		if (auto node = cast(TagNode) completion.parser.root.children[i])
+		{
+			if (node.name == "extends" && completion.parser.root.children.length > 1)
+				i++;
+		}
+
+		if (auto comment = cast(HiddenComment) completion.parser.root.children[i])
 		{
 			string startComment = comment.content.strip;
 			info("Have context ", startComment);
