@@ -61,6 +61,8 @@ enum ManyProjectsAction : string
 	load = "load"
 }
 
+// alias to avoid name clashing
+alias UserConfiguration = Configuration;
 struct Configuration
 {
 	struct D
@@ -115,6 +117,7 @@ struct Configuration
 	struct Editor
 	{
 		int[] rulers;
+		int tabSize;
 	}
 
 	struct Git
