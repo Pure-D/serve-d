@@ -23,36 +23,37 @@ CompletionItemKind convertFromDCDType(string type)
 {
 	switch (type)
 	{
-	case "c":
+	case "c": // class name
 		return CompletionItemKind.class_;
-	case "i":
+	case "i": // interface name
 		return CompletionItemKind.interface_;
-	case "s":
-	case "u":
-		return CompletionItemKind.unit;
-	case "a":
-	case "A":
-	case "v":
+	case "s": // struct name
+	case "u": // union name
+		return CompletionItemKind.struct_;
+	case "a": // array
+	case "A": // associative array
+	case "v": // variable name
 		return CompletionItemKind.variable;
-	case "m":
-	case "e":
+	case "m": // member variable
 		return CompletionItemKind.field;
-	case "k":
+	case "e": // enum member
+		return CompletionItemKind.enumMember;
+	case "k": // keyword
 		return CompletionItemKind.keyword;
-	case "f":
+	case "f": // function
 		return CompletionItemKind.function_;
-	case "g":
+	case "g": // enum name
 		return CompletionItemKind.enum_;
-	case "P":
-	case "M":
+	case "P": // package name
+	case "M": // module name
 		return CompletionItemKind.module_;
-	case "l":
+	case "l": // alias name
 		return CompletionItemKind.reference;
-	case "t":
-	case "T":
+	case "t": // template name
+	case "T": // mixin template name
 		return CompletionItemKind.property;
-	case "h":
-	case "p":
+	case "h": // template type parameter
+	case "p": // template variadic parameter
 		return CompletionItemKind.typeParameter;
 	default:
 		return CompletionItemKind.text;
