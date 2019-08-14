@@ -229,7 +229,7 @@ void processConfigChange(served.types.Configuration configuration)
 			}
 			for (size_t i = 0; i < settings.length; i += configurationSections.length)
 			{
-				auto workspace = i == 0 ? &fallbackWorkspace : &workspaces[i / configurationSections.length];
+				auto workspace = i == 0 ? &fallbackWorkspace : &.workspace(items[i].scopeUri.get, false);
 				string[] changed;
 				static foreach (n, section; configurationSections)
 					changed ~= workspace.config.replaceSection!section(
