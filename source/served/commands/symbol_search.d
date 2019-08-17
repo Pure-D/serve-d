@@ -7,7 +7,7 @@ import workspaced.api;
 import workspaced.coms;
 
 import std.algorithm : canFind, filter, map, startsWith;
-import std.array : array;
+import std.array : array, appender;
 import std.json : JSONValue;
 import std.path : extension, isAbsolute;
 import std.string : toLower;
@@ -77,7 +77,7 @@ SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParams params)
 	auto document = documents.tryGet(params.textDocument.uri);
 	auto result = backend.best!DscannerComponent(params.textDocument.uri.uriToFile)
 		.listDefinitions(uriToFile(params.textDocument.uri), document.rawText).getYield;
-	SymbolInformationEx[] ret;
+	auto ret = appender!(SymbolInformationEx[]);
 	foreach (def; result)
 	{
 		SymbolInformationEx info;
@@ -95,10 +95,10 @@ SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParams params)
 			info.containerName = *ptr;
 		if ("deprecation" in attribs)
 			info.deprecated_ = true;
-		ret ~= info;
+		ret.put(info);
 	}
-	documentSymbolsCacheOld.store(document, ret);
-	return ret;
+	documentSymbolsCacheOld.store(document, ret.data);
+	return ret.data;
 }
 
 PerDocumentCache!(DocumentSymbol[]) documentSymbolsCacheHierarchical;
