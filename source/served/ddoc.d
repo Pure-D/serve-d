@@ -5,6 +5,9 @@ import served.protocol;
 import ddoc;
 import std.format;
 import std.string;
+import std.uni : sicmp;
+
+public import ddoc : Comment;
 
 /**
  * A test function for checking `DDoc` parsing
@@ -32,6 +35,34 @@ private int testFunction(string foo, int bar)
 }
 
 /**
+ * Parses a ddoc string into a divided comment.
+ * Returns: A comment if the ddoc could be parsed or Comment.init if it couldn't be parsed and throwError is false.
+ * Throws: Exception if comment has ddoc syntax errors.
+ * Params:
+ * 	ddoc = the documentation string as given by the user without any comment markers
+ * 	throwError = set to true to make parsing errors throw
+ */
+Comment parseDdoc(string ddoc, bool throwError = false)
+{
+	if (ddoc.length == 0)
+		return Comment.init;
+
+	if (throwError)
+		return parseComment(prepareDDoc(ddoc), markdownMacros, true);
+	else
+	{
+		try
+		{
+			return parseComment(prepareDDoc(ddoc), markdownMacros, true);
+		}
+		catch (Exception e)
+		{
+			return Comment.init;
+		}
+	}
+}
+
+/**
  * Convert a Ddoc comment string to markdown. Returns ddoc string back if it is
  * not valid.
  * Params:
@@ -49,9 +80,14 @@ string ddocToMarkdown(string ddoc)
 	{
 		return ddoc;
 	}
+	return ddocToMarkdown(comment);
+}
 
+/// ditto
+string ddocToMarkdown(const Comment comment)
+{
 	auto output = "";
-	foreach (Section section; comment.sections)
+	foreach (section; comment.sections)
 	{
 		import std.uni : toLower;
 
@@ -104,8 +140,26 @@ MarkedString[] ddocToMarked(string ddoc)
 	MarkedString[] ret;
 	if (!ddoc.length)
 		return ret;
+	return markdownToMarked(ddoc.ddocToMarkdown);
+}
 
-	auto md = ddoc.ddocToMarkdown;
+/// ditto
+MarkedString[] ddocToMarked(const Comment comment)
+{
+	MarkedString[] ret;
+	if (comment == Comment.init)
+		return ret;
+	return markdownToMarked(comment.ddocToMarkdown);
+}
+
+/**
+ * Converts markdown code to MarkedString blocks as determined by D code blocks.
+ */
+MarkedString[] markdownToMarked(string md)
+{
+	MarkedString[] ret;
+	if (!md.length)
+		return ret;
 
 	ret ~= MarkedString("");
 
