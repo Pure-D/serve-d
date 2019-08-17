@@ -66,7 +66,7 @@ SignatureHelp convertDCDCalltips(DCDExtComponent dcdext, string[] calltips,
 					auto docString = getParamDocumentation(docs, paramName);
 					if (docString.length)
 						paramDocs = MarkupContent(MarkupKind.markdown,
-								("**" ~ paramLabel ~ "**: " ~ ddocToMarkdown(docString.strip)).stripRight).opt;
+								("**" ~ paramName ~ "**: " ~ ddocToMarkdown(docString.strip)).stripRight).opt;
 				}
 				retParams ~= ParameterInformation(paramLabel, paramDocs);
 			}
