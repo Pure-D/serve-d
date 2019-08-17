@@ -59,7 +59,7 @@ string ddocToMarkdown(string ddoc)
 		{
 		case "":
 		case "summary":
-			output ~= section.content ~= "\n\n";
+			output ~= section.content ~ "\n\n";
 			break;
 		case "params":
 			output ~= "**Params**\n\n";
