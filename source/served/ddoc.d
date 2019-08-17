@@ -177,6 +177,28 @@ MarkedString[] markdownToMarked(string md)
 }
 
 /**
+ * Returns: the params section in a ddoc comment as key value pair. Or null if not found.
+ */
+inout(KeyValuePair[]) getParams(inout Comment comment)
+{
+	foreach (section; comment.sections)
+		if (section.name.sicmp("params") == 0)
+			return section.mapping;
+	return null;
+}
+
+/**
+ * Returns: documentation for a given parameter in the params section of a documentation comment. Or null if not found.
+ */
+string getParamDocumentation(const Comment comment, string searchParam)
+{
+	foreach (param; getParams(comment))
+		if (param[0] == searchParam)
+			return param[1];
+	return null;
+}
+
+/**
  * Performs preprocessing of the document. Wraps code blocks in macros.
  * Params:
  * 		str = This is one of the params
