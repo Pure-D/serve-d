@@ -496,3 +496,15 @@ unittest
 	assert(doc.rawText == "inthe");
 	assert(ptr is doc.text.ptr);
 }
+
+size_t countUTF16Length(const(char)[] s)
+{
+	size_t offset;
+	size_t index;
+	while (index < s.length)
+	{
+		const c = decode!(UseReplacementDchar.yes)(s, index);
+		offset += c.codeLength!wchar;
+	}
+	return offset;
+}
