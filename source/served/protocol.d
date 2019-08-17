@@ -644,6 +644,38 @@ struct TextDocumentClientCapabilities
 		Optional!bool contextSupport;
 	}
 
+	struct SignatureHelpInfo
+	{
+		struct SignatureInformationInfo
+		{
+			struct ParameterInformationInfo
+			{
+				mixin StrictOptionalSerializer;
+
+				Optional!bool labelOffsetSupport;
+			}
+
+			mixin StrictOptionalSerializer;
+
+			// MarkupKind[]
+			Optional!(string[]) documentationFormat;
+			Optional!ParameterInformationInfo parameterInformation;
+		}
+
+		mixin StrictOptionalSerializer;
+
+		Optional!bool dynamicRegistration;
+		Optional!SignatureInformationInfo signatureInformation;
+
+		@SerializeIgnore bool supportsLabelOffset() @property
+		{
+			if (signatureInformation.isNull || signatureInformation.parameterInformation.isNull
+					|| signatureInformation.parameterInformation.labelOffsetSupport.isNull)
+				return false;
+			return signatureInformation.parameterInformation.labelOffsetSupport.get;
+		}
+	}
+
 	struct DocumentSymbolInfo
 	{
 		mixin StrictOptionalSerializer;
@@ -671,7 +703,7 @@ struct TextDocumentClientCapabilities
 	Optional!SyncInfo synchronization;
 	Optional!CompletionInfo completion;
 	Optional!DynamicRegistration hover;
-	Optional!DynamicRegistration signatureHelp;
+	Optional!SignatureHelpInfo signatureHelp;
 	Optional!DynamicRegistration references;
 	Optional!DynamicRegistration documentHighlight;
 	Optional!DocumentSymbolInfo documentSymbol;
@@ -1153,7 +1185,7 @@ struct SignatureInformation
 
 struct ParameterInformation
 {
-	string label;
+	JSONValue label;
 	Optional!MarkupContent documentation;
 }
 

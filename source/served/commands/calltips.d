@@ -11,6 +11,7 @@ import workspaced.coms;
 
 import std.algorithm : max;
 import std.string : strip, stripRight;
+import std.json;
 
 /**
  * Convert DCD calltips to LSP compatible `SignatureHelp` objects
@@ -59,14 +60,30 @@ SignatureHelp convertDCDCalltips(DCDExtComponent dcdext, string[] calltips,
 			{
 				int[2] range = param.nameRange[1] == 0 ? param.contentRange : param.nameRange;
 				string paramName = calltip[range[0] .. range[1]];
-				string paramLabel = calltip[param.contentRange[0] .. param.contentRange[1]];
+				JSONValue paramLabel;
+				if (capabilities.textDocument.signatureHelp.supportsLabelOffset)
+					paramLabel = JSONValue([
+							JSONValue(cast(int) calltip[0 .. param.contentRange[0]].countUTF16Length),
+							JSONValue(cast(int) calltip[0 .. param.contentRange[1]].countUTF16Length)
+							]);
+				else
+					paramLabel = JSONValue(calltip[param.contentRange[0] .. param.contentRange[1]]);
 				Optional!MarkupContent paramDocs;
 				if (docs != Comment.init)
 				{
 					auto docString = getParamDocumentation(docs, paramName);
 					if (docString.length)
-						paramDocs = MarkupContent(MarkupKind.markdown,
-								("**" ~ paramName ~ "**: " ~ ddocToMarkdown(docString.strip)).stripRight).opt;
+					{
+						Optional!(string[]) formats = capabilities.textDocument
+							.signatureHelp.signatureInformation.documentationFormat;
+						MarkupKind kind = formats.isNull || formats.length == 0
+							? MarkupKind.markdown : cast(MarkupKind) formats[0];
+						string prefix = kind == MarkupKind.markdown ? "**" ~ paramName ~ "**: " : paramName
+							~ ": ";
+						string docRet = kind == MarkupKind.markdown
+							? ddocToMarkdown(docString.strip) : docString.strip;
+						paramDocs = MarkupContent(kind, (prefix ~ docRet).stripRight).opt;
+					}
 				}
 				retParams ~= ParameterInformation(paramLabel, paramDocs);
 			}
