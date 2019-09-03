@@ -298,16 +298,21 @@ struct WindowFunctions
 		return requestMessage(type, message, a).title;
 	}
 
-	void runOrMessage(lazy void fn, MessageType type, string message)
+	/// Runs a function and shows a UI message on failure and logs the error.
+	/// Returns: true if fn was successfully run or false if an exception occured.
+	bool runOrMessage(lazy void fn, MessageType type, string message,
+			string file = __FILE__, size_t line = __LINE__)
 	{
 		try
 		{
 			fn();
+			return true;
 		}
 		catch (Exception e)
 		{
-			stderr.writeln(e);
+			errorf("Error running in %s(%s): %s", file, line, e);
 			showMessage(type, message);
+			return false;
 		}
 	}
 

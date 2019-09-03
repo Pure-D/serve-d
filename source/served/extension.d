@@ -336,7 +336,9 @@ InitializeResult initialize(InitializeParams params)
 
 	InitializeResult result;
 	result.capabilities.textDocumentSync = documents.syncKind;
-	result.capabilities.completionProvider = CompletionOptions(false, [".", "=", "*", "/", "+", "-", "%"]);
+	result.capabilities.completionProvider = CompletionOptions(false, [
+			".", "=", "*", "/", "+", "-", "%"
+			]);
 	result.capabilities.signatureHelpProvider = SignatureHelpOptions([
 			"(", "[", ","
 			]);
@@ -864,6 +866,8 @@ void doDscanner(DocumentLinkParams params)
 @protocolNotification("textDocument/didSave")
 void onDidSaveDocument(DidSaveTextDocumentParams params)
 {
+	import dub = served.commands.dub;
+
 	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	auto config = workspace(params.textDocument.uri).config;
 	auto document = documents[params.textDocument.uri];
@@ -913,8 +917,24 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 		}
 
 		setTimeout({
-			rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
+			const successfulUpdate = rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
 				.updateImportPaths(true), MessageType.warning, translate!"d.ext.dubImportFail");
+			if (successfulUpdate)
+			{
+				rpc.window.runOrMessage(dub.updateImports(), MessageType.warning,
+					translate!"d.ext.dubImportFail");
+			}
+			else
+			{
+				try
+				{
+					dub.updateImports();
+				}
+				catch (Exception e)
+				{
+					errorf("Failed updating imports: %s", e);
+				}
+			}
 		}, 500.msecs);
 
 		setTimeout({
