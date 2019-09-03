@@ -543,7 +543,7 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 	{
 	case DCDCompletions.Type.identifiers:
 		auto d = workspace(params.textDocument.uri).config.d;
-		completion = convertDCDIdentifiers(result.identifiers, d.argumentSnippets, d.completeNoDupes);
+		completion ~= convertDCDIdentifiers(result.identifiers, d.argumentSnippets, d.completeNoDupes);
 		goto case;
 	case DCDCompletions.Type.calltips:
 		return CompletionList(false, completion);
