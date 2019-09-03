@@ -336,7 +336,7 @@ InitializeResult initialize(InitializeParams params)
 
 	InitializeResult result;
 	result.capabilities.textDocumentSync = documents.syncKind;
-	result.capabilities.completionProvider = CompletionOptions(false, [".", "="]);
+	result.capabilities.completionProvider = CompletionOptions(false, [".", "=", "*", "/", "+", "-", "%"]);
 	result.capabilities.signatureHelpProvider = SignatureHelpOptions([
 			"(", "[", ","
 			]);

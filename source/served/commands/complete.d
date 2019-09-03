@@ -9,7 +9,8 @@ import workspaced.api;
 import workspaced.com.dcd;
 import workspaced.coms;
 
-import std.algorithm : any, canFind, chunkBy, endsWith, filter, map, min, reverse, sort, uniq;
+import std.algorithm : among, any, canFind, chunkBy, endsWith, filter, map, min,
+	reverse, sort, startsWith, uniq;
 import std.array : appender, array;
 import std.conv : text, to;
 import std.experimental.logger;
@@ -440,7 +441,8 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 		WorkspaceD.Instance instance, ref Document document)
 {
-	string line = document.lineAt(params.position);
+	auto lineRange = document.lineByteRangeAt(params.position.line);
+	string line = document.rawText[lineRange[0] .. lineRange[1]].idup;
 	string prefix = line[0 .. min($, params.position.character)];
 	CompletionItem[] completion;
 	if (prefix.strip == "///" || prefix.strip == "*")
@@ -459,19 +461,19 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 		if (instance.has!DCDComponent)
 			result = instance.get!DCDComponent.listCompletion(document.rawText, byteOff).getYield;
 	}, {
-		if (!line.strip.length)
+		string lineStripped = line.strip;
+		if (lineStripped.among!("", "/", "/*", "/+", "//", "///", "/**", "/++"))
 		{
 			auto defs = instance.get!DscannerComponent.listDefinitions(uriToFile(params.textDocument.uri),
-				document.rawText).getYield;
+				document.rawText[lineRange[1] .. $]).getYield;
 			ptrdiff_t di = -1;
 			FuncFinder: foreach (i, def; defs)
 			{
-				for (int n = 1; n < 5; n++)
-					if (def.line == params.position.line + n)
-					{
-						di = i;
-						break FuncFinder;
-					}
+				if (def.line >= 0 && def.line <= 5)
+				{
+					di = i;
+					break FuncFinder;
+				}
 			}
 			if (di == -1)
 				return;
@@ -485,10 +487,15 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 				auto eol = document.eolAt(params.position.line).toString;
 				doc.insertText = "/// ";
 				CompletionItem doc2 = doc;
+				CompletionItem doc3 = doc;
 				doc2.label = "/**";
 				doc2.insertText = "/** " ~ eol ~ " * $0" ~ eol ~ " */";
-				completion ~= doc;
-				completion ~= doc2;
+				doc3.label = "/++";
+				doc3.insertText = "/++ " ~ eol ~ " * $0" ~ eol ~ " +/";
+
+				completion.addDocComplete(doc, lineStripped);
+				completion.addDocComplete(doc2, lineStripped);
+				completion.addDocComplete(doc3, lineStripped);
 				return;
 			}
 			auto funcArgs = extractFunctionParameters(*sig);
@@ -533,10 +540,15 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 			auto eol = document.eolAt(params.position.line).toString;
 			doc.insertText = docs.map!(a => "/// " ~ a).join(eol);
 			CompletionItem doc2 = doc;
+			CompletionItem doc3 = doc;
 			doc2.label = "/**";
 			doc2.insertText = "/** " ~ eol ~ docs.map!(a => " * " ~ a ~ eol).join() ~ " */";
-			completion ~= doc;
-			completion ~= doc2;
+			doc3.label = "/++";
+			doc3.insertText = "/++ " ~ eol ~ docs.map!(a => " + " ~ a ~ eol).join() ~ " +/";
+
+			completion.addDocComplete(doc, lineStripped);
+			completion.addDocComplete(doc2, lineStripped);
+			completion.addDocComplete(doc3, lineStripped);
 		}
 	});
 	switch (result.type)
@@ -550,6 +562,15 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 	default:
 		throw new Exception("Unexpected result from DCD:\n\t" ~ result.raw.join("\n\t"));
 	}
+}
+
+private void addDocComplete(ref CompletionItem[] completion, CompletionItem doc, string prefix)
+{
+	if (!doc.label.startsWith(prefix))
+		return;
+	if (prefix.length > 0)
+		doc.insertText = doc.insertText[prefix.length .. $];
+	completion ~= doc;
 }
 
 auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, bool completeNoDupes)

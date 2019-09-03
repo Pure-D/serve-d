@@ -212,14 +212,7 @@ struct Document
 		return TextRange(Position(position.line, chars[0]), Position(position.line, chars[1]));
 	}
 
-	/// Returns the text of a line at the given position.
-	string lineAt(Position position)
-	{
-		return lineAt(position.line);
-	}
-
-	/// Returns the text of a line starting at line 0.
-	string lineAt(uint line)
+	size_t[2] lineByteRangeAt(uint line)
 	{
 		size_t index = 0;
 		size_t lineStart = 0;
@@ -249,8 +242,21 @@ struct Document
 			}
 		}
 		if (!found)
-			return "";
-		return text[lineStart .. index].idup;
+			return [0, 0];
+		return [lineStart, index];
+	}
+
+	/// Returns the text of a line at the given position.
+	string lineAt(Position position)
+	{
+		return lineAt(position.line);
+	}
+
+	/// Returns the text of a line starting at line 0.
+	string lineAt(uint line)
+	{
+		auto range = lineByteRangeAt(line);
+		return text[range[0] .. range[1]].idup;
 	}
 
 	unittest
