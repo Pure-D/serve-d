@@ -15,7 +15,9 @@ import std.array : appender, array;
 import std.conv : text, to;
 import std.experimental.logger;
 import std.regex : ctRegex, matchFirst;
-import std.string : indexOf, join, lastIndexOf, lineSplitter, strip, stripRight, toLower;
+import std.string : indexOf, join, lastIndexOf, lineSplitter, strip,
+	stripLeft, stripRight, toLower;
+import std.utf : decodeFront;
 
 import fs = std.file;
 import io = std.stdio;
@@ -442,20 +444,28 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 		WorkspaceD.Instance instance, ref Document document)
 {
 	auto lineRange = document.lineByteRangeAt(params.position.line);
-	string line = document.rawText[lineRange[0] .. lineRange[1]].idup;
-	string prefix = line[0 .. min($, params.position.character)];
-	CompletionItem[] completion;
-	if (prefix.strip == "///" || prefix.strip == "*")
-	{
-		foreach (compl; import("ddocs.txt").lineSplitter)
-		{
-			auto item = CompletionItem(compl, CompletionItemKind.snippet.opt);
-			item.insertText = compl ~ ": ";
-			completion ~= item;
-		}
-		return CompletionList(false, completion);
-	}
 	auto byteOff = cast(int) document.positionToBytes(params.position);
+
+	string line = document.rawText[lineRange[0] .. lineRange[1]].idup;
+	string prefix = line[0 .. min($, params.position.character)].strip;
+	CompletionItem[] completion;
+	if (document.rawText.isInComment(byteOff, backend))
+		if (prefix.startsWith("///", "*", "+"))
+		{
+			int prefixLen = prefix[0] == '/' ? 3 : 1;
+			auto remaining = prefix[prefixLen .. $].stripLeft;
+
+			foreach (compl; import("ddocs.txt").lineSplitter)
+			{
+				if (compl.startsWith(remaining))
+				{
+					auto item = CompletionItem(compl, CompletionItemKind.snippet.opt);
+					item.insertText = compl ~ ": ";
+					completion ~= item;
+				}
+			}
+			return CompletionList(false, completion);
+		}
 	DCDCompletions result = DCDCompletions.empty;
 	joinAll({
 		if (instance.has!DCDComponent)
@@ -571,6 +581,63 @@ private void addDocComplete(ref CompletionItem[] completion, CompletionItem doc,
 	if (prefix.length > 0)
 		doc.insertText = doc.insertText[prefix.length .. $];
 	completion ~= doc;
+}
+
+private bool isInComment(scope const(char)[] code, size_t at, WorkspaceD backend)
+{
+	if (!backend)
+		return false;
+
+	import dparse.lexer : DLexer, LexerConfig, StringBehavior, tok;
+
+	// TODO: does this kind of token parsing belong in serve-d?
+
+	LexerConfig config;
+	config.fileName = "stdin";
+	config.stringBehavior = StringBehavior.source;
+	auto lexer = DLexer(code, config, &backend.stringCache);
+
+	while (!lexer.empty) switch (lexer.front.type)
+	{
+	case tok!"comment":
+		auto t = lexer.front;
+
+		if (lexer.front.text.startsWith("//"))
+		{
+			if (t.index <= at && t.index + t.text.length >= at)
+				return true;
+		}
+		else
+		{
+			if (t.index <= at && t.index + t.text.length > at)
+				return true;
+		}
+
+		lexer.popFront();
+		break;
+	case tok!"__EOF__":
+		return false;
+	default:
+		lexer.popFront();
+		break;
+	}
+	return false;
+}
+
+unittest
+{
+	auto backend = new WorkspaceD();
+	assert(isInComment(`hello /** world`, 10, backend));
+	assert(!isInComment(`hello /** world`, 3, backend));
+	assert(isInComment(`hello /* world */ bar`, 8, backend));
+	assert(isInComment(`hello /* world */ bar`, 16, backend));
+	assert(!isInComment(`hello /* world */ bar`, 17, backend));
+	assert(!isInComment("int x;\n// line comment\n", 6, backend));
+	assert(isInComment("int x;\n// line comment\n", 7, backend));
+	assert(isInComment("int x;\n// line comment\n", 9, backend));
+	assert(isInComment("int x;\n// line comment\n", 21, backend));
+	assert(isInComment("int x;\n// line comment\n", 22, backend));
+	assert(!isInComment("int x;\n// line comment\n", 23, backend));
 }
 
 auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, bool completeNoDupes)
