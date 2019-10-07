@@ -1,13 +1,13 @@
 module served.extension;
 
-import core.sync.mutex : Mutex;
-
 import served.fibermanager;
 import served.nothrow_fs;
 import served.translate;
 import served.types;
 
-import core.time : Duration, msecs, seconds;
+public import served.async;
+
+import core.time : msecs, seconds;
 
 import std.algorithm : any, canFind, endsWith, map;
 import std.array : array;
@@ -49,25 +49,6 @@ else version = DCDFromSource;
 
 /// Set to true when shutdown is called
 __gshared bool shutdownRequested;
-
-bool safe(alias fn, Args...)(Args args)
-{
-	try
-	{
-		fn(args);
-		return true;
-	}
-	catch (Exception e)
-	{
-		error(e);
-		return false;
-	}
-	catch (AssertError e)
-	{
-		error(e);
-		return false;
-	}
-}
 
 void changedConfig(string workspaceUri, string[] paths,
 		served.types.Configuration config, bool allowFallback = false)
@@ -954,65 +935,6 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 	}
 }
 
-struct Timeout
-{
-	StopWatch sw;
-	Duration timeout;
-	void delegate() callback;
-	int id;
-}
-
-int setTimeout(void delegate() callback, int ms)
-{
-	return setTimeout(callback, ms.msecs);
-}
-
-void setImmediate(void delegate() callback)
-{
-	setTimeout(callback, 0);
-}
-
-int setTimeout(void delegate() callback, Duration timeout)
-{
-	trace("Setting timeout for ", timeout);
-	Timeout to;
-	to.timeout = timeout;
-	to.callback = callback;
-	to.sw.start();
-	synchronized (timeoutsMutex)
-	{
-		to.id = ++timeoutID;
-		timeouts ~= to;
-	}
-	return to.id;
-}
-
-void clearTimeout(int id)
-{
-	synchronized (timeoutsMutex)
-		foreach_reverse (i, ref timeout; timeouts)
-		{
-			if (timeout.id == id)
-			{
-				timeout.sw.stop();
-				if (timeouts.length > 1)
-					timeouts[i] = timeouts[$ - 1];
-				timeouts.length--;
-				return;
-			}
-		}
-}
-
-__gshared void delegate(void delegate(), int pages, string file, int line) spawnFiberImpl;
-
-void spawnFiber(void delegate() cb, int pages = 20, string file = __FILE__, int line = __LINE__)
-{
-	if (spawnFiberImpl)
-		spawnFiberImpl(cb, pages, file, line);
-	else
-		setImmediate(cb);
-}
-
 shared static this()
 {
 	backend = new WorkspaceD();
@@ -1028,43 +950,4 @@ shared static this()
 shared static ~this()
 {
 	backend.shutdown();
-}
-
-__gshared int timeoutID;
-__gshared Timeout[] timeouts;
-__gshared Mutex timeoutsMutex;
-
-// Called at most 100x per second
-void parallelMain()
-{
-	timeoutsMutex = new Mutex;
-	void delegate()[32] callsBuf;
-	void delegate()[] calls;
-	while (true)
-	{
-		synchronized (timeoutsMutex)
-			foreach_reverse (i, ref timeout; timeouts)
-			{
-				if (timeout.sw.peek >= timeout.timeout)
-				{
-					timeout.sw.stop();
-					trace("Calling timeout");
-					callsBuf[calls.length] = timeout.callback;
-					calls = callsBuf[0 .. calls.length + 1];
-					if (timeouts.length > 1)
-						timeouts[i] = timeouts[$ - 1];
-					timeouts.length--;
-
-					if (calls.length >= callsBuf.length)
-						break;
-				}
-			}
-
-		foreach (call; calls)
-			call();
-
-		callsBuf[] = null;
-		calls = null;
-		Fiber.yield();
-	}
 }
