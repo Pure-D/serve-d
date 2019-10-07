@@ -153,20 +153,27 @@ void processNotify(RequestMessage msg)
 	}
 }
 
-void printVersion()
+void printVersion(io.File output = io.stdout)
 {
+	import Compiler = std.compiler;
+	import OS = std.system;
+
 	static if (__traits(compiles, {
-			import workspaced.info : WorkspacedVersion = Version;
+			import workspaced.info : BundledDependencies, WorkspacedVersion = Version;
 		}))
-		import workspaced.info : WorkspacedVersion = Version;
+		import workspaced.info : BundledDependencies, WorkspacedVersion = Version;
 	else
-		import source.workspaced.info : WorkspacedVersion = Version;
+		import source.workspaced.info : BundledDependencies, WorkspacedVersion = Version;
 	import source.served.info;
 
-	io.writefln("serve-d v%(%s.%) with workspace-d v%(%s.%)", Version, WorkspacedVersion);
-	io.writefln("Included features: %(%s, %)", IncludedFeatures);
+	output.writefln("serve-d v%(%s.%) with workspace-d v%(%s.%)", Version, WorkspacedVersion);
+	output.writefln("Included features: %(%s, %)", IncludedFeatures);
 	// There will always be a line which starts with `Built: ` forever, it is considered stable. If there is no line, assume version 0.1.2
-	io.writefln("Built: %s", __TIMESTAMP__);
+	output.writefln("Built: %s", __TIMESTAMP__);
+	output.writeln("with compiler ", Compiler.name, " v",
+			Compiler.version_major.to!string, ".", Compiler.version_minor.to!string,
+			" on ", OS.os.to!string, " ", OS.endian.to!string);
+	output.writefln(BundledDependencies);
 }
 
 __gshared FiberManager fibers;
@@ -251,6 +258,8 @@ int main(string[] args)
 
 	served.extension.spawnFiberImpl = (&pushFiber!(void delegate())).toDelegate;
 	pushFiber(&served.extension.parallelMain);
+
+	printVersion(io.stderr);
 
 	while (rpc.state != Fiber.State.TERM)
 	{
