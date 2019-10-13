@@ -544,6 +544,12 @@ string userPath(string path)
 	return expandTilde(path);
 }
 
+string userPath(Configuration.Git git)
+{
+	// vscode may send null git path
+	return git.path.length ? userPath(git.path) : "git";
+}
+
 DocumentUri uri(string scheme, string authority, string path, string query, string fragment)
 {
 	return scheme ~ "://" ~ (authority.length ? authority : "") ~ (path.length ? path

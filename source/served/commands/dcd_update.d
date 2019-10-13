@@ -69,7 +69,8 @@ void updateDCD()
 		version (Windows)
 		{
 			// needed to check for 64 bit process compatibility on 32 bit binaries because of WoW64
-			import core.sys.windows.windows : GetNativeSystemInfo, SYSTEM_INFO, PROCESSOR_ARCHITECTURE_INTEL;
+			import core.sys.windows.windows : GetNativeSystemInfo, SYSTEM_INFO,
+				PROCESSOR_ARCHITECTURE_INTEL;
 
 			SYSTEM_INFO sysInfo;
 			GetNativeSystemInfo(&sysInfo);
@@ -91,7 +92,7 @@ void updateDCD()
 		success = compileDependency(outputFolder, "DCD",
 				"https://github.com/Hackerpilot/DCD.git", [
 					[
-						firstConfig.git.path.userPath, "submodule", "update", "--init",
+						firstConfig.git.userPath, "submodule", "update", "--init",
 						"--recursive"
 					], ["dub", "build", "--config=client"] ~ platformOptions,
 					["dub", "build", "--config=server"] ~ platformOptions
