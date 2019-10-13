@@ -56,11 +56,20 @@ void changedConfig(string workspaceUri, string[] paths,
 	StopWatch sw;
 	sw.start();
 
-	if (!syncedConfiguration)
+	if (!workspaceUri.length)
+	{
+		if (!allowFallback)
+			error("Passed invalid empty workspace uri to changedConfig!");
+		trace("Updated fallback config (user settings) for sections ", paths);
+		return;
+	}
+
+	if (!syncedConfiguration && !allowFallback)
 	{
 		syncedConfiguration = true;
 		doGlobalStartup();
 	}
+
 	Workspace* proj = &workspace(workspaceUri);
 	bool isFallback = proj is &fallbackWorkspace;
 	if (isFallback && !allowFallback)
@@ -189,6 +198,10 @@ void processConfigChange(served.types.Configuration configuration)
 {
 	import painlessjson : fromJSON;
 
+	syncingConfiguration = true;
+	scope (exit)
+		syncingConfiguration = false;
+
 	if (capabilities.workspace.configuration && workspaces.length >= 2)
 	{
 		ConfigurationItem[] items;
@@ -198,6 +211,7 @@ void processConfigChange(served.types.Configuration configuration)
 		foreach (workspace; workspaces)
 			foreach (section; configurationSections)
 				items ~= ConfigurationItem(opt(workspace.folder.uri), opt(section));
+		trace("Re-requesting configuration from client because there is more than 1 workspace");
 		auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
 		if (res.result.type == JSONType.array && res.result.array.length >= 1)
 		{
@@ -215,7 +229,7 @@ void processConfigChange(served.types.Configuration configuration)
 				static foreach (n, section; configurationSections)
 					changed ~= workspace.config.replaceSection!section(
 							settings[i + n].fromJSON!(configurationTypes[n]));
-				changedConfig(workspace.folder.uri, changed, workspace.config, i == 0);
+				changedConfig(i == 0 ? null : workspace.folder.uri, changed, workspace.config, i == 0);
 			}
 		}
 	}
@@ -224,8 +238,8 @@ void processConfigChange(served.types.Configuration configuration)
 		if (workspaces.length > 1)
 			error(
 					"Client does not support configuration request, only applying config for first workspace.");
-		changedConfig(workspaces[0].folder.uri,
-				workspaces[0].config.replace(configuration), workspaces[0].config);
+		auto changed = workspaces[0].config.replace(configuration);
+		changedConfig(workspaces[0].folder.uri, changed, workspaces[0].config);
 		fallbackWorkspace.config = workspaces[0].config;
 	}
 }
@@ -290,6 +304,7 @@ string[] getPossibleSourceRoots(string workspaceFolder)
 }
 
 __gshared bool syncedConfiguration = false;
+__gshared bool syncingConfiguration = false;
 InitializeResult initialize(InitializeParams params)
 {
 	import std.file : chdir;
@@ -334,10 +349,13 @@ InitializeResult initialize(InitializeParams params)
 			opt(ServerWorkspaceCapabilities.WorkspaceFolders(opt(true), opt(true)))));
 
 	setTimeout({
-		if (!syncedConfiguration && capabilities.workspace.configuration)
+		if (!syncedConfiguration && !syncingConfiguration && capabilities.workspace.configuration)
 		{
 			if (!syncConfiguration(null))
 				error("Syncing user configuration failed!");
+
+			warning(
+				"Didn't receive any configuration notification, manually requesting all configurations now");
 
 			foreach (ref workspace; workspaces)
 				syncConfiguration(workspace.folder.uri);
