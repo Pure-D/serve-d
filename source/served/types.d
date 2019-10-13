@@ -93,7 +93,7 @@ struct Configuration
 		string[] extraRoots;
 		ManyProjectsAction manyProjectsAction = ManyProjectsAction.ask;
 		int manyProjectsThreshold = 4;
-		bool lintOnFileOpen = true;
+		string lintOnFileOpen = "project";
 		bool dietContextCompletion = false;
 	}
 

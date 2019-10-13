@@ -795,7 +795,14 @@ void onDidOpenDocument(DidOpenTextDocumentParams params)
 {
 	freshlyOpened[params.textDocument.uri] = FileOpenInfo(Clock.currTime);
 
-	if (config(params.textDocument.uri).d.lintOnFileOpen)
+	string lintSetting = config(params.textDocument.uri).d.lintOnFileOpen;
+	bool shouldLint;
+	if (lintSetting == "always")
+		shouldLint = true;
+	else if (lintSetting == "project")
+		shouldLint = workspaceIndex(params.textDocument.uri) != size_t.max;
+
+	if (shouldLint)
 		onDidChangeDocument(DocumentLinkParams(TextDocumentIdentifier(params.textDocument.uri)));
 }
 
