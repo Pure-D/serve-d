@@ -111,6 +111,7 @@ string formatTranslation(Args...)(string text, Args formatArgs)
 				switch (n)
 				{
 					static foreach (i, arg; formatArgs)
+					{
 				case i:
 						static if (isIntegral!(typeof(arg)))
 							targetIndex = resolvePlural(form, cast(int) arg);
@@ -118,7 +119,8 @@ string formatTranslation(Args...)(string text, Args formatArgs)
 							targetIndex = resolvePlural(form, arg.to!int);
 						else
 							assert(false, "Cannot pluralize based on value of type " ~ typeof(arg).stringof);
-					break ArgIndexSwitch;
+						break ArgIndexSwitch;
+					}
 				default:
 					targetIndex = 0;
 					break ArgIndexSwitch;
@@ -176,9 +178,11 @@ string formatTranslation(Args...)(string text, Args formatArgs)
 					switch (n)
 					{
 						static foreach (i, arg; formatArgs)
+						{
 					case i:
 							insert = arg.to!string;
-						break ArgSwitch;
+							break ArgSwitch;
+						}
 					default:
 						insert = null;
 						break ArgSwitch;
@@ -219,6 +223,14 @@ string formatTranslation(Args...)(string text, Args formatArgs)
 		startIndex = text.indexOfAny(escapeChars, end + 1);
 	}
 	return text;
+}
+
+unittest
+{
+	assert(formatTranslation("{0} {1}", "hello", "world") == "hello world");
+
+	assert(formatTranslation("DCD is outdated. (target={0}, installed={1})",
+			"v1.12.0", "v1.11.1") == "DCD is outdated. (target=v1.12.0, installed=v1.11.1)");
 }
 
 unittest
