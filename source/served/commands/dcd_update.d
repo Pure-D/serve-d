@@ -218,6 +218,7 @@ void updateDCD()
 		rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("dcdServerPath",
 				JSONValue(finalDestinationServer), true));
 		rpc.notifyMethod("coded/logInstall", "Successfully installed DCD");
+
 		foreach (ref workspace; workspaces)
 		{
 			auto instance = backend.getInstance(workspace.folder.uri.uriToFile);
@@ -229,7 +230,8 @@ void updateDCD()
 				instance.config.set("dcd", "clientPath", finalDestinationClient);
 				instance.config.set("dcd", "serverPath", finalDestinationServer);
 
-				startDCD(instance, workspace.folder.uri);
+				prepareDCD(instance, workspace.folder.uri);
+				startDCDServer(instance, workspace.folder.uri);
 			}
 		}
 	}

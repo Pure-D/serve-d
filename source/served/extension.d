@@ -10,7 +10,7 @@ public import served.async;
 import core.time : msecs, seconds;
 
 import std.algorithm : any, canFind, endsWith, map;
-import std.array : array;
+import std.array : appender, array;
 import std.conv : to;
 import std.datetime.stopwatch : StopWatch;
 import std.datetime.systime : Clock, SysTime;
@@ -152,7 +152,11 @@ void changedConfig(string workspaceUri, string[] paths,
 			if (config.d.enableAutoComplete)
 			{
 				if (!backend.has!DCDComponent(workspaceFs))
-					startDCD(backend.getInstance(workspaceFs), workspaceUri);
+				{
+					auto instance = backend.getInstance(workspaceFs);
+					prepareDCD(instance, workspaceUri);
+					startDCDServer(instance, workspaceUri);
+				}
 			}
 			else if (backend.has!DCDComponent(workspaceFs))
 			{
@@ -529,10 +533,24 @@ void doStartup(string workspaceUri)
 	}
 	trace("Initializing serve-d for " ~ workspaceUri);
 
+	struct Root
+	{
+		RootSuggestion root;
+		string uri;
+		WorkspaceD.Instance instance;
+	}
+
+	bool gotOneDub;
+	scope roots = appender!(Root[]);
+
 	foreach (root; rootsForProject(workspaceUri.uriToFile, proj.config.d.scanAllFolders,
 			proj.config.d.disabledRootGlobs, proj.config.d.extraRoots,
 			proj.config.d.manyProjectsAction, proj.config.d.manyProjectsThreshold))
 	{
+		info("Initializing instance for root ", root);
+		StopWatch rootTimer;
+		rootTimer.start();
+
 		auto workspaceRoot = root.dir;
 		workspaced.api.Configuration config;
 		config.base = JSONValue([
@@ -546,6 +564,8 @@ void doStartup(string workspaceUri)
 		auto instance = backend.addInstance(workspaceRoot, config);
 		if (!activeInstance)
 			activeInstance = instance;
+
+		roots ~= Root(root, workspaceUri, instance);
 
 		bool disableDub = proj.config.d.neverUseDub || !root.useDub;
 		bool loadedDub;
@@ -591,18 +611,35 @@ void doStartup(string workspaceUri)
 			}
 		}
 		else
-			setTimeout({ rpc.notifyMethod("coded/initDubTree"); }, 50);
+			gotOneDub = true;
 
 		trace("Started files provider for root ", root);
 
 		trace("Attaching dmd");
 		if (!backend.attach(instance, "dmd", err))
 			error("Failed to attach DMD component to ", workspaceUri, "\n", err.msg);
-		startDCD(instance, workspaceUri);
+		prepareDCD(instance, workspaceUri);
 
 		trace("Loaded Components for ", instance.cwd, ": ",
 				instance.instanceComponents.map!"a.info.name");
+
+		rootTimer.stop();
+		info("Root ", root, " initialized in ", rootTimer.peek);
 	}
+
+	// TODO: lazy initialize dmd?
+	trace("Starting auto completion service...");
+	StopWatch dcdTimer;
+	dcdTimer.start();
+	foreach (root; roots)
+	{
+		startDCDServer(root.instance, root.uri);
+	}
+	dcdTimer.stop();
+	trace("Started all completion servers in ", dcdTimer.peek);
+
+	if (gotOneDub)
+		setTimeout({ rpc.notifyMethod("coded/initDubTree"); }, 50);
 }
 
 void removeWorkspace(string workspaceUri)
@@ -622,11 +659,14 @@ void handleBroadcast(WorkspaceD workspaced, WorkspaceD.Instance instance, JSONVa
 	if (type && type.type == JSONType.string && type.str == "crash")
 	{
 		if (data["component"].str == "dcd")
-			spawnFiber(() => startDCD(instance, instance.cwd.uriFromFile));
+			spawnFiber(() {
+				prepareDCD(instance, instance.cwd.uriFromFile);
+				startDCDServer(instance, instance.cwd.uriFromFile);
+			});
 	}
 }
 
-void startDCD(WorkspaceD.Instance instance, string workspaceUri)
+void prepareDCD(WorkspaceD.Instance instance, string workspaceUri)
 {
 	if (shutdownRequested)
 		return;
@@ -650,14 +690,33 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 		if (dcdUpdating)
 			return;
 		else
-			startupError ~= "\n" ~ err.msg;
+			instance.config.set("dcd", "errorlog", instance.config.get("dcd",
+					"errorlog", "") ~ "\n" ~ err.msg);
 	}
 	trace("Starting dcdext");
 	if (!backend.attach(instance, "dcdext", err))
 	{
 		error("Failed to attach DCDExt component to ", instance.cwd, ": ", err.msg);
-		startupError ~= "\n" ~ err.msg;
+		instance.config.set("dcd", "errorlog", instance.config.get("dcd",
+				"errorlog", "") ~ "\n" ~ err.msg);
 	}
+}
+
+void startDCDServer(WorkspaceD.Instance instance, string workspaceUri)
+{
+	if (shutdownRequested || dcdUpdating)
+		return;
+	Workspace* proj = &workspace(workspaceUri, false);
+	if (proj is &fallbackWorkspace)
+	{
+		error("Trying to start DCD on unknown workspace ", workspaceUri, "?");
+		return;
+	}
+	if (!proj.config.d.enableAutoComplete)
+	{
+		return;
+	}
+
 	trace("Running DCD setup");
 	try
 	{
@@ -674,20 +733,13 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 	}
 	catch (Exception e)
 	{
-		rpc.window.showErrorMessage(translate!"d.ext.dcdFail"(instance.cwd, startupError));
+		rpc.window.showErrorMessage(translate!"d.ext.dcdFail"(instance.cwd,
+				instance.config.get("dcd", "errorlog", "")));
 		error(e);
 		trace("Instance Config: ", instance.config);
 		return;
 	}
 	info("Imports for ", instance.cwd, ": ", backend.getInstance(instance.cwd).importPaths);
-
-	auto globalDCD = backend.has!DCDComponent ? backend.get!DCDComponent : null;
-	if (globalDCD && !globalDCD.isActive)
-	{
-		globalDCD.fromRunning(globalDCD.getSupportsFullOutput, globalDCD.isUsingUnixDomainSockets
-				? globalDCD.getSocketFile : "", globalDCD.isUsingUnixDomainSockets
-				? 0 : globalDCD.getRunningPort);
-	}
 }
 
 string determineOutputFolder()
