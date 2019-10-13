@@ -419,6 +419,13 @@ struct Diagnostic
 	JSONValue code;
 	string source;
 	string message;
+	Optional!(DiagnosticRelatedInformation[]) relatedInformation;
+}
+
+struct DiagnosticRelatedInformation
+{
+	Location location;
+	string message;
 }
 
 enum DiagnosticSeverity
