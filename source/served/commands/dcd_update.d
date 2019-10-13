@@ -203,6 +203,8 @@ void updateDCD()
 
 	if (success)
 	{
+		dcdUpdating = false;
+
 		backend.globalConfiguration.set("dcd", "clientPath", finalDestinationClient);
 		backend.globalConfiguration.set("dcd", "serverPath", finalDestinationServer);
 
