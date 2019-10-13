@@ -85,7 +85,7 @@ struct Configuration
 		string dubBuildType;
 		string dubCompiler;
 		bool overrideDfmtEditorconfig = true;
-		bool aggressiveUpdate = true;
+		bool aggressiveUpdate = false; // differs from default code-d settings on purpose!
 		bool argumentSnippets = false;
 		bool completeNoDupes = true;
 		bool scanAllFolders = true;
