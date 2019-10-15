@@ -38,7 +38,7 @@ jobs:
 
             - name: Deploy Linux release
               if: matrix.os == 'ubuntu-latest'
-              uses: ./.github/actions/deploy-nightly
+              uses: WebFreak001/deploy-nightly@master
               env:
                 GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
@@ -57,7 +57,7 @@ jobs:
 
             - name: Deploy OSX release
               if: matrix.os == 'macOS-latest'
-              uses: ./.github/actions/deploy-nightly
+              uses: WebFreak001/deploy-nightly@master
               env:
                 GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
@@ -74,7 +74,7 @@ jobs:
 
             - name: Deploy Windows release
               if: matrix.os == 'windows-latest'
-              uses: ./.github/actions/deploy-nightly
+              uses: WebFreak001/deploy-nightly@master
               env:
                 GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
