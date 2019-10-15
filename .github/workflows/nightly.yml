@@ -38,13 +38,14 @@ jobs:
 
             - name: Deploy Linux release
               if: matrix.os == 'ubuntu-latest'
-              uses: actions/upload-release-asset@v1.0.1
+              uses: ./.github/actions/deploy-nightly
               env:
                 GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
                 upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
+                release_id: 20717582
                 asset_path: ./serve-d.tar.xz
-                asset_name: serve-d_linux-nightly-x86_64-${{ github.sha }}.tar.xz
+                asset_name: serve-d_linux-nightly-x86_64-$$.tar.xz
                 asset_content_type: application/x-gtar
 
             # OSX release
@@ -56,13 +57,14 @@ jobs:
 
             - name: Deploy OSX release
               if: matrix.os == 'macOS-latest'
-              uses: actions/upload-release-asset@v1.0.1
+              uses: ./.github/actions/deploy-nightly
               env:
                 GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
                 upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
+                release_id: 20717582
                 asset_path: ./serve-d.tar.xz
-                asset_name: serve-d_osx-nightly-x86_64-${{ github.sha }}.tar.xz
+                asset_name: serve-d_osx-nightly-x86_64-$$.tar.xz
                 asset_content_type: application/x-gtar
 
             # Windows release
@@ -72,11 +74,12 @@ jobs:
 
             - name: Deploy Windows release
               if: matrix.os == 'windows-latest'
-              uses: actions/upload-release-asset@v1.0.1
+              uses: ./.github/actions/deploy-nightly
               env:
                 GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
                 upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
-                asset_path: ./serve-d.tar.xz
-                asset_name: serve-d_windows-nightly-${{ github.sha }}.zip
+                release_id: 20717582
+                asset_path: ./serve-d.zip
+                asset_name: serve-d_windows-nightly-$$.zip
                 asset_content_type: application/zip

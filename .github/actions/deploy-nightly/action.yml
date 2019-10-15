@@ -1,0 +1,30 @@
+name: 'Deploy Nightly'
+description: 'delete old nightlies, upload on new commit'
+inputs:
+  upload_url:
+    description: 'GitHub upload URL'
+    required: true
+  release_id:
+    description: 'GitHub release id'
+    required: true
+  asset_path:
+    description: 'Path to archive to upload'
+    required: true
+  asset_name:
+    description: 'Name of the file to upload with a $$ placeholder to insert date and hash into'
+    required: true
+  asset_content_type:
+    description: 'Content type of the uploaded file'
+    required: true
+  max_releases:
+    description: 'Maximum number of historical releases with the given asset_name to keep'
+    required: false
+    default: 7
+output:
+  uploaded:
+    description: 'yes if a new upload has been made, no if the upload already existed'
+  url:
+    description: 'GitHub asset URL'
+runs:
+  using: 'node12'
+  main: 'index.js'
