@@ -18,4 +18,9 @@ jobs:
                   compiler: ${{ matrix.dc }}
 
             - name: Run tests
-              run: dub -q test
+              run: dub test
+              if: matrix.os != "windows-latest"
+
+            - name: Run tests (x86_mscoff)
+              run: dub test -a x86_mscoff
+              if: matrix.os == "windows-latest"
