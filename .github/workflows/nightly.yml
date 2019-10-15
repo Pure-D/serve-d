@@ -1,0 +1,83 @@
+name: Deploy Nightly
+on:
+    schedule:
+        - cron: '0 2 * * *'
+
+jobs:
+    nightly:
+        name: Deploy nightly
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, windows-latest, macOS-latest]
+        runs-on: ${{ matrix.os }}
+        steps:
+            - uses: actions/checkout@v1
+              with:
+                ref: new-coded
+
+            - name: Install D compiler
+              uses: mihails-strasuns/setup-dlang@v0.3.0
+              with:
+                  compiler: ldc-latest
+
+            - name: Dub upgrade
+              run: dub upgrade
+
+            - name: Run tests
+              run: dub test
+
+            # Linux release
+            - name: Build Linux release
+              run: ./ci/build.sh
+              if: matrix.os == 'ubuntu-latest'
+              env:
+                ARCH: x86_64
+
+            - name: Deploy Linux release
+              if: matrix.os == 'ubuntu-latest'
+              uses: WebFreak001/deploy-nightly@master
+              env:
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
+                release_id: 20717582
+                asset_path: ./serve-d.tar.xz
+                asset_name: serve-d_linux-nightly-x86_64-$$.tar.xz
+                asset_content_type: application/x-gtar
+
+            # OSX release
+            - name: Build OSX release
+              run: ./ci/build.sh
+              if: matrix.os == 'macOS-latest'
+              env:
+                ARCH: x86_64
+
+            - name: Deploy OSX release
+              if: matrix.os == 'macOS-latest'
+              uses: WebFreak001/deploy-nightly@master
+              env:
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
+                release_id: 20717582
+                asset_path: ./serve-d.tar.xz
+                asset_name: serve-d_osx-nightly-x86_64-$$.tar.xz
+                asset_content_type: application/x-gtar
+
+            # Windows release
+            - name: Build Windows release
+              run: .\ci\build.bat
+              if: matrix.os == 'windows-latest'
+
+            - name: Deploy Windows release
+              if: matrix.os == 'windows-latest'
+              uses: WebFreak001/deploy-nightly@master
+              env:
+                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+              with:
+                upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
+                release_id: 20717582
+                asset_path: ./serve-d.zip
+                asset_name: serve-d_windows-nightly-$$.zip
+                asset_content_type: application/zip
