@@ -527,7 +527,6 @@ string uriToFile(DocumentUri uri)
 		assertEqual(a.uriFromFile.uriToFile, a);
 	}
 
-	testUri(`/home/pi/.bashrc`, `file:///home/pi/.bashrc`);
 	version (Windows)
 	{
 		// taken from vscode-uri
@@ -536,6 +535,11 @@ string uriToFile(DocumentUri uri)
 		testUri(`c:\test with %25\c#code`, `file:///c%3A/test%20with%20%2525/c%23code`);
 		testUri(`\\shäres\path\c#\plugin.json`, `file://sh%C3%A4res/path/c%23/plugin.json`);
 		testUri(`\\localhost\c$\GitDevelopment\express`, `file://localhost/c%24/GitDevelopment/express`);
+	}
+	else version (Posix)
+	{
+		testUri(`/home/pi/.bashrc`, `file:///home/pi/.bashrc`);
+		testUri(`/home/pi/Development Projects/D-code`, `file:///home/pi/Development%20Projects/D-code`);
 	}
 }
 
