@@ -1,5 +1,9 @@
 name: Deploy Nightly
 on: [push]
+# on:
+#     schedule:
+#         - cron: '0 2 * * *'
+
 
 jobs:
     nightly:
@@ -40,7 +44,7 @@ jobs:
               with:
                 upload_url: https://api.github.com/repos/${{ github.repository }}/releases/nightly/assets
                 asset_path: ./serve-d.tar.xz
-                asset_name: serve-d_linux-nightly-x86_64-${{ join(github.sha[0], github.sha[1], github.sha[2], github.sha[3], github.sha[4], github.sha[5]) }}.tar.xz
+                asset_name: serve-d_linux-nightly-x86_64-${{ github.sha }}.tar.xz
                 asset_content_type: application/x-gtar
 
             # OSX release
@@ -58,7 +62,7 @@ jobs:
               with:
                 upload_url: https://api.github.com/repos/${{ github.repository }}/releases/nightly/assets
                 asset_path: ./serve-d.tar.xz
-                asset_name: serve-d_osx-nightly-x86_64-${{ join(github.sha[0], github.sha[1], github.sha[2], github.sha[3], github.sha[4], github.sha[5]) }}.tar.xz
+                asset_name: serve-d_osx-nightly-x86_64-${{ github.sha }}.tar.xz
                 asset_content_type: application/x-gtar
 
             # Windows release
@@ -74,5 +78,5 @@ jobs:
               with:
                 upload_url: https://api.github.com/repos/${{ github.repository }}/releases/nightly/assets
                 asset_path: ./serve-d.tar.xz
-                asset_name: serve-d_windows-nightly-${{ join(github.sha[0], github.sha[1], github.sha[2], github.sha[3], github.sha[4], github.sha[5]) }}.zip
+                asset_name: serve-d_windows-nightly-${{ github.sha }}.zip
                 asset_content_type: application/zip
