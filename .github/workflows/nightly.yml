@@ -38,7 +38,7 @@ jobs:
 
             - name: Deploy Linux release
               if: matrix.os == 'ubuntu-latest'
-              uses: actions/upload-release-asset@v1
+              uses: actions/upload-release-asset@v1.0.1
               env:
                 GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
@@ -56,7 +56,7 @@ jobs:
 
             - name: Deploy OSX release
               if: matrix.os == 'macOS-latest'
-              uses: actions/upload-release-asset@v1
+              uses: actions/upload-release-asset@v1.0.1
               env:
                 GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
@@ -72,7 +72,7 @@ jobs:
 
             - name: Deploy Windows release
               if: matrix.os == 'windows-latest'
-              uses: actions/upload-release-asset@v1
+              uses: actions/upload-release-asset@v1.0.1
               env:
                 GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
               with:
