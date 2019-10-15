@@ -5,6 +5,7 @@ jobs:
     dubtest:
         name: Dub Tests
         strategy:
+            fail-fast: false
             matrix:
                 os: [ubuntu-latest, windows-latest, macOS-latest]
                 dc: [dmd-latest, ldc-latest]
