@@ -631,10 +631,8 @@ void doStartup(string workspaceUri)
 	trace("Starting auto completion service...");
 	StopWatch dcdTimer;
 	dcdTimer.start();
-	foreach (root; roots)
-	{
+	foreach (root; roots.data)
 		startDCDServer(root.instance, root.uri);
-	}
 	dcdTimer.stop();
 	trace("Started all completion servers in ", dcdTimer.peek);
 

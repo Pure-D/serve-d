@@ -133,7 +133,7 @@ void lint(Document document)
 		void pushError(Diagnostic error, string uri)
 		{
 			bool found;
-			foreach (ref elem; result)
+			foreach (ref elem; result.data)
 				if (elem.uri == uri)
 				{
 					found = true;
