@@ -19,8 +19,8 @@ jobs:
 
             - name: Run tests
               run: dub test
-              if: matrix.os != "windows-latest"
+              if: matrix.os != 'windows-latest' || matrix.dc != 'dmd-latest'
 
             - name: Run tests (x86_mscoff)
               run: dub test -a x86_mscoff
-              if: matrix.os == "windows-latest"
+              if: matrix.os == 'windows-latest' && matrix.dc == 'dmd-latest'
