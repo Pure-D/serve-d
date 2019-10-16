@@ -198,6 +198,9 @@ TextEdit[] sortImports(SortImportsParams params)
 	return [TextEdit(TextRange(start, end), code)];
 }
 
+/// Flag to make dcdext.implementAll return snippets
+__gshared bool implementInterfaceSnippets;
+
 @protocolMethod("served/implementMethods")
 TextEdit[] implementMethods(ImplementMethodsParams params)
 {
@@ -217,8 +220,9 @@ TextEdit[] implementMethods(ImplementMethodsParams params)
 
 	auto eol = document.eolAt(0);
 	auto eolStr = eol.toString;
-	auto toImplement = backend.best!DCDExtComponent(file).implementAll(codeText,
-			cast(int) location, config.d.enableFormatting, generateDfmtArgs(config, eol), true).getYield;
+	auto toImplement = backend.best!DCDExtComponent(file).implementAll(codeText, cast(int) location,
+			config.d.enableFormatting, generateDfmtArgs(config, eol), implementInterfaceSnippets)
+		.getYield;
 	if (!toImplement.length)
 		return ret;
 

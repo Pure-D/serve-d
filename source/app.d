@@ -218,7 +218,16 @@ int main(string[] args)
 
 	foreach (feature; features)
 		if (!IncludedFeatures.canFind(feature.toLower.strip))
-			throw new Exception("Feature set '" ~ feature ~ "' not in this version of serve-d");
+		{
+			io.stderr.writeln();
+			io.stderr.writeln(
+					"FATAL: Extension-requested feature set '" ~ feature
+					~ "' is not in this version of serve-d!");
+			io.stderr.writeln("---");
+			io.stderr.writeln("HINT: Maybe serve-d is outdated?");
+			io.stderr.writeln();
+			return 1;
+		}
 	trace("Features fulfilled");
 
 	foreach (provide; provides)
@@ -228,6 +237,12 @@ int main(string[] args)
 		case "http":
 			letEditorDownload = true;
 			trace("Interactive HTTP downloads handled via editor");
+			break;
+		case "implement-snippets":
+			import served.commands.code_actions : implementInterfaceSnippets;
+
+			implementInterfaceSnippets = true;
+			trace("Auto-implement interface supports snippets");
 			break;
 		default:
 			warningf("Unknown --provide flag '%s' provided. Maybe serve-d is outdated?", provide);
