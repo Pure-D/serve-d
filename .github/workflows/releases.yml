@@ -1,0 +1,80 @@
+name: Upload prebuild binaries
+on:
+  release:
+    types: [published]
+
+jobs:
+  nightly:
+    name: Deploy releases
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v1
+        with:
+          ref: new-coded
+
+      - name: Install D compiler
+        uses: mihails-strasuns/setup-dlang@v0.3.0
+        with:
+            compiler: ldc-latest
+
+      - name: Dub upgrade
+        run: dub upgrade
+
+      - name: Run tests
+        run: dub test
+
+      # Linux release
+      - name: Build Linux release
+        run: ./ci/build.sh
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          ARCH: x86_64
+
+      - name: Deploy Linux release
+        if: matrix.os == 'ubuntu-latest'
+        uses: WebFreak001/upload-asset@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OS: linux-x86_64
+        with:
+          file: ./serve-d.tar.xz
+          mime: application/x-gtar
+          name: serve-d_${TAG}-${OS}.tar.xz
+
+      # OSX release
+      - name: Build OSX release
+        run: ./ci/build.sh
+        if: matrix.os == 'macOS-latest'
+        env:
+          ARCH: x86_64
+
+      - name: Deploy OSX release
+        if: matrix.os == 'macOS-latest'
+        uses: WebFreak001/upload-asset@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OS: osx-x86_64
+        with:
+          file: ./serve-d.tar.xz
+          mime: application/x-gtar
+          name: serve-d_${TAG}-${OS}.tar.xz
+
+      # Windows release
+      - name: Build Windows release
+        run: .\ci\build.bat
+        if: matrix.os == 'windows-latest'
+
+      - name: Deploy Windows release
+        if: matrix.os == 'windows-latest'
+        uses: WebFreak001/upload-asset@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OS: windows
+        with:
+          file: ./serve-d.zip
+          mime: application/zip
+          name: serve-d_${TAG}-${OS}.zip
