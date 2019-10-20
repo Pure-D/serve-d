@@ -13,8 +13,6 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v1
-        with:
-          ref: new-coded
 
       - name: Install D compiler
         uses: mihails-strasuns/setup-dlang@v0.3.0
@@ -29,7 +27,7 @@ jobs:
 
       # Linux release
       - name: Build Linux release
-        run: ./ci/build.sh
+        run: ./ci/build.sh && rdmd ci/validate_version.d
         if: matrix.os == 'ubuntu-latest'
         env:
           ARCH: x86_64
@@ -47,7 +45,7 @@ jobs:
 
       # OSX release
       - name: Build OSX release
-        run: ./ci/build.sh
+        run: ./ci/build.sh && rdmd ci/validate_version.d
         if: matrix.os == 'macOS-latest'
         env:
           ARCH: x86_64
@@ -65,7 +63,7 @@ jobs:
 
       # Windows release
       - name: Build Windows release
-        run: .\ci\build.bat
+        run: .\ci\build.bat && rdmd ci\validate_version.d
         if: matrix.os == 'windows-latest'
 
       - name: Deploy Windows release
