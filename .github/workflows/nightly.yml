@@ -13,8 +13,6 @@ jobs:
         runs-on: ${{ matrix.os }}
         steps:
             - uses: actions/checkout@v1
-              with:
-                ref: new-coded
 
             - name: Install D compiler
               uses: mihails-strasuns/setup-dlang@v0.3.0

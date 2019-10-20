@@ -1,16 +1,16 @@
 module served.extension;
 
-import core.sync.mutex : Mutex;
-
 import served.fibermanager;
 import served.nothrow_fs;
 import served.translate;
 import served.types;
 
-import core.time : Duration, msecs, seconds;
+public import served.async;
+
+import core.time : msecs, seconds;
 
 import std.algorithm : any, canFind, endsWith, map;
-import std.array : array;
+import std.array : appender, array;
 import std.conv : to;
 import std.datetime.stopwatch : StopWatch;
 import std.datetime.systime : Clock, SysTime;
@@ -50,36 +50,26 @@ else version = DCDFromSource;
 /// Set to true when shutdown is called
 __gshared bool shutdownRequested;
 
-bool safe(alias fn, Args...)(Args args)
-{
-	try
-	{
-		fn(args);
-		return true;
-	}
-	catch (Exception e)
-	{
-		error(e);
-		return false;
-	}
-	catch (AssertError e)
-	{
-		error(e);
-		return false;
-	}
-}
-
 void changedConfig(string workspaceUri, string[] paths,
 		served.types.Configuration config, bool allowFallback = false)
 {
 	StopWatch sw;
 	sw.start();
 
-	if (!syncedConfiguration)
+	if (!workspaceUri.length)
+	{
+		if (!allowFallback)
+			error("Passed invalid empty workspace uri to changedConfig!");
+		trace("Updated fallback config (user settings) for sections ", paths);
+		return;
+	}
+
+	if (!syncedConfiguration && !allowFallback)
 	{
 		syncedConfiguration = true;
 		doGlobalStartup();
 	}
+
 	Workspace* proj = &workspace(workspaceUri);
 	bool isFallback = proj is &fallbackWorkspace;
 	if (isFallback && !allowFallback)
@@ -162,7 +152,11 @@ void changedConfig(string workspaceUri, string[] paths,
 			if (config.d.enableAutoComplete)
 			{
 				if (!backend.has!DCDComponent(workspaceFs))
-					startDCD(backend.getInstance(workspaceFs), workspaceUri);
+				{
+					auto instance = backend.getInstance(workspaceFs);
+					prepareDCD(instance, workspaceUri);
+					startDCDServer(instance, workspaceUri);
+				}
 			}
 			else if (backend.has!DCDComponent(workspaceFs))
 			{
@@ -208,6 +202,10 @@ void processConfigChange(served.types.Configuration configuration)
 {
 	import painlessjson : fromJSON;
 
+	syncingConfiguration = true;
+	scope (exit)
+		syncingConfiguration = false;
+
 	if (capabilities.workspace.configuration && workspaces.length >= 2)
 	{
 		ConfigurationItem[] items;
@@ -217,6 +215,7 @@ void processConfigChange(served.types.Configuration configuration)
 		foreach (workspace; workspaces)
 			foreach (section; configurationSections)
 				items ~= ConfigurationItem(opt(workspace.folder.uri), opt(section));
+		trace("Re-requesting configuration from client because there is more than 1 workspace");
 		auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
 		if (res.result.type == JSONType.array && res.result.array.length >= 1)
 		{
@@ -234,7 +233,7 @@ void processConfigChange(served.types.Configuration configuration)
 				static foreach (n, section; configurationSections)
 					changed ~= workspace.config.replaceSection!section(
 							settings[i + n].fromJSON!(configurationTypes[n]));
-				changedConfig(workspace.folder.uri, changed, workspace.config, i == 0);
+				changedConfig(i == 0 ? null : workspace.folder.uri, changed, workspace.config, i == 0);
 			}
 		}
 	}
@@ -243,8 +242,8 @@ void processConfigChange(served.types.Configuration configuration)
 		if (workspaces.length > 1)
 			error(
 					"Client does not support configuration request, only applying config for first workspace.");
-		changedConfig(workspaces[0].folder.uri,
-				workspaces[0].config.replace(configuration), workspaces[0].config);
+		auto changed = workspaces[0].config.replace(configuration);
+		changedConfig(workspaces[0].folder.uri, changed, workspaces[0].config);
 		fallbackWorkspace.config = workspaces[0].config;
 	}
 }
@@ -309,6 +308,7 @@ string[] getPossibleSourceRoots(string workspaceFolder)
 }
 
 __gshared bool syncedConfiguration = false;
+__gshared bool syncingConfiguration = false;
 InitializeResult initialize(InitializeParams params)
 {
 	import std.file : chdir;
@@ -336,7 +336,9 @@ InitializeResult initialize(InitializeParams params)
 
 	InitializeResult result;
 	result.capabilities.textDocumentSync = documents.syncKind;
-	result.capabilities.completionProvider = CompletionOptions(false, [".", "="]);
+	result.capabilities.completionProvider = CompletionOptions(false, [
+			".", "=", "*", "/", "+", "-", "%"
+			]);
 	result.capabilities.signatureHelpProvider = SignatureHelpOptions([
 			"(", "[", ","
 			]);
@@ -351,10 +353,13 @@ InitializeResult initialize(InitializeParams params)
 			opt(ServerWorkspaceCapabilities.WorkspaceFolders(opt(true), opt(true)))));
 
 	setTimeout({
-		if (!syncedConfiguration && capabilities.workspace.configuration)
+		if (!syncedConfiguration && !syncingConfiguration && capabilities.workspace.configuration)
 		{
 			if (!syncConfiguration(null))
 				error("Syncing user configuration failed!");
+
+			warning(
+				"Didn't receive any configuration notification, manually requesting all configurations now");
 
 			foreach (ref workspace; workspaces)
 				syncConfiguration(workspace.folder.uri);
@@ -528,10 +533,24 @@ void doStartup(string workspaceUri)
 	}
 	trace("Initializing serve-d for " ~ workspaceUri);
 
+	struct Root
+	{
+		RootSuggestion root;
+		string uri;
+		WorkspaceD.Instance instance;
+	}
+
+	bool gotOneDub;
+	scope roots = appender!(Root[]);
+
 	foreach (root; rootsForProject(workspaceUri.uriToFile, proj.config.d.scanAllFolders,
 			proj.config.d.disabledRootGlobs, proj.config.d.extraRoots,
 			proj.config.d.manyProjectsAction, proj.config.d.manyProjectsThreshold))
 	{
+		info("Initializing instance for root ", root);
+		StopWatch rootTimer;
+		rootTimer.start();
+
 		auto workspaceRoot = root.dir;
 		workspaced.api.Configuration config;
 		config.base = JSONValue([
@@ -545,6 +564,8 @@ void doStartup(string workspaceUri)
 		auto instance = backend.addInstance(workspaceRoot, config);
 		if (!activeInstance)
 			activeInstance = instance;
+
+		roots ~= Root(root, workspaceUri, instance);
 
 		bool disableDub = proj.config.d.neverUseDub || !root.useDub;
 		bool loadedDub;
@@ -590,18 +611,33 @@ void doStartup(string workspaceUri)
 			}
 		}
 		else
-			setTimeout({ rpc.notifyMethod("coded/initDubTree"); }, 50);
+			gotOneDub = true;
 
 		trace("Started files provider for root ", root);
 
 		trace("Attaching dmd");
 		if (!backend.attach(instance, "dmd", err))
 			error("Failed to attach DMD component to ", workspaceUri, "\n", err.msg);
-		startDCD(instance, workspaceUri);
+		prepareDCD(instance, workspaceUri);
 
 		trace("Loaded Components for ", instance.cwd, ": ",
 				instance.instanceComponents.map!"a.info.name");
+
+		rootTimer.stop();
+		info("Root ", root, " initialized in ", rootTimer.peek);
 	}
+
+	// TODO: lazy initialize dmd?
+	trace("Starting auto completion service...");
+	StopWatch dcdTimer;
+	dcdTimer.start();
+	foreach (root; roots.data)
+		startDCDServer(root.instance, root.uri);
+	dcdTimer.stop();
+	trace("Started all completion servers in ", dcdTimer.peek);
+
+	if (gotOneDub)
+		setTimeout({ rpc.notifyMethod("coded/initDubTree"); }, 50);
 }
 
 void removeWorkspace(string workspaceUri)
@@ -621,11 +657,14 @@ void handleBroadcast(WorkspaceD workspaced, WorkspaceD.Instance instance, JSONVa
 	if (type && type.type == JSONType.string && type.str == "crash")
 	{
 		if (data["component"].str == "dcd")
-			spawnFiber(() => startDCD(instance, instance.cwd.uriFromFile));
+			spawnFiber(() {
+				prepareDCD(instance, instance.cwd.uriFromFile);
+				startDCDServer(instance, instance.cwd.uriFromFile);
+			});
 	}
 }
 
-void startDCD(WorkspaceD.Instance instance, string workspaceUri)
+void prepareDCD(WorkspaceD.Instance instance, string workspaceUri)
 {
 	if (shutdownRequested)
 		return;
@@ -649,14 +688,33 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 		if (dcdUpdating)
 			return;
 		else
-			startupError ~= "\n" ~ err.msg;
+			instance.config.set("dcd", "errorlog", instance.config.get("dcd",
+					"errorlog", "") ~ "\n" ~ err.msg);
 	}
 	trace("Starting dcdext");
 	if (!backend.attach(instance, "dcdext", err))
 	{
 		error("Failed to attach DCDExt component to ", instance.cwd, ": ", err.msg);
-		startupError ~= "\n" ~ err.msg;
+		instance.config.set("dcd", "errorlog", instance.config.get("dcd",
+				"errorlog", "") ~ "\n" ~ err.msg);
 	}
+}
+
+void startDCDServer(WorkspaceD.Instance instance, string workspaceUri)
+{
+	if (shutdownRequested || dcdUpdating)
+		return;
+	Workspace* proj = &workspace(workspaceUri, false);
+	if (proj is &fallbackWorkspace)
+	{
+		error("Trying to start DCD on unknown workspace ", workspaceUri, "?");
+		return;
+	}
+	if (!proj.config.d.enableAutoComplete)
+	{
+		return;
+	}
+
 	trace("Running DCD setup");
 	try
 	{
@@ -673,20 +731,13 @@ void startDCD(WorkspaceD.Instance instance, string workspaceUri)
 	}
 	catch (Exception e)
 	{
-		rpc.window.showErrorMessage(translate!"d.ext.dcdFail"(instance.cwd, startupError));
+		rpc.window.showErrorMessage(translate!"d.ext.dcdFail"(instance.cwd,
+				instance.config.get("dcd", "errorlog", "")));
 		error(e);
 		trace("Instance Config: ", instance.config);
 		return;
 	}
 	info("Imports for ", instance.cwd, ": ", backend.getInstance(instance.cwd).importPaths);
-
-	auto globalDCD = backend.has!DCDComponent ? backend.get!DCDComponent : null;
-	if (globalDCD && !globalDCD.isActive)
-	{
-		globalDCD.fromRunning(globalDCD.getSupportsFullOutput, globalDCD.isUsingUnixDomainSockets
-				? globalDCD.getSocketFile : "", globalDCD.isUsingUnixDomainSockets
-				? 0 : globalDCD.getRunningPort);
-	}
 }
 
 string determineOutputFolder()
@@ -812,7 +863,14 @@ void onDidOpenDocument(DidOpenTextDocumentParams params)
 {
 	freshlyOpened[params.textDocument.uri] = FileOpenInfo(Clock.currTime);
 
-	if (config(params.textDocument.uri).d.lintOnFileOpen)
+	string lintSetting = config(params.textDocument.uri).d.lintOnFileOpen;
+	bool shouldLint;
+	if (lintSetting == "always")
+		shouldLint = true;
+	else if (lintSetting == "project")
+		shouldLint = workspaceIndex(params.textDocument.uri) != size_t.max;
+
+	if (shouldLint)
 		onDidChangeDocument(DocumentLinkParams(TextDocumentIdentifier(params.textDocument.uri)));
 }
 
@@ -864,6 +922,8 @@ void doDscanner(DocumentLinkParams params)
 @protocolNotification("textDocument/didSave")
 void onDidSaveDocument(DidSaveTextDocumentParams params)
 {
+	import dub = served.commands.dub;
+
 	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	auto config = workspace(params.textDocument.uri).config;
 	auto document = documents[params.textDocument.uri];
@@ -913,8 +973,24 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 		}
 
 		setTimeout({
-			rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
+			const successfulUpdate = rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
 				.updateImportPaths(true), MessageType.warning, translate!"d.ext.dubImportFail");
+			if (successfulUpdate)
+			{
+				rpc.window.runOrMessage(dub.updateImports(), MessageType.warning,
+					translate!"d.ext.dubImportFail");
+			}
+			else
+			{
+				try
+				{
+					dub.updateImports();
+				}
+				catch (Exception e)
+				{
+					errorf("Failed updating imports: %s", e);
+				}
+			}
 		}, 500.msecs);
 
 		setTimeout({
@@ -934,65 +1010,6 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 	}
 }
 
-struct Timeout
-{
-	StopWatch sw;
-	Duration timeout;
-	void delegate() callback;
-	int id;
-}
-
-int setTimeout(void delegate() callback, int ms)
-{
-	return setTimeout(callback, ms.msecs);
-}
-
-void setImmediate(void delegate() callback)
-{
-	setTimeout(callback, 0);
-}
-
-int setTimeout(void delegate() callback, Duration timeout)
-{
-	trace("Setting timeout for ", timeout);
-	Timeout to;
-	to.timeout = timeout;
-	to.callback = callback;
-	to.sw.start();
-	synchronized (timeoutsMutex)
-	{
-		to.id = ++timeoutID;
-		timeouts ~= to;
-	}
-	return to.id;
-}
-
-void clearTimeout(int id)
-{
-	synchronized (timeoutsMutex)
-		foreach_reverse (i, ref timeout; timeouts)
-		{
-			if (timeout.id == id)
-			{
-				timeout.sw.stop();
-				if (timeouts.length > 1)
-					timeouts[i] = timeouts[$ - 1];
-				timeouts.length--;
-				return;
-			}
-		}
-}
-
-__gshared void delegate(void delegate(), int pages, string file, int line) spawnFiberImpl;
-
-void spawnFiber(void delegate() cb, int pages = 20, string file = __FILE__, int line = __LINE__)
-{
-	if (spawnFiberImpl)
-		spawnFiberImpl(cb, pages, file, line);
-	else
-		setImmediate(cb);
-}
-
 shared static this()
 {
 	backend = new WorkspaceD();
@@ -1008,43 +1025,4 @@ shared static this()
 shared static ~this()
 {
 	backend.shutdown();
-}
-
-__gshared int timeoutID;
-__gshared Timeout[] timeouts;
-__gshared Mutex timeoutsMutex;
-
-// Called at most 100x per second
-void parallelMain()
-{
-	timeoutsMutex = new Mutex;
-	void delegate()[32] callsBuf;
-	void delegate()[] calls;
-	while (true)
-	{
-		synchronized (timeoutsMutex)
-			foreach_reverse (i, ref timeout; timeouts)
-			{
-				if (timeout.sw.peek >= timeout.timeout)
-				{
-					timeout.sw.stop();
-					trace("Calling timeout");
-					callsBuf[calls.length] = timeout.callback;
-					calls = callsBuf[0 .. calls.length + 1];
-					if (timeouts.length > 1)
-						timeouts[i] = timeouts[$ - 1];
-					timeouts.length--;
-
-					if (calls.length >= callsBuf.length)
-						break;
-				}
-			}
-
-		foreach (call; calls)
-			call();
-
-		callsBuf[] = null;
-		calls = null;
-		Fiber.yield();
-	}
 }

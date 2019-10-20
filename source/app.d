@@ -153,20 +153,27 @@ void processNotify(RequestMessage msg)
 	}
 }
 
-void printVersion()
+void printVersion(io.File output = io.stdout)
 {
+	import Compiler = std.compiler;
+	import OS = std.system;
+
 	static if (__traits(compiles, {
-			import workspaced.info : WorkspacedVersion = Version;
+			import workspaced.info : BundledDependencies, WorkspacedVersion = Version;
 		}))
-		import workspaced.info : WorkspacedVersion = Version;
+		import workspaced.info : BundledDependencies, WorkspacedVersion = Version;
 	else
-		import source.workspaced.info : WorkspacedVersion = Version;
+		import source.workspaced.info : BundledDependencies, WorkspacedVersion = Version;
 	import source.served.info;
 
-	io.writefln("serve-d v%(%s.%) with workspace-d v%(%s.%)", Version, WorkspacedVersion);
-	io.writefln("Included features: %(%s, %)", IncludedFeatures);
+	output.writefln("serve-d v%(%s.%)%s with workspace-d v%(%s.%)", Version, VersionSuffix.length ? text('-', VersionSuffix) : VersionSuffix, WorkspacedVersion);
+	output.writefln("Included features: %(%s, %)", IncludedFeatures);
 	// There will always be a line which starts with `Built: ` forever, it is considered stable. If there is no line, assume version 0.1.2
-	io.writefln("Built: %s", __TIMESTAMP__);
+	output.writefln("Built: %s", __TIMESTAMP__);
+	output.writeln("with compiler ", Compiler.name, " v",
+			Compiler.version_major.to!string, ".", Compiler.version_minor.to!string,
+			" on ", OS.os.to!string, " ", OS.endian.to!string);
+	output.writefln(BundledDependencies);
 }
 
 __gshared FiberManager fibers;
@@ -211,7 +218,16 @@ int main(string[] args)
 
 	foreach (feature; features)
 		if (!IncludedFeatures.canFind(feature.toLower.strip))
-			throw new Exception("Feature set '" ~ feature ~ "' not in this version of serve-d");
+		{
+			io.stderr.writeln();
+			io.stderr.writeln(
+					"FATAL: Extension-requested feature set '" ~ feature
+					~ "' is not in this version of serve-d!");
+			io.stderr.writeln("---");
+			io.stderr.writeln("HINT: Maybe serve-d is outdated?");
+			io.stderr.writeln();
+			return 1;
+		}
 	trace("Features fulfilled");
 
 	foreach (provide; provides)
@@ -221,6 +237,12 @@ int main(string[] args)
 		case "http":
 			letEditorDownload = true;
 			trace("Interactive HTTP downloads handled via editor");
+			break;
+		case "implement-snippets":
+			import served.commands.code_actions : implementInterfaceSnippets;
+
+			implementInterfaceSnippets = true;
+			trace("Auto-implement interface supports snippets");
 			break;
 		default:
 			warningf("Unknown --provide flag '%s' provided. Maybe serve-d is outdated?", provide);
@@ -251,6 +273,8 @@ int main(string[] args)
 
 	served.extension.spawnFiberImpl = (&pushFiber!(void delegate())).toDelegate;
 	pushFiber(&served.extension.parallelMain);
+
+	printVersion(io.stderr);
 
 	while (rpc.state != Fiber.State.TERM)
 	{

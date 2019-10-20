@@ -5,8 +5,11 @@ import served.fibermanager;
 import served.types;
 
 import workspaced.api;
+import workspaced.com.dcdext;
 import workspaced.com.importer;
 import workspaced.coms;
+
+import served.commands.format : generateDfmtArgs;
 
 import served.linters.dscanner : DScannerDiagnosticSource;
 import served.linters.dub : DubDiagnosticSource;
@@ -54,8 +57,8 @@ Command[] provideCodeActions(CodeActionParams params)
 			if (codeText[idx] == ':')
 			{
 				// probably extends
-				if (instance.get!DCDExtComponent.implement(codeText,
-						cast(int) startIndex).getYield.strip.length > 0)
+				if (instance.get!DCDExtComponent.implementAll(codeText,
+						cast(int) startIndex).getYield.length > 0)
 					ret ~= Command("Implement base classes/interfaces", "code-d.implementMethods",
 							[JSONValue(document.positionToOffset(params.range.start))]);
 				break;
@@ -195,6 +198,9 @@ TextEdit[] sortImports(SortImportsParams params)
 	return [TextEdit(TextRange(start, end), code)];
 }
 
+/// Flag to make dcdext.implementAll return snippets
+__gshared bool implementInterfaceSnippets;
+
 @protocolMethod("served/implementMethods")
 TextEdit[] implementMethods(ImplementMethodsParams params)
 {
@@ -202,54 +208,62 @@ TextEdit[] implementMethods(ImplementMethodsParams params)
 
 	auto document = documents[params.textDocument.uri];
 	string file = document.uri.uriToFile;
+	auto config = workspace(params.textDocument.uri).config;
 	TextEdit[] ret;
 	auto location = document.offsetToBytes(params.location);
 	scope codeText = document.rawText.idup;
-	auto code = backend.best!DCDExtComponent(file).implement(codeText,
-			cast(int) location).getYield.strip;
-	if (!code.length)
+
+	if (gFormattingOptionsApplyOn != params.textDocument.uri)
+		tryFindFormattingSettings(config, document);
+
+	string indent = gFormattingOptions.indentString;
+
+	auto eol = document.eolAt(0);
+	auto eolStr = eol.toString;
+	auto toImplement = backend.best!DCDExtComponent(file).implementAll(codeText, cast(int) location,
+			config.d.enableFormatting, generateDfmtArgs(config, eol), implementInterfaceSnippets)
+		.getYield;
+	if (!toImplement.length)
 		return ret;
-	auto brace = codeText.indexOf('{', location);
-	auto fallback = brace;
-	if (brace == -1)
-		brace = codeText.length;
-	else
+
+	string formatCode(ImplementedMethod method)
 	{
-		fallback = codeText.indexOf('\n', location);
-		brace = codeText.indexOfAny("}\n", brace);
+		// cool! snippets handle indentation and new lines automatically so we just keep it as is
+		return method.code;
+	}
+
+	auto existing = backend.best!DCDExtComponent(file).getInterfaceDetails(file,
+			codeText, cast(int) location);
+	if (existing == InterfaceDetails.init)
+	{
+		// insert at start (could not parse class properly)
+		auto brace = codeText.indexOf('{', location);
 		if (brace == -1)
 			brace = codeText.length;
+		brace++;
+		auto pos = document.bytesToPosition(brace);
+		return [
+			TextEdit(TextRange(pos, pos),
+					eolStr ~ eolStr ~ toImplement.map!(a => formatCode(a)).join(eolStr ~ eolStr))
+		];
 	}
-	code = "\n\t" ~ code.replace("\n", document.eolAt(0).toString ~ "\t") ~ "\n";
-	bool inIdentifier = true;
-	int depth = 0;
-	foreach (i; location .. brace)
+	else if (existing.methods.length == 0)
 	{
-		if (codeText[i].isWhite)
-			inIdentifier = false;
-		else if (codeText[i] == '{')
-			break;
-		else if (codeText[i] == ',' || codeText[i] == '!')
-			inIdentifier = true;
-		else if (codeText[i] == '(')
-			depth++;
-		else
-		{
-			if (depth > 0)
-			{
-				inIdentifier = true;
-				if (codeText[i] == ')')
-					depth--;
-			}
-			else if (!inIdentifier)
-			{
-				if (fallback != -1)
-					brace = fallback;
-				code = "\n{" ~ code ~ "}";
-				break;
-			}
-		}
+		// insert at end (no methods in class)
+		auto end = document.bytesToPosition(existing.blockRange[1] - 1);
+		return [
+			TextEdit(TextRange(end, end), eolStr ~ toImplement.map!(a => formatCode(a))
+					.join(eolStr ~ eolStr) ~ eolStr)
+		];
 	}
-	auto pos = document.bytesToPosition(brace);
-	return [TextEdit(TextRange(pos, pos), code)];
+	else
+	{
+		// simply insert at the end of methods, maybe we want to add sorting?
+		// ... ofc that would need a configuration flag because once this is in for a while at least one user will have get used to this and wants to continue having it.
+		auto end = document.bytesToPosition(existing.methods[$ - 1].blockRange[1]);
+		return [
+			TextEdit(TextRange(end, end),
+					eolStr ~ eolStr ~ toImplement.map!(a => formatCode(a)).join(eolStr ~ eolStr) ~ eolStr)
+		];
+	}
 }

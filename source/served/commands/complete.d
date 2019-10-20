@@ -9,12 +9,15 @@ import workspaced.api;
 import workspaced.com.dcd;
 import workspaced.coms;
 
-import std.algorithm : any, canFind, chunkBy, endsWith, filter, map, min, reverse, sort, uniq;
+import std.algorithm : among, any, canFind, chunkBy, endsWith, filter, map, min,
+	reverse, sort, startsWith, uniq;
 import std.array : appender, array;
 import std.conv : text, to;
 import std.experimental.logger;
 import std.regex : ctRegex, matchFirst;
-import std.string : indexOf, join, lastIndexOf, lineSplitter, strip, stripRight, toLower;
+import std.string : indexOf, join, lastIndexOf, lineSplitter, strip,
+	stripLeft, stripRight, toLower;
+import std.utf : decodeFront;
 
 import fs = std.file;
 import io = std.stdio;
@@ -440,38 +443,47 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 		WorkspaceD.Instance instance, ref Document document)
 {
-	string line = document.lineAt(params.position);
-	string prefix = line[0 .. min($, params.position.character)];
-	CompletionItem[] completion;
-	if (prefix.strip == "///" || prefix.strip == "*")
-	{
-		foreach (compl; import("ddocs.txt").lineSplitter)
-		{
-			auto item = CompletionItem(compl, CompletionItemKind.snippet.opt);
-			item.insertText = compl ~ ": ";
-			completion ~= item;
-		}
-		return CompletionList(false, completion);
-	}
+	auto lineRange = document.lineByteRangeAt(params.position.line);
 	auto byteOff = cast(int) document.positionToBytes(params.position);
+
+	string line = document.rawText[lineRange[0] .. lineRange[1]].idup;
+	string prefix = line[0 .. min($, params.position.character)].strip;
+	CompletionItem[] completion;
+	if (document.rawText.isInComment(byteOff, backend))
+		if (prefix.startsWith("///", "*", "+"))
+		{
+			int prefixLen = prefix[0] == '/' ? 3 : 1;
+			auto remaining = prefix[prefixLen .. $].stripLeft;
+
+			foreach (compl; import("ddocs.txt").lineSplitter)
+			{
+				if (compl.startsWith(remaining))
+				{
+					auto item = CompletionItem(compl, CompletionItemKind.snippet.opt);
+					item.insertText = compl ~ ": ";
+					completion ~= item;
+				}
+			}
+			return CompletionList(false, completion);
+		}
 	DCDCompletions result = DCDCompletions.empty;
 	joinAll({
 		if (instance.has!DCDComponent)
 			result = instance.get!DCDComponent.listCompletion(document.rawText, byteOff).getYield;
 	}, {
-		if (!line.strip.length)
+		string lineStripped = line.strip;
+		if (lineStripped.among!("", "/", "/*", "/+", "//", "///", "/**", "/++"))
 		{
 			auto defs = instance.get!DscannerComponent.listDefinitions(uriToFile(params.textDocument.uri),
-				document.rawText).getYield;
+				document.rawText[lineRange[1] .. $]).getYield;
 			ptrdiff_t di = -1;
 			FuncFinder: foreach (i, def; defs)
 			{
-				for (int n = 1; n < 5; n++)
-					if (def.line == params.position.line + n)
-					{
-						di = i;
-						break FuncFinder;
-					}
+				if (def.line >= 0 && def.line <= 5)
+				{
+					di = i;
+					break FuncFinder;
+				}
 			}
 			if (di == -1)
 				return;
@@ -485,10 +497,15 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 				auto eol = document.eolAt(params.position.line).toString;
 				doc.insertText = "/// ";
 				CompletionItem doc2 = doc;
+				CompletionItem doc3 = doc;
 				doc2.label = "/**";
 				doc2.insertText = "/** " ~ eol ~ " * $0" ~ eol ~ " */";
-				completion ~= doc;
-				completion ~= doc2;
+				doc3.label = "/++";
+				doc3.insertText = "/++ " ~ eol ~ " * $0" ~ eol ~ " +/";
+
+				completion.addDocComplete(doc, lineStripped);
+				completion.addDocComplete(doc2, lineStripped);
+				completion.addDocComplete(doc3, lineStripped);
 				return;
 			}
 			auto funcArgs = extractFunctionParameters(*sig);
@@ -533,23 +550,94 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 			auto eol = document.eolAt(params.position.line).toString;
 			doc.insertText = docs.map!(a => "/// " ~ a).join(eol);
 			CompletionItem doc2 = doc;
+			CompletionItem doc3 = doc;
 			doc2.label = "/**";
 			doc2.insertText = "/** " ~ eol ~ docs.map!(a => " * " ~ a ~ eol).join() ~ " */";
-			completion ~= doc;
-			completion ~= doc2;
+			doc3.label = "/++";
+			doc3.insertText = "/++ " ~ eol ~ docs.map!(a => " + " ~ a ~ eol).join() ~ " +/";
+
+			completion.addDocComplete(doc, lineStripped);
+			completion.addDocComplete(doc2, lineStripped);
+			completion.addDocComplete(doc3, lineStripped);
 		}
 	});
 	switch (result.type)
 	{
 	case DCDCompletions.Type.identifiers:
 		auto d = workspace(params.textDocument.uri).config.d;
-		completion = convertDCDIdentifiers(result.identifiers, d.argumentSnippets, d.completeNoDupes);
+		completion ~= convertDCDIdentifiers(result.identifiers, d.argumentSnippets, d.completeNoDupes);
 		goto case;
 	case DCDCompletions.Type.calltips:
 		return CompletionList(false, completion);
 	default:
 		throw new Exception("Unexpected result from DCD:\n\t" ~ result.raw.join("\n\t"));
 	}
+}
+
+private void addDocComplete(ref CompletionItem[] completion, CompletionItem doc, string prefix)
+{
+	if (!doc.label.startsWith(prefix))
+		return;
+	if (prefix.length > 0)
+		doc.insertText = doc.insertText[prefix.length .. $];
+	completion ~= doc;
+}
+
+private bool isInComment(scope const(char)[] code, size_t at, WorkspaceD backend)
+{
+	if (!backend)
+		return false;
+
+	import dparse.lexer : DLexer, LexerConfig, StringBehavior, tok;
+
+	// TODO: does this kind of token parsing belong in serve-d?
+
+	LexerConfig config;
+	config.fileName = "stdin";
+	config.stringBehavior = StringBehavior.source;
+	auto lexer = DLexer(code, config, &backend.stringCache);
+
+	while (!lexer.empty) switch (lexer.front.type)
+	{
+	case tok!"comment":
+		auto t = lexer.front;
+
+		if (lexer.front.text.startsWith("//"))
+		{
+			if (t.index <= at && t.index + t.text.length >= at)
+				return true;
+		}
+		else
+		{
+			if (t.index <= at && t.index + t.text.length > at)
+				return true;
+		}
+
+		lexer.popFront();
+		break;
+	case tok!"__EOF__":
+		return false;
+	default:
+		lexer.popFront();
+		break;
+	}
+	return false;
+}
+
+unittest
+{
+	auto backend = new WorkspaceD();
+	assert(isInComment(`hello /** world`, 10, backend));
+	assert(!isInComment(`hello /** world`, 3, backend));
+	assert(isInComment(`hello /* world */ bar`, 8, backend));
+	assert(isInComment(`hello /* world */ bar`, 16, backend));
+	assert(!isInComment(`hello /* world */ bar`, 17, backend));
+	assert(!isInComment("int x;\n// line comment\n", 6, backend));
+	assert(isInComment("int x;\n// line comment\n", 7, backend));
+	assert(isInComment("int x;\n// line comment\n", 9, backend));
+	assert(isInComment("int x;\n// line comment\n", 21, backend));
+	assert(isInComment("int x;\n// line comment\n", 22, backend));
+	assert(!isInComment("int x;\n// line comment\n", 23, backend));
 }
 
 auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, bool completeNoDupes)

@@ -61,6 +61,8 @@ enum ManyProjectsAction : string
 	load = "load"
 }
 
+// alias to avoid name clashing
+alias UserConfiguration = Configuration;
 struct Configuration
 {
 	struct D
@@ -83,7 +85,7 @@ struct Configuration
 		string dubBuildType;
 		string dubCompiler;
 		bool overrideDfmtEditorconfig = true;
-		bool aggressiveUpdate = true;
+		bool aggressiveUpdate = false; // differs from default code-d settings on purpose!
 		bool argumentSnippets = false;
 		bool completeNoDupes = true;
 		bool scanAllFolders = true;
@@ -91,7 +93,7 @@ struct Configuration
 		string[] extraRoots;
 		ManyProjectsAction manyProjectsAction = ManyProjectsAction.ask;
 		int manyProjectsThreshold = 4;
-		bool lintOnFileOpen = true;
+		string lintOnFileOpen = "project";
 		bool dietContextCompletion = false;
 	}
 
@@ -115,6 +117,7 @@ struct Configuration
 	struct Editor
 	{
 		int[] rulers;
+		int tabSize;
 	}
 
 	struct Git
@@ -524,7 +527,6 @@ string uriToFile(DocumentUri uri)
 		assertEqual(a.uriFromFile.uriToFile, a);
 	}
 
-	testUri(`/home/pi/.bashrc`, `file:///home/pi/.bashrc`);
 	version (Windows)
 	{
 		// taken from vscode-uri
@@ -534,11 +536,22 @@ string uriToFile(DocumentUri uri)
 		testUri(`\\shäres\path\c#\plugin.json`, `file://sh%C3%A4res/path/c%23/plugin.json`);
 		testUri(`\\localhost\c$\GitDevelopment\express`, `file://localhost/c%24/GitDevelopment/express`);
 	}
+	else version (Posix)
+	{
+		testUri(`/home/pi/.bashrc`, `file:///home/pi/.bashrc`);
+		testUri(`/home/pi/Development Projects/D-code`, `file:///home/pi/Development%20Projects/D-code`);
+	}
 }
 
 string userPath(string path)
 {
 	return expandTilde(path);
+}
+
+string userPath(Configuration.Git git)
+{
+	// vscode may send null git path
+	return git.path.length ? userPath(git.path) : "git";
 }
 
 DocumentUri uri(string scheme, string authority, string path, string query, string fragment)

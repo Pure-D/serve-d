@@ -1,0 +1,27 @@
+name: Run Unittests
+on: [push, pull_request]
+
+jobs:
+    dubtest:
+        name: Dub Tests
+        strategy:
+            fail-fast: false
+            matrix:
+                os: [ubuntu-latest, windows-latest, macOS-latest]
+                dc: [dmd-latest, ldc-latest]
+        runs-on: ${{ matrix.os }}
+        steps:
+            - uses: actions/checkout@v1
+
+            - name: Install D compiler
+              uses: mihails-strasuns/setup-dlang@v0.3.0
+              with:
+                  compiler: ${{ matrix.dc }}
+
+            - name: Run tests
+              run: dub test
+              if: matrix.os != 'windows-latest' || matrix.dc != 'dmd-latest'
+
+            - name: Run tests (x86_mscoff)
+              run: dub test -a x86_mscoff
+              if: matrix.os == 'windows-latest' && matrix.dc == 'dmd-latest'
