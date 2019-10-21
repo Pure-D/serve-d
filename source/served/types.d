@@ -262,6 +262,106 @@ struct Configuration
 	}
 }
 
+Configuration parseConfiguration(JSONValue json)
+{
+	Configuration ret;
+	if (json.type != JSONType.object)
+	{
+		error("Configuration is not an object!");
+		return ret;
+	}
+
+	foreach (key, value; json.object)
+	{
+	SectionSwitch:
+		switch (key)
+		{
+			static foreach (section; configurationSections)
+			{
+		case section:
+				__traits(getMember, ret, section) = value.parseConfigurationSection!(
+						typeof(__traits(getMember, ret, section)))(key);
+				break SectionSwitch;
+			}
+		default:
+			infof("Ignoring unknown configuration section '%s'", key);
+			break;
+		}
+	}
+
+	return ret;
+}
+
+T parseConfigurationSection(T)(JSONValue json, string sectionKey)
+{
+	import std.traits : FieldNameTuple;
+	import painlessjson : fromJSON;
+
+	T ret;
+	if (json.type != JSONType.object)
+	{
+		error("Configuration is not an object!");
+		return ret;
+	}
+
+	foreach (key, value; json.object)
+	{
+	ConfigSwitch:
+		switch (key)
+		{
+			static foreach (member; FieldNameTuple!T)
+			{
+		case member:
+				{
+					alias U = typeof(__traits(getMember, ret, member));
+					try
+					{
+						static if (__traits(compiles, { T t = null; }))
+						{
+							if (value.type == JSONType.null_)
+							{
+								__traits(getMember, ret, member) = null;
+							}
+							else
+							{
+								static if (is(U : string))
+									__traits(getMember, ret, member) = cast(U) value.str;
+								else
+									__traits(getMember, ret, member) = value.fromJSON!U;
+							}
+						}
+						else
+						{
+							if (value.type == JSONType.null_)
+							{
+								// ignore null value on non-nullable
+							}
+							else
+							{
+								static if (is(U : string))
+									__traits(getMember, ret, member) = cast(U) value.str;
+								else
+									__traits(getMember, ret, member) = value.fromJSON!U;
+							}
+						}
+					}
+					catch (Exception e)
+					{
+						errorf("Skipping unparsable configuration '%s.%s' which was expected to be of type %s parsed from %s: %s",
+								sectionKey, key, U.stringof, value.type, e.msg);
+					}
+					break ConfigSwitch;
+				}
+			}
+		default:
+			warningf("Ignoring unknown configuration section '%s.%s'", sectionKey, key);
+			break;
+		}
+	}
+
+	return ret;
+}
+
 struct Workspace
 {
 	WorkspaceFolder folder;

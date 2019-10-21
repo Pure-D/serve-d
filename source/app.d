@@ -118,7 +118,7 @@ void processNotify(RequestMessage msg)
 		return;
 	}
 	if (msg.method == "workspace/didChangeConfiguration")
-		served.extension.processConfigChange(msg.params["settings"].fromJSON!Configuration);
+		served.extension.processConfigChange(msg.params["settings"].parseConfiguration);
 	documents.process(msg);
 	foreach (name; served.extension.members)
 	{
