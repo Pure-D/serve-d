@@ -94,6 +94,7 @@ version (Windows) class WindowsStdinReader : FileReader
 
 version (Posix) class PosixStdinReader : FileReader
 {
+	import core.stdc.errno;
 	import core.sys.posix.sys.select;
 	import core.sys.posix.sys.time;
 	import core.sys.posix.sys.types;
@@ -121,12 +122,17 @@ version (Posix) class PosixStdinReader : FileReader
 			auto ret = select(1, &rfds, null, null, &tv);
 
 			if (ret == -1)
-				stderr.writeln("PosixStdinReader error in select()");
+			{
+				int err = errno;
+				if (err == EINTR)
+					continue;
+				stderr.writeln("PosixStdinReader error ", err, " in select()");
+			}
 			else if (ret)
 			{
 				auto len = read(0, buffer.ptr, buffer.length);
 				if (len == -1)
-					stderr.writeln("PosixStdinReader error in read()");
+					stderr.writeln("PosixStdinReader error ", errno, " in read()");
 				else
 					synchronized (mutex)
 						data ~= buffer[0 .. len];
