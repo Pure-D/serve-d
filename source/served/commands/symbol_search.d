@@ -71,6 +71,9 @@ JSONValue provideDocumentSymbols(DocumentSymbolParams params)
 PerDocumentCache!(SymbolInformationEx[]) documentSymbolsCacheOld;
 SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParams params)
 {
+	if (!backend.hasBest!DscannerComponent(params.textDocument.uri.uriToFile))
+		return null;
+
 	auto cached = documentSymbolsCacheOld.cached(documents, params.textDocument.uri);
 	if (cached.length)
 		return cached;
