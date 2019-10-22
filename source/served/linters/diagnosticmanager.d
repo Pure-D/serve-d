@@ -3,6 +3,7 @@ module served.linters.diagnosticmanager;
 import std.array : array;
 import std.algorithm : map, sort;
 
+import served.memory;
 import served.types;
 
 import painlessjson;
@@ -65,6 +66,6 @@ void updateDiagnostics(string uriHint = "")
 			rpc.send(request);
 		}
 	}
-	destroy!false(publishedUris);
+	destroyUnset(publishedUris);
 	publishedUris = diags;
 }

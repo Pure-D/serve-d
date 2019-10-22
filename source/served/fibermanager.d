@@ -8,6 +8,8 @@ import std.algorithm;
 import std.experimental.logger;
 import std.range;
 
+import served.memory;
+
 import workspaced.api : Future;
 
 public import core.thread : Fiber, Thread;
@@ -30,7 +32,7 @@ struct FiberManager
 		{
 			debug (Fibers)
 				tracef("Releasing fiber %s", cast(void*) fibers[i]);
-			destroy(fibers[i]);
+			destroyUnset(fibers[i]);
 			fibers = fibers.remove(i);
 		}
 	}

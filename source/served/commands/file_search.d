@@ -81,7 +81,7 @@ string[] findFilesByModule(string module_)
 	if (auto cache = module_ in modFileCache)
 		return [*cache];
 
-	ubyte[] buffer = new ubyte[8 * 1024];
+	scope ubyte[] buffer = new ubyte[8 * 1024];
 	scope (exit)
 		buffer.destroy();
 
