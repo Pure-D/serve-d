@@ -215,6 +215,8 @@ Task[] provideBuildTasks()
 			continue;
 		auto dub = instance.get!DubComponent;
 		auto workspace = .workspace(instance.cwd.uriFromFile, false);
+		info("Found dub package to build at ", dub.recipePath);
+		string uri = dub.recipePath.dirName.uriFromFile;
 		{
 			Task t;
 			t.source = "dub";
@@ -231,7 +233,7 @@ Task[] provideBuildTasks()
 				workspace.config.d.dubPath.userPath, "build", "--compiler=" ~ dub.compiler,
 				"-a=" ~ dub.archType, "-b=" ~ dub.buildType, "-c=" ~ dub.configuration
 			].fixEmptyArgs;
-			t.scope_ = workspace.folder.uri;
+			t.scope_ = uri;
 			t.name = "Build " ~ dub.name;
 			ret ~= t;
 		}
@@ -251,7 +253,7 @@ Task[] provideBuildTasks()
 				workspace.config.d.dubPath.userPath, "run", "--compiler=" ~ dub.compiler,
 				"-a=" ~ dub.archType, "-b=" ~ dub.buildType, "-c=" ~ dub.configuration
 			].fixEmptyArgs;
-			t.scope_ = workspace.folder.uri;
+			t.scope_ = uri;
 			t.name = "Run " ~ dub.name;
 			ret ~= t;
 		}
@@ -273,7 +275,7 @@ Task[] provideBuildTasks()
 				"--compiler=" ~ dub.compiler, "-a=" ~ dub.archType,
 				"-b=" ~ dub.buildType, "-c=" ~ dub.configuration
 			].fixEmptyArgs;
-			t.scope_ = workspace.folder.uri;
+			t.scope_ = uri;
 			t.name = "Rebuild " ~ dub.name;
 			ret ~= t;
 		}
@@ -293,7 +295,7 @@ Task[] provideBuildTasks()
 				workspace.config.d.dubPath.userPath, "test", "--compiler=" ~ dub.compiler,
 				"-a=" ~ dub.archType, "-b=" ~ dub.buildType, "-c=" ~ dub.configuration
 			].fixEmptyArgs;
-			t.scope_ = workspace.folder.uri;
+			t.scope_ = uri;
 			t.name = "Test " ~ dub.name;
 			ret ~= t;
 		}

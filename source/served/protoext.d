@@ -83,14 +83,22 @@ struct Task
 		test = "test"
 	}
 
+	/// the default JSON task
 	JSONValue definition;
+	/// global | workspace | uri of workspace folder
 	@SerializedName("scope")
 	string scope_;
+	/// command to execute
 	string[] exec;
+	/// name of the task
 	string name;
+	/// true if this is a background task without shown console
 	bool isBackground;
+	/// Task source extension name
 	string source;
+	/// clean | build | rebuild | test
 	Group group;
+	/// problem matchers to use
 	string[] problemMatchers;
 }
 
