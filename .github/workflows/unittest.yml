@@ -9,6 +9,9 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
         dc: [dmd-latest, ldc-latest]
+        exclude:
+        - os: windows-latest
+          dc: dmd-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v1
@@ -20,11 +23,6 @@ jobs:
 
       - name: Run tests
         run: dub test
-        if: matrix.os != 'windows-latest' || matrix.dc != 'dmd-latest'
         env:
           # shouldn't break other OSes
           MACOSX_DEPLOYMENT_TARGET: '10.12'
-
-      - name: Run tests (x86_mscoff)
-        run: dub test -a x86_mscoff
-        if: matrix.os == 'windows-latest' && matrix.dc == 'dmd-latest'
