@@ -420,6 +420,7 @@ struct Diagnostic
 	string source;
 	string message;
 	Optional!(DiagnosticRelatedInformation[]) relatedInformation;
+	Optional!(DiagnosticTag[]) tags;
 }
 
 struct DiagnosticRelatedInformation
@@ -434,6 +435,12 @@ enum DiagnosticSeverity
 	warning,
 	information,
 	hint
+}
+
+enum DiagnosticTag
+{
+	unnecessary = 1,
+	deprecated_
 }
 
 struct Command

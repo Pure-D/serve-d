@@ -164,6 +164,8 @@ void lint(Document document)
 			Diagnostic error;
 			error.range = TextRange(issue.line - 1, issue.column - 1, issue.line - 1, issue.column);
 			error.severity = mapDubLintType(issue.type);
+			if (issue.type == ErrorType.Deprecation)
+				error.tags = opt([DiagnosticTag.deprecated_]);
 			error.source = DubDiagnosticSource;
 			error.message = issue.text;
 			if (supplemental.length)

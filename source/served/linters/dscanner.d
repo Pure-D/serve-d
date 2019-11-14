@@ -57,7 +57,17 @@ void lint(Document document)
 					Position(cast(uint) issue.line - 1, 1000));
 		else
 			d.range = document.wordRangeAt(Position(cast(uint) issue.line - 1, cast(uint) issue.column - 1));
-		d.severity = issue.type ? DiagnosticSeverity.warning : DiagnosticSeverity.error;
+
+		if (issue.key == "dscanner.suspicious.unused_parameter"
+				|| issue.key == "dscanner.suspicious.unused_variable")
+		{
+			d.severity = DiagnosticSeverity.hint;
+			d.tags = opt([DiagnosticTag.unnecessary]);
+		}
+		else
+		{
+			d.severity = issue.type ? DiagnosticSeverity.warning : DiagnosticSeverity.error;
+		}
 		d.source = DScannerDiagnosticSource;
 		d.message = issue.description;
 		d.code = JSONValue(issue.key);
