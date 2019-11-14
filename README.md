@@ -1,6 +1,11 @@
 # serve-d
 
-Join the chat: [![Join on Discord](https://discordapp.com/api/guilds/242094594181955585/widget.png?style=shield)](https://discord.gg/Bstj9bx)
+![build status](https://github.com/Pure-D/serve-d/workflows/Run%20Unittests/badge.svg)
+![deploy nightly](https://github.com/Pure-D/serve-d/workflows/Deploy%20Nightly/badge.svg)
+
+Join the chat:
+
+[![Join on Discord](https://discordapp.com/api/guilds/242094594181955585/widget.png?style=shield)](https://discord.gg/Bstj9bx)
 
 [Microsoft language server protocol](https://github.com/Microsoft/language-server-protocol) implementation for [D](https://dlang.org) using [workspace-d](https://github.com/Pure-D/workspace-d).
 
