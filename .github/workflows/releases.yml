@@ -15,7 +15,7 @@ jobs:
       - uses: actions/checkout@v1
 
       - name: Install D compiler
-        uses: mihails-strasuns/setup-dlang@v0.3.0
+        uses: mihails-strasuns/setup-dlang@v0.3.1
         with:
             compiler: ldc-latest
 
@@ -48,6 +48,7 @@ jobs:
         run: ./ci/build.sh && rdmd ci/validate_version.d
         if: matrix.os == 'macOS-latest'
         env:
+          MACOSX_DEPLOYMENT_TARGET: '10.6'
           ARCH: x86_64
 
       - name: Deploy OSX release
