@@ -166,7 +166,8 @@ void printVersion(io.File output = io.stdout)
 		import source.workspaced.info : BundledDependencies, WorkspacedVersion = Version;
 	import source.served.info;
 
-	output.writefln("serve-d v%(%s.%)%s with workspace-d v%(%s.%)", Version, VersionSuffix.length ? text('-', VersionSuffix) : VersionSuffix, WorkspacedVersion);
+	output.writefln("serve-d v%(%s.%)%s with workspace-d v%(%s.%)", Version,
+			VersionSuffix.length ? text('-', VersionSuffix) : VersionSuffix, WorkspacedVersion);
 	output.writefln("Included features: %(%s, %)", IncludedFeatures);
 	// There will always be a line which starts with `Built: ` forever, it is considered stable. If there is no line, assume version 0.1.2
 	output.writefln("Built: %s", __TIMESTAMP__);
