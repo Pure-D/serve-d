@@ -23,7 +23,7 @@ jobs:
         if: matrix.os != 'windows-latest' || matrix.dc != 'dmd-latest'
         env:
           # shouldn't break other OSes
-          MACOSX_DEPLOYMENT_TARGET: '10.6'
+          MACOSX_DEPLOYMENT_TARGET: '10.12'
 
       - name: Run tests (x86_mscoff)
         run: dub test -a x86_mscoff

@@ -49,7 +49,7 @@ jobs:
               run: ./ci/build.sh
               if: matrix.os == 'macOS-latest'
               env:
-                MACOSX_DEPLOYMENT_TARGET: '10.6'
+                MACOSX_DEPLOYMENT_TARGET: '10.12'
                 ARCH: x86_64
 
             - name: Deploy OSX release
