@@ -31,6 +31,7 @@ jobs:
               if: matrix.os == 'ubuntu-latest'
               env:
                 ARCH: x86_64
+                BUILD: release-debug
 
             - name: Deploy Linux release
               if: matrix.os == 'ubuntu-latest'
@@ -51,6 +52,7 @@ jobs:
               env:
                 MACOSX_DEPLOYMENT_TARGET: '10.12'
                 ARCH: x86_64
+                BUILD: release-debug
 
             - name: Deploy OSX release
               if: matrix.os == 'macOS-latest'
@@ -68,6 +70,8 @@ jobs:
             - name: Build Windows release
               run: .\ci\build.bat
               if: matrix.os == 'windows-latest'
+              env:
+                BUILD: release-debug
 
             - name: Deploy Windows release
               if: matrix.os == 'windows-latest'
