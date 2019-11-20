@@ -22,7 +22,12 @@ jobs:
           compiler: ${{ matrix.dc }}
 
       - name: dub upgrade
-        run: dub upgrade || (sleep 30 && dub upgrade) || (sleep 30 && dub upgrade)
+        run: .\ci\upgrade.bat
+        if: matrix.os == "windows-latest"
+
+      - name: dub upgrade
+        run: ./ci/upgrade.sh
+        if: matrix.os != "windows-latest"
 
       - name: Run tests
         run: dub test
