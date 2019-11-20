@@ -20,7 +20,7 @@ jobs:
             compiler: ldc-latest
 
       - name: Dub upgrade
-        run: dub upgrade
+        run: dub upgrade || (sleep 30 && dub upgrade) || (sleep 30 && dub upgrade)
 
       - name: Run tests
         run: dub test

@@ -21,6 +21,9 @@ jobs:
         with:
           compiler: ${{ matrix.dc }}
 
+      - name: dub upgrade
+        run: dub upgrade || (sleep 30 && dub upgrade) || (sleep 30 && dub upgrade)
+
       - name: Run tests
         run: dub test
         env:
