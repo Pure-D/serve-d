@@ -21,11 +21,11 @@ jobs:
 
             - name: dub upgrade
               run: .\ci\upgrade.bat
-              if: matrix.os == "windows-latest"
+              if: matrix.os == 'windows-latest'
 
             - name: dub upgrade
               run: ./ci/upgrade.sh
-              if: matrix.os != "windows-latest"
+              if: matrix.os != 'windows-latest'
 
             - name: Run tests
               run: dub test
