@@ -354,16 +354,27 @@ InitializeResult initialize(InitializeParams params)
 			opt(ServerWorkspaceCapabilities.WorkspaceFolders(opt(true), opt(true)))));
 
 	setTimeout({
-		if (!syncedConfiguration && !syncingConfiguration && capabilities.workspace.configuration)
+		if (!syncedConfiguration && !syncingConfiguration)
 		{
-			if (!syncConfiguration(null))
-				error("Syncing user configuration failed!");
+			if (capabilities.workspace.configuration)
+			{
+				if (!syncConfiguration(null))
+					error("Syncing user configuration failed!");
 
-			warning(
-				"Didn't receive any configuration notification, manually requesting all configurations now");
+				warning(
+					"Didn't receive any configuration notification, manually requesting all configurations now");
 
-			foreach (ref workspace; workspaces)
-				syncConfiguration(workspace.folder.uri);
+				foreach (ref workspace; workspaces)
+					syncConfiguration(workspace.folder.uri);
+			}
+			else
+			{
+				warning("This Language Client doesn't support configuration requests and also didn't send any ",
+					"configuration to serve-d. Initializing using default configuration");
+
+				changedConfig(workspaces[0].folder.uri, null, workspaces[0].config);
+				fallbackWorkspace.config = workspaces[0].config;
+			}
 		}
 	}, 1000);
 
