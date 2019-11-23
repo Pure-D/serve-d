@@ -851,3 +851,53 @@ unittest
 	test(`-I/usr/include/dmd/phobos -L-L/usr/lib/x86_64-linux-gnu -I/usr/include/dmd/druntime/import -L--export-dynamic -fPIC`,
 			[`/usr/include/dmd/phobos`, `/usr/include/dmd/druntime/import`]);
 }
+
+void prettyPrintStruct(alias printFunc, T, int line = __LINE__, string file = __FILE__,
+		string funcName = __FUNCTION__, string prettyFuncName = __PRETTY_FUNCTION__,
+		string moduleName = __MODULE__)(T value, string indent = "\t")
+		if (is(T == struct))
+{
+	static foreach (i, member; T.tupleof)
+	{
+		{
+			static if (is(typeof(member) == Optional!U, U))
+			{
+				if (value.tupleof[i].isNull)
+				{
+					printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
+							__traits(identifier, member), "?: <null>");
+				}
+				else
+				{
+					static if (is(U == struct))
+					{
+						printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
+								__traits(identifier, member), "?:");
+						prettyPrintStruct!(printFunc, U, line, file, funcName, prettyFuncName, moduleName)(value.tupleof[i].get,
+								indent ~ "\t");
+					}
+					else
+					{
+						printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
+								__traits(identifier, member), "?: ", value.tupleof[i].get);
+					}
+				}
+			}
+			else static if (is(typeof(member) == JSONValue))
+			{
+				printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
+						__traits(identifier, member), ": ", value.tupleof[i].toString());
+			}
+			else static if (is(typeof(member) == struct))
+			{
+				printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
+						__traits(identifier, member), ":");
+				prettyPrintStruct!(printFunc, typeof(member), line, file, funcName,
+						prettyFuncName, moduleName)(value.tupleof[i], indent ~ "\t");
+			}
+			else
+				printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
+						__traits(identifier, member), ": ", value.tupleof[i]);
+		}
+	}
+}

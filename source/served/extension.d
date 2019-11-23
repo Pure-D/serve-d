@@ -314,7 +314,8 @@ InitializeResult initialize(InitializeParams params)
 	import std.file : chdir;
 
 	capabilities = params.capabilities;
-	trace("Set capabilities to ", params);
+	trace("initialize params:");
+	prettyPrintStruct!trace(params);
 
 	if (params.workspaceFolders.length)
 		workspaces = params.workspaceFolders.map!(a => Workspace(a,
