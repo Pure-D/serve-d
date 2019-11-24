@@ -78,7 +78,7 @@ struct Optional(T)
 		return ret;
 	}
 
-	ref T get()
+	ref inout(T) get() inout
 	{
 		return value;
 	}
