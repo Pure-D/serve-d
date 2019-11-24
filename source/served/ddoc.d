@@ -231,7 +231,7 @@ private string prepareDDoc(string str)
 }
 
 string[string] markdownMacros;
-shared static this()
+static this()
 {
 	markdownMacros = [
 		`B`: `**$0**`,
@@ -327,12 +327,7 @@ $(BODY)`,
 
 unittest
 {
-	void assertEqual(A, B)(A a, B b)
-	{
-		import std.conv : to;
-
-		assert(a == b, a.to!string ~ " is not equal to " ~ b.to!string);
-	}
+	import unit_threaded.assertions;
 
 	//dfmt off
 	auto comment = "Quick example of a comment\n"
@@ -360,5 +355,5 @@ unittest
 		~ "**Returns** — nothing of consequence\n\n";
 	//dfmt on
 
-	assertEqual(ddocToMarkdown(comment), commentMarkdown);
+	shouldEqual(ddocToMarkdown(comment), commentMarkdown);
 }

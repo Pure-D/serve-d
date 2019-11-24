@@ -11,3 +11,4 @@ dub.selections.json
 *.tar.xz
 *.zip
 /version.txt
+/bin/
