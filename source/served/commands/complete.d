@@ -1,12 +1,15 @@
 module served.commands.complete;
 
+import served.commands.format : formatCode, formatSnippet;
 import served.ddoc;
 import served.extension;
 import served.fibermanager;
 import served.types;
 
 import workspaced.api;
+import workspaced.com.dfmt : DfmtComponent;
 import workspaced.com.dcd;
+import workspaced.com.snippets;
 import workspaced.coms;
 
 import std.algorithm : among, any, canFind, chunkBy, endsWith, filter, map, min,
@@ -14,10 +17,13 @@ import std.algorithm : among, any, canFind, chunkBy, endsWith, filter, map, min,
 import std.array : appender, array;
 import std.conv : text, to;
 import std.experimental.logger;
+import std.json : JSONType, JSONValue;
 import std.regex : ctRegex, matchFirst;
 import std.string : indexOf, join, lastIndexOf, lineSplitter, strip,
 	stripLeft, stripRight, toLower;
 import std.utf : decodeFront;
+
+import painlessjson : fromJSON, toJSON;
 
 import fs = std.file;
 import io = std.stdio;
@@ -270,13 +276,14 @@ unittest
 			]);
 }
 
+/// Provide snippets in auto-completion
+__gshared bool doCompleteSnippets = false;
+
 // === Protocol Methods starting here ===
 
 @protocolMethod("textDocument/completion")
 CompletionList provideComplete(TextDocumentPositionParams params)
 {
-	import painlessjson : fromJSON;
-
 	Document document = documents[params.textDocument.uri];
 	auto instance = activeInstance = backend.getBestInstance(document.uri.uriToFile);
 	trace("Completing from instance ", instance ? instance.cwd : "null");
@@ -466,111 +473,139 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 			}
 			return CompletionList(false, completion);
 		}
+	const config = workspace(params.textDocument.uri).config;
 	DCDCompletions result = DCDCompletions.empty;
 	joinAll({
 		if (instance.has!DCDComponent)
 			result = instance.get!DCDComponent.listCompletion(document.rawText, byteOff).getYield;
 	}, {
-		string lineStripped = line.strip;
-		if (lineStripped.among!("", "/", "/*", "/+", "//", "///", "/**", "/++"))
-		{
-			auto defs = instance.get!DscannerComponent.listDefinitions(uriToFile(params.textDocument.uri),
-				document.rawText[lineRange[1] .. $]).getYield;
-			ptrdiff_t di = -1;
-			FuncFinder: foreach (i, def; defs)
-			{
-				if (def.line >= 0 && def.line <= 5)
-				{
-					di = i;
-					break FuncFinder;
-				}
-			}
-			if (di == -1)
-				return;
-			auto def = defs[di];
-			auto sig = "signature" in def.attributes;
-			if (!sig)
-			{
-				CompletionItem doc = CompletionItem("///");
-				doc.kind = CompletionItemKind.snippet;
-				doc.insertTextFormat = InsertTextFormat.snippet;
-				auto eol = document.eolAt(params.position.line).toString;
-				doc.insertText = "/// ";
-				CompletionItem doc2 = doc;
-				CompletionItem doc3 = doc;
-				doc2.label = "/**";
-				doc2.insertText = "/** " ~ eol ~ " * $0" ~ eol ~ " */";
-				doc3.label = "/++";
-				doc3.insertText = "/++ " ~ eol ~ " * $0" ~ eol ~ " +/";
-
-				completion.addDocComplete(doc, lineStripped);
-				completion.addDocComplete(doc2, lineStripped);
-				completion.addDocComplete(doc3, lineStripped);
-				return;
-			}
-			auto funcArgs = extractFunctionParameters(*sig);
-			string[] docs;
-			if (def.name.matchFirst(ctRegex!`^[Gg]et([^a-z]|$)`))
-				docs ~= "Gets $0";
-			else if (def.name.matchFirst(ctRegex!`^[Ss]et([^a-z]|$)`))
-				docs ~= "Sets $0";
-			else if (def.name.matchFirst(ctRegex!`^[Ii]s([^a-z]|$)`))
-				docs ~= "Checks if $0";
-			else
-				docs ~= "$0";
-			int argNo = 1;
-			foreach (arg; funcArgs)
-			{
-				auto space = arg.lastIndexOf(' ');
-				if (space == -1)
-					continue;
-				auto identifier = arg[space + 1 .. $];
-				if (!identifier.matchFirst(ctRegex!`[a-zA-Z_][a-zA-Z0-9_]*`))
-					continue;
-				if (argNo == 1)
-					docs ~= "Params:";
-				docs ~= text("  ", identifier, " = $", argNo.to!string);
-				argNo++;
-			}
-			auto retAttr = "return" in def.attributes;
-			if (retAttr && *retAttr != "void")
-			{
-				docs ~= "Returns: $" ~ argNo.to!string;
-				argNo++;
-			}
-			auto depr = "deprecation" in def.attributes;
-			if (depr)
-			{
-				docs ~= "Deprecated: $" ~ argNo.to!string ~ *depr;
-				argNo++;
-			}
-			CompletionItem doc = CompletionItem("///");
-			doc.kind = CompletionItemKind.snippet;
-			doc.insertTextFormat = InsertTextFormat.snippet;
-			auto eol = document.eolAt(params.position.line).toString;
-			doc.insertText = docs.map!(a => "/// " ~ a).join(eol);
-			CompletionItem doc2 = doc;
-			CompletionItem doc3 = doc;
-			doc2.label = "/**";
-			doc2.insertText = "/** " ~ eol ~ docs.map!(a => " * " ~ a ~ eol).join() ~ " */";
-			doc3.label = "/++";
-			doc3.insertText = "/++ " ~ eol ~ docs.map!(a => " + " ~ a ~ eol).join() ~ " +/";
-
-			completion.addDocComplete(doc, lineStripped);
-			completion.addDocComplete(doc2, lineStripped);
-			completion.addDocComplete(doc3, lineStripped);
-		}
+		if (instance.has!DscannerComponent)
+			provideDocComplete(params, instance, document, completion, line, lineRange);
+	}, {
+		if (doCompleteSnippets && instance.has!SnippetsComponent)
+			provideSnippetComplete(params, instance, document, config, completion, byteOff);
 	});
 	switch (result.type)
 	{
 	case DCDCompletions.Type.identifiers:
-		auto d = workspace(params.textDocument.uri).config.d;
+		auto d = config.d;
 		completion ~= convertDCDIdentifiers(result.identifiers, d.argumentSnippets, d.completeNoDupes);
 		goto case;
 	case DCDCompletions.Type.calltips:
 		return CompletionList(false, completion);
 	default:
 		throw new Exception("Unexpected result from DCD:\n\t" ~ result.raw.join("\n\t"));
+	}
+}
+
+private void provideDocComplete(TextDocumentPositionParams params, WorkspaceD.Instance instance,
+		ref Document document, ref CompletionItem[] completion, string line, size_t[2] lineRange)
+{
+	string lineStripped = line.strip;
+	if (lineStripped.among!("", "/", "/*", "/+", "//", "///", "/**", "/++"))
+	{
+		auto defs = instance.get!DscannerComponent.listDefinitions(uriToFile(
+				params.textDocument.uri), document.rawText[lineRange[1] .. $]).getYield;
+		ptrdiff_t di = -1;
+		FuncFinder: foreach (i, def; defs)
+		{
+			if (def.line >= 0 && def.line <= 5)
+			{
+				di = i;
+				break FuncFinder;
+			}
+		}
+		if (di == -1)
+			return;
+		auto def = defs[di];
+		auto sig = "signature" in def.attributes;
+		if (!sig)
+		{
+			CompletionItem doc = CompletionItem("///");
+			doc.kind = CompletionItemKind.snippet;
+			doc.insertTextFormat = InsertTextFormat.snippet;
+			auto eol = document.eolAt(params.position.line).toString;
+			doc.insertText = "/// ";
+			CompletionItem doc2 = doc;
+			CompletionItem doc3 = doc;
+			doc2.label = "/**";
+			doc2.insertText = "/** " ~ eol ~ " * $0" ~ eol ~ " */";
+			doc3.label = "/++";
+			doc3.insertText = "/++ " ~ eol ~ " * $0" ~ eol ~ " +/";
+
+			completion.addDocComplete(doc, lineStripped);
+			completion.addDocComplete(doc2, lineStripped);
+			completion.addDocComplete(doc3, lineStripped);
+			return;
+		}
+		auto funcArgs = extractFunctionParameters(*sig);
+		string[] docs;
+		if (def.name.matchFirst(ctRegex!`^[Gg]et([^a-z]|$)`))
+			docs ~= "Gets $0";
+		else if (def.name.matchFirst(ctRegex!`^[Ss]et([^a-z]|$)`))
+			docs ~= "Sets $0";
+		else if (def.name.matchFirst(ctRegex!`^[Ii]s([^a-z]|$)`))
+			docs ~= "Checks if $0";
+		else
+			docs ~= "$0";
+		int argNo = 1;
+		foreach (arg; funcArgs)
+		{
+			auto space = arg.lastIndexOf(' ');
+			if (space == -1)
+				continue;
+			auto identifier = arg[space + 1 .. $];
+			if (!identifier.matchFirst(ctRegex!`[a-zA-Z_][a-zA-Z0-9_]*`))
+				continue;
+			if (argNo == 1)
+				docs ~= "Params:";
+			docs ~= text("  ", identifier, " = $", argNo.to!string);
+			argNo++;
+		}
+		auto retAttr = "return" in def.attributes;
+		if (retAttr && *retAttr != "void")
+		{
+			docs ~= "Returns: $" ~ argNo.to!string;
+			argNo++;
+		}
+		auto depr = "deprecation" in def.attributes;
+		if (depr)
+		{
+			docs ~= "Deprecated: $" ~ argNo.to!string ~ *depr;
+			argNo++;
+		}
+		CompletionItem doc = CompletionItem("///");
+		doc.kind = CompletionItemKind.snippet;
+		doc.insertTextFormat = InsertTextFormat.snippet;
+		auto eol = document.eolAt(params.position.line).toString;
+		doc.insertText = docs.map!(a => "/// " ~ a).join(eol);
+		CompletionItem doc2 = doc;
+		CompletionItem doc3 = doc;
+		doc2.label = "/**";
+		doc2.insertText = "/** " ~ eol ~ docs.map!(a => " * " ~ a ~ eol).join() ~ " */";
+		doc3.label = "/++";
+		doc3.insertText = "/++ " ~ eol ~ docs.map!(a => " + " ~ a ~ eol).join() ~ " +/";
+
+		completion.addDocComplete(doc, lineStripped);
+		completion.addDocComplete(doc2, lineStripped);
+		completion.addDocComplete(doc3, lineStripped);
+	}
+}
+
+private void provideSnippetComplete(TextDocumentPositionParams params, WorkspaceD.Instance instance,
+		ref Document document, ref const UserConfiguration config,
+		ref CompletionItem[] completion, int byteOff)
+{
+	auto snippets = instance.get!SnippetsComponent();
+	auto ret = snippets.getSnippetsYield(document.uri.uriToFile, document.rawText, byteOff);
+	trace("got ", ret.length, " snippets fitting in this context: ", ret.map!"a.shortcut");
+	auto eol = document.eolAt(0);
+	foreach (Snippet snippet; ret)
+	{
+		auto item = snippet.snippetToCompletionItem;
+		item.data["format"] = toJSON(generateDfmtArgs(config, eol));
+		item.data["params"] = toJSON(params);
+		completion ~= item;
 	}
 }
 
@@ -622,6 +657,104 @@ private bool isInComment(scope const(char)[] code, size_t at, WorkspaceD backend
 		break;
 	}
 	return false;
+}
+
+@protocolMethod("completionItem/resolve")
+CompletionItem resolveCompletionItem(CompletionItem item)
+{
+	auto data = item.data;
+
+	if (item.insertTextFormat.get == InsertTextFormat.snippet
+			&& item.kind.get == CompletionItemKind.snippet && data.type == JSONType.object)
+	{
+		const resolved = "resolved" in data.object;
+		if (resolved.type != JSONType.true_)
+		{
+			TextDocumentPositionParams params = data.object["params"]
+				.fromJSON!TextDocumentPositionParams;
+
+			Document document = documents[params.textDocument.uri];
+			auto f = document.uri.uriToFile;
+			auto instance = backend.getBestInstance(f);
+
+			if (instance.has!SnippetsComponent)
+			{
+				auto snippets = instance.get!SnippetsComponent;
+				auto snippet = snippetFromCompletionItem(item);
+				snippet = snippets.resolveSnippet(f, document.rawText,
+						cast(int) document.positionToBytes(params.position), snippet).getYield;
+				item = snippetToCompletionItem(snippet);
+			}
+		}
+
+		if (const format = "format" in data.object)
+		{
+			auto args = (*format).fromJSON!(string[]);
+			if (item.insertTextFormat.get == InsertTextFormat.snippet)
+			{
+				item.insertText = formatSnippet(item.insertText.get, args).opt;
+			}
+			else
+			{
+				item.insertText = formatCode(item.insertText.get, args).opt;
+			}
+		}
+
+		// TODO: format code
+		return item;
+	}
+	else
+	{
+		return item;
+	}
+}
+
+CompletionItem snippetToCompletionItem(Snippet snippet)
+{
+	CompletionItem item;
+	item.label = snippet.shortcut;
+	item.detail = snippet.title.opt;
+	item.kind = CompletionItemKind.snippet.opt;
+	item.documentation = MarkupContent(MarkupKind.markdown,
+			snippet.documentation ~ "\n\n```d\n" ~ snippet.snippet ~ "\n```\n");
+	item.filterText = snippet.shortcut.opt;
+	if (capabilities.textDocument.completion.completionItem.snippetSupport)
+	{
+		item.insertText = snippet.snippet.opt;
+		item.insertTextFormat = InsertTextFormat.snippet.opt;
+	}
+	else
+		item.insertText = snippet.plain.opt;
+
+	item.data = JSONValue([
+			"resolved": JSONValue(snippet.resolved),
+			"id": JSONValue(snippet.id),
+			"providerId": JSONValue(snippet.providerId),
+			"data": snippet.data
+			]);
+	return item;
+}
+
+Snippet snippetFromCompletionItem(CompletionItem item)
+{
+	Snippet snippet;
+	snippet.shortcut = item.label;
+	snippet.title = item.detail.get;
+	snippet.documentation = item.documentation.get.value;
+	auto end = snippet.documentation.lastIndexOf("\n\n```d\n");
+	if (end != -1)
+		snippet.documentation = snippet.documentation[0 .. end];
+
+	if (capabilities.textDocument.completion.completionItem.snippetSupport)
+		snippet.snippet = item.insertText.get;
+	else
+		snippet.plain = item.insertText.get;
+
+	snippet.resolved = item.data["resolved"].boolean;
+	snippet.id = item.data["id"].str;
+	snippet.providerId = item.data["providerId"].str;
+	snippet.data = item.data["data"];
+	return snippet;
 }
 
 unittest

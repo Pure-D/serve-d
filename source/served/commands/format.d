@@ -117,3 +117,13 @@ TextEdit[] provideFormatting(DocumentFormattingParams params)
 		TextEdit(TextRange(Position(0, 0), document.offsetToPosition(document.length)), result)
 	];
 }
+
+string formatCode(string code, string[] dfmtArgs)
+{
+	return backend.get!DfmtComponent.format(code, dfmtArgs).getYield;
+}
+
+string formatSnippet(string code, string[] dfmtArgs)
+{
+	return backend.get!SnippetsComponent.format(code, dfmtArgs).getYield;
+}

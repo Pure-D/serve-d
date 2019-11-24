@@ -337,9 +337,9 @@ InitializeResult initialize(InitializeParams params)
 
 	InitializeResult result;
 	result.capabilities.textDocumentSync = documents.syncKind;
-	result.capabilities.completionProvider = CompletionOptions(false, [
-			".", "=", "*", "/", "+", "-", "%"
-			]);
+	// only provide fixes when doCompleteSnippets is requested
+	result.capabilities.completionProvider = CompletionOptions(doCompleteSnippets,
+			[".", "=", "*", "/", "+", "-", "%"]);
 	result.capabilities.signatureHelpProvider = SignatureHelpOptions([
 			"(", "[", ","
 			]);
@@ -419,6 +419,8 @@ void doGlobalStartup()
 		backend.register!ImporterComponent;
 		trace("Starting moduleman");
 		backend.register!ModulemanComponent;
+		trace("Starting snippets");
+		backend.register!SnippetsComponent;
 
 		if (!backend.has!DCDComponent || backend.get!DCDComponent.isOutdated)
 		{

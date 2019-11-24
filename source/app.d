@@ -245,6 +245,12 @@ int main(string[] args)
 			implementInterfaceSnippets = true;
 			trace("Auto-implement interface supports snippets");
 			break;
+		case "context-snippets":
+			import served.commands.complete : doCompleteSnippets;
+
+			doCompleteSnippets = true;
+			trace("Context snippets handled by serve-d");
+			break;
 		default:
 			warningf("Unknown --provide flag '%s' provided. Maybe serve-d is outdated?", provide);
 			break;
