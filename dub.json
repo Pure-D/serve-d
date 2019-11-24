@@ -26,7 +26,10 @@
 		{
 			"name": "unittest",
 			"targetType": "executable",
-			"preBuildCommands": [
+			"preBuildCommands-windows": [
+				"$DUB run --compiler=%DC% unit-threaded -c gen_ut_main -- -f bin\\ut.d"
+			],
+			"preBuildCommands-posix": [
 				"$DUB run --compiler=$$DC unit-threaded -c gen_ut_main -- -f bin/ut.d"
 			],
 			"mainSourceFile": "bin/ut.d",
