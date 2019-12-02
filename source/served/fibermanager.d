@@ -58,7 +58,7 @@ struct FiberManager
 	}
 }
 
-void joinAll(Fibers...)(Fibers fibers)
+void joinAll(size_t fiberSize = 4096 * 24, Fibers...)(Fibers fibers)
 {
 	FiberManager f;
 	int i;
@@ -72,9 +72,9 @@ void joinAll(Fibers...)(Fibers fibers)
 				static if (is(typeof(fib) : Fiber))
 					converted[i++] = fib;
 				else static if (is(typeof(fib) : Future!T, T))
-					converted[i++] = new Fiber(&fib.getYield, 4096 * 8);
+					converted[i++] = new Fiber(&fib.getYield, fiberSize);
 				else
-					converted[i++] = new Fiber(fib, 4096 * 8);
+					converted[i++] = new Fiber(fib, fiberSize);
 			}
 		}
 		else
@@ -82,9 +82,9 @@ void joinAll(Fibers...)(Fibers fibers)
 			static if (is(typeof(fiber) : Fiber))
 				converted[i++] = fiber;
 			else static if (is(typeof(fiber) : Future!T, T))
-				converted[i++] = new Fiber(&fiber.getYield, 4096 * 8);
+				converted[i++] = new Fiber(&fiber.getYield, fiberSize);
 			else
-				converted[i++] = new Fiber(fiber, 4096 * 8);
+				converted[i++] = new Fiber(fiber, fiberSize);
 		}
 	}
 	f.fibers = converted[];
