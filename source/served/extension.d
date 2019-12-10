@@ -339,7 +339,7 @@ InitializeResult initialize(InitializeParams params)
 	result.capabilities.textDocumentSync = documents.syncKind;
 	// only provide fixes when doCompleteSnippets is requested
 	result.capabilities.completionProvider = CompletionOptions(doCompleteSnippets,
-			[".", "=", "*", "/", "+", "-", "%"]);
+			[".", "="]);
 	result.capabilities.signatureHelpProvider = SignatureHelpOptions([
 			"(", "[", ","
 			]);
