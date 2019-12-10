@@ -596,7 +596,7 @@ private void provideSnippetComplete(TextDocumentPositionParams params, Workspace
 		ref Document document, ref const UserConfiguration config,
 		ref CompletionItem[] completion, int byteOff)
 {
-	auto snippets = instance.get!SnippetsComponent();
+	auto snippets = instance.get!SnippetsComponent;
 	auto ret = snippets.getSnippetsYield(document.uri.uriToFile, document.rawText, byteOff);
 	trace("got ", ret.length, " snippets fitting in this context: ", ret.map!"a.shortcut");
 	auto eol = document.eolAt(0);
@@ -880,4 +880,13 @@ void killServer()
 	foreach (instance; backend.instances)
 		if (instance.has!DCDComponent)
 			instance.get!DCDComponent.killServer();
+}
+
+@protocolMethod("served/addDependencySnippet")
+bool addDependencySnippet(AddDependencySnippetParams params)
+{
+	if (!backend.has!SnippetsComponent)
+		return false;
+	backend.get!SnippetsComponent.addDependencySnippet(params.requiredDependencies, params.snippet);
+	return true;
 }

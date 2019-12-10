@@ -121,3 +121,11 @@ struct SymbolInformationEx
 		return ret;
 	}
 }
+
+struct AddDependencySnippetParams
+{
+	import workspaced.com.snippets : PlainSnippet;
+
+	string[] requiredDependencies;
+	PlainSnippet snippet;
+}
