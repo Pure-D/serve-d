@@ -4,6 +4,7 @@ import served.extension;
 import served.types;
 
 import workspaced.api;
+import workspaced.com.snippets : SnippetLevel;
 import workspaced.coms;
 
 import std.conv : to;
@@ -123,7 +124,7 @@ string formatCode(string code, string[] dfmtArgs)
 	return backend.get!DfmtComponent.format(code, dfmtArgs).getYield;
 }
 
-string formatSnippet(string code, string[] dfmtArgs)
+string formatSnippet(string code, string[] dfmtArgs, SnippetLevel level = SnippetLevel.global)
 {
-	return backend.get!SnippetsComponent.format(code, dfmtArgs).getYield;
+	return backend.get!SnippetsComponent.format(code, dfmtArgs, level).getYield;
 }

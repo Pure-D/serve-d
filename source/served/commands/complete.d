@@ -598,11 +598,13 @@ private void provideSnippetComplete(TextDocumentPositionParams params, Workspace
 {
 	auto snippets = instance.get!SnippetsComponent;
 	auto ret = snippets.getSnippetsYield(document.uri.uriToFile, document.rawText, byteOff);
-	trace("got ", ret.length, " snippets fitting in this context: ", ret.map!"a.shortcut");
+	trace("got ", ret.snippets.length, " snippets fitting in this context: ",
+			ret.snippets.map!"a.shortcut");
 	auto eol = document.eolAt(0);
-	foreach (Snippet snippet; ret)
+	foreach (Snippet snippet; ret.snippets)
 	{
 		auto item = snippet.snippetToCompletionItem;
+		item.data["level"] = JSONValue(ret.info.level.to!string);
 		item.data["format"] = toJSON(generateDfmtArgs(config, eol));
 		item.data["params"] = toJSON(params);
 		completion ~= item;
@@ -692,7 +694,10 @@ CompletionItem resolveCompletionItem(CompletionItem item)
 			auto args = (*format).fromJSON!(string[]);
 			if (item.insertTextFormat.get == InsertTextFormat.snippet)
 			{
-				item.insertText = formatSnippet(item.insertText.get, args).opt;
+				SnippetLevel level = SnippetLevel.global;
+				if (const levelStr = "level" in data.object)
+					level = levelStr.str.to!SnippetLevel;
+				item.insertText = formatSnippet(item.insertText.get, args, level).opt;
 			}
 			else
 			{
