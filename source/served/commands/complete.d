@@ -887,6 +887,15 @@ bool addDependencySnippet(AddDependencySnippetParams params)
 {
 	if (!backend.has!SnippetsComponent)
 		return false;
-	backend.get!SnippetsComponent.addDependencySnippet(params.requiredDependencies, params.snippet);
+	PlainSnippet snippet;
+	foreach (i, ref v; snippet.tupleof)
+	{
+		static assert(__traits(identifier, snippet.tupleof[i]) == __traits(identifier,
+				params.snippet.tupleof[i]),
+				"struct definition changed without updating SerializablePlainSnippet");
+		// convert enums
+		v = cast(typeof(v)) params.snippet.tupleof[i];
+	}
+	backend.get!SnippetsComponent.addDependencySnippet(params.requiredDependencies, snippet);
 	return true;
 }

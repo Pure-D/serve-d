@@ -124,8 +124,22 @@ struct SymbolInformationEx
 
 struct AddDependencySnippetParams
 {
-	import workspaced.com.snippets : PlainSnippet;
-
 	string[] requiredDependencies;
-	PlainSnippet snippet;
+	SerializablePlainSnippet snippet;
+}
+
+struct SerializablePlainSnippet
+{
+	/// Grammar scopes in which to complete this snippet. Maps to workspaced.com.snippets:SnippetLevel
+	int[] levels;
+	/// Shortcut to type for this snippet
+	string shortcut;
+	/// Label for this snippet.
+	string title;
+	/// Text with interactive snippet locations to insert assuming global indentation.
+	string snippet;
+	/// Markdown documentation for this snippet
+	string documentation;
+	/// Plain text to insert assuming global level indentation. Optional if snippet is a simple string only using plain variables and snippet locations.
+	string plain;
 }
