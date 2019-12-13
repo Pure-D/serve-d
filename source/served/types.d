@@ -30,6 +30,11 @@ struct protocolMethod
 	string method;
 }
 
+struct postProtocolMethod
+{
+	string method;
+}
+
 struct protocolNotification
 {
 	string method;

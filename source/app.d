@@ -21,6 +21,8 @@ import served.jsonrpc;
 import served.translate;
 import served.types;
 
+import painlessjson;
+
 static import served.extension;
 
 __gshared io.File stdin, stdout;
@@ -36,8 +38,6 @@ shared static this()
 		io.stderr.writeln("warning: no /dev/null implementation on this OS");
 	io.stdout = io.stderr;
 }
-
-import painlessjson;
 
 bool initialized = false;
 
@@ -78,11 +78,18 @@ ResponseMessage processRequest(RequestMessage msg)
 						{
 							trace("Calling " ~ name);
 							static if (params.length == 0)
-								res.result = symbol[0]().toJSON;
+								auto requestResult = symbol[0]();
 							else static if (params.length == 1)
-								res.result = symbol[0](fromJSON!(Parameters!symbol[0])(msg.params)).toJSON;
+								auto requestResult = symbol[0](fromJSON!(Parameters!symbol[0])(msg.params));
 							else
 								static assert(0, "Can't have more than one argument");
+
+							static if (is(typeof(requestResult) : JSONValue))
+								res.result = requestResult;
+							else
+								res.result = toJSON(requestResult);
+
+							processRequestObservers(msg, requestResult);
 							return res;
 						}
 						catch (MethodException e)
@@ -99,6 +106,44 @@ ResponseMessage processRequest(RequestMessage msg)
 	io.stderr.writeln(msg);
 	res.error = ResponseError(ErrorCode.methodNotFound);
 	return res;
+}
+
+void processRequestObservers(T)(RequestMessage msg, T result)
+{
+	foreach (name; served.extension.members)
+	{
+		static if (__traits(compiles, __traits(getMember, served.extension, name)))
+		{
+			alias symbol = Identity!(__traits(getMember, served.extension, name));
+			static if (symbol.length == 1 && hasUDA!(symbol, postProtocolMethod))
+			{
+				static if (isSomeFunction!symbol && __traits(getProtection, symbol[0]) == "public")
+				{
+					enum method = getUDAs!(symbol, protocolMethod)[0];
+					if (msg.method == method.method)
+					{
+						alias params = Parameters!symbol;
+						try
+						{
+							trace("Calling post " ~ name);
+							static if (params.length == 0)
+								symbol[0]();
+							else static if (params.length == 1)
+								symbol[0](fromJSON!(Parameters!symbol[0])(msg.params));
+							else static if (params.length == 2)
+								symbol[0](fromJSON!(Parameters!symbol[0])(msg.params), result);
+							else
+								static assert(0, "Can't have more than one argument");
+						}
+						catch (MethodException e)
+						{
+							error("Error in post-protocolMethod: ", e);
+						}
+					}
+				}
+			}
+		}
+	}
 }
 
 void processNotify(RequestMessage msg)
