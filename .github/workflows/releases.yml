@@ -71,7 +71,7 @@ jobs:
 
       # Windows release
       - name: Build Windows release
-        run: .\ci\build.bat && rdmd ci\validate_version.d
+        run: (.\ci\build.bat) -and (rdmd ci\validate_version.d)
         if: matrix.os == 'windows-latest'
         env:
           BUILD: release
