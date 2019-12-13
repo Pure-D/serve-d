@@ -222,6 +222,28 @@ void printVersion(io.File output = io.stdout)
 	output.writefln(BundledDependencies);
 }
 
+private string[] findDuplicates(string[] fields)
+{
+	string[] dups;
+	foreach (i, field; fields)
+	{
+		if (field == "object" || field == "served" || field == "std" || field == "io"
+				|| field == "workspaced" || field == "fs")
+			continue;
+
+		if (fields[0 .. i].canFind(field) || fields[i + 1 .. $].canFind(field))
+			dups ~= field;
+	}
+	return dups;
+}
+
+enum duplicates = findDuplicates([served.extension.members]);
+static if (duplicates.length > 0)
+{
+	pragma(msg, "duplicates: ", duplicates);
+	static assert(false, "Found duplicate method handlers of same name");
+}
+
 __gshared FiberManager fibers;
 int main(string[] args)
 {
