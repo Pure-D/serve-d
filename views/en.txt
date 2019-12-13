@@ -171,3 +171,4 @@ d.served.failDscanner: Could not start DScanner. (root={0}, path={1})
 d.served.tooManySubprojects: There are too many subprojects in this project according to d.manyProjectsThreshold\n\nDo you want to load {plural #1 {0} {an additonal project} {all additional {0} projects}}?
 d.served.tooManySubprojects.load: Load
 d.served.tooManySubprojects.skip: Skip
+d.served.moduleNameAutoUpdated: The current file module name has been updated.

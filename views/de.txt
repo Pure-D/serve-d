@@ -169,3 +169,4 @@ d.served.failDscanner: Konnte DScanner nicht starten. (Projekt={0}, Pfad={1})
 d.served.tooManySubprojects: Nach Einstellung d.manyProjectsThreshold sind zu viele Projekte in dieser Projektmappe.\n\n{plural #1 {0} {Soll 1 zusätzliches Projekt} {Sollen alle {0} zusätzlichen Projekte}} geladen werden?
 d.served.tooManySubprojects.load: Alle Laden
 d.served.tooManySubprojects.skip: Überspringen
+d.served.moduleNameAutoUpdated: Der Modulname der aktuellen Datei wurde aktualisiert.

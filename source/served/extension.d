@@ -338,8 +338,9 @@ InitializeResult initialize(InitializeParams params)
 	InitializeResult result;
 	result.capabilities.textDocumentSync = documents.syncKind;
 	// only provide fixes when doCompleteSnippets is requested
-	result.capabilities.completionProvider = CompletionOptions(doCompleteSnippets,
-			[".", "="]);
+	result.capabilities.completionProvider = CompletionOptions(doCompleteSnippets, [
+			".", "="
+			]);
 	result.capabilities.signatureHelpProvider = SignatureHelpOptions([
 			"(", "[", ","
 			]);
@@ -797,6 +798,7 @@ public import served.commands.dub;
 public import served.commands.format;
 public import served.commands.symbol_search;
 public import served.commands.file_search;
+public import served.workers.rename_listener;
 
 //dfmt off
 alias members = AliasSeq!(
@@ -810,54 +812,12 @@ alias members = AliasSeq!(
 	__traits(derivedMembers, served.commands.dub),
 	__traits(derivedMembers, served.commands.format),
 	__traits(derivedMembers, served.commands.symbol_search),
-	__traits(derivedMembers, served.commands.file_search)
+	__traits(derivedMembers, served.commands.file_search),
+	__traits(derivedMembers, served.workers.rename_listener),
 );
 //dfmt on
 
 // === Protocol Notifications starting here ===
-
-struct FileOpenInfo
-{
-	SysTime at;
-}
-
-__gshared FileOpenInfo[string] freshlyOpened;
-
-@protocolNotification("workspace/didChangeWatchedFiles")
-void onChangeFiles(DidChangeWatchedFilesParams params)
-{
-	foreach (change; params.changes)
-	{
-		string file = change.uri;
-		if (change.type == FileChangeType.created && file.endsWith(".d"))
-		{
-			auto document = documents[file];
-			auto isNew = file in freshlyOpened;
-			info(file);
-			if (isNew)
-			{
-				// Only edit if creation & opening is < 800msecs apart (vscode automatically opens on creation),
-				// we don't want to affect creation from/in other programs/editors.
-				if (Clock.currTime - isNew.at > 800.msecs)
-				{
-					freshlyOpened.remove(file);
-					continue;
-				}
-				string workspace = workspaceRootFor(file);
-				// Sending applyEdit so it is undoable
-				auto patches = backend.get!ModulemanComponent(workspace)
-					.normalizeModules(file.uriToFile, document.rawText);
-				if (patches.length)
-				{
-					WorkspaceEdit edit;
-					edit.changes[file] = patches.map!(a => TextEdit(TextRange(document.bytesToPosition(a.range[0]),
-							document.bytesToPosition(a.range[1])), a.content)).array;
-					rpc.sendMethod("workspace/applyEdit", ApplyWorkspaceEditParams(edit));
-				}
-			}
-		}
-	}
-}
 
 @protocolNotification("workspace/didChangeWorkspaceFolders")
 void didChangeWorkspaceFolders(DidChangeWorkspaceFoldersParams params)
@@ -875,8 +835,6 @@ void didChangeWorkspaceFolders(DidChangeWorkspaceFoldersParams params)
 @protocolNotification("textDocument/didOpen")
 void onDidOpenDocument(DidOpenTextDocumentParams params)
 {
-	freshlyOpened[params.textDocument.uri] = FileOpenInfo(Clock.currTime);
-
 	string lintSetting = config(params.textDocument.uri).d.lintOnFileOpen;
 	bool shouldLint;
 	if (lintSetting == "always")
@@ -913,7 +871,7 @@ void onDidChangeDocument(DocumentLinkParams params)
 	doDscanner(params);
 }
 
-@protocolNotification("coded/doDscanner") // deprecated alias
+@protocolNotification("coded/doDscanner")  // deprecated alias
 @protocolNotification("served/doDscanner")
 void doDscanner(DocumentLinkParams params)
 {
