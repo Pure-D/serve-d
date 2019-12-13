@@ -151,7 +151,7 @@ void onFullyCreateDubJson(DocumentUri uri)
 		string packageName = determineDubPackageName(uri.uriToFile.dirName);
 		WorkspaceEdit edit;
 		edit.changes[uri] = [
-			TextEdit(TextRange(0, 0, 0, 0), "{\n\t\"name\": \"" ~ packageName ~ "\"\n}\n")
+			TextEdit(TextRange(0, 0, 0, 0), "{\n\t\"name\": \"" ~ packageName ~ "\"\n}")
 		];
 		rpc.sendMethod("workspace/applyEdit", ApplyWorkspaceEditParams(edit));
 	}
