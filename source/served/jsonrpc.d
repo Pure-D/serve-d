@@ -40,13 +40,16 @@ class RPCProcessor : Fiber
 		auto msg = JSONValue(["jsonrpc": JSONValue("2.0")]);
 		if (res.id.hasData)
 			msg["id"] = res.id.toJSON;
-		if (res.result.type != JSONType.null_)
-			msg["result"] = res.result;
+
+		if (!res.result.isNull)
+			msg["result"] = res.result.get;
+
 		if (!res.error.isNull)
 		{
 			msg["error"] = res.error.toJSON;
 			stderr.writeln(msg["error"]);
 		}
+
 		send(msg);
 	}
 

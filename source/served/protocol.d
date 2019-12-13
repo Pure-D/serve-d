@@ -335,7 +335,7 @@ struct ResponseMessage
 	}
 
 	RequestToken id;
-	JSONValue result;
+	Optional!JSONValue result;
 	Optional!ResponseError error;
 }
 
