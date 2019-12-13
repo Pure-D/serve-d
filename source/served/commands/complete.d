@@ -868,6 +868,7 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 
 // === Protocol Notifications starting here ===
 
+/// Restarts all DCD servers started by this serve-d instance. Returns `true` once done.
 @protocolMethod("served/restartServer")
 bool restartServer()
 {
@@ -879,6 +880,7 @@ bool restartServer()
 	return true;
 }
 
+/// Kills all DCD servers started by this serve-d instance.
 @protocolNotification("served/killServer")
 void killServer()
 {
@@ -887,6 +889,9 @@ void killServer()
 			instance.get!DCDComponent.killServer();
 }
 
+/// Registers a snippet across the whole serve-d application which may be limited to given grammatical scopes.
+/// Requires `--provide context-snippets`
+/// Returns: `false` if SnippetsComponent hasn't been loaded yet, otherwise `true`.
 @protocolMethod("served/addDependencySnippet")
 bool addDependencySnippet(AddDependencySnippetParams params)
 {

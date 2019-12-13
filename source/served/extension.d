@@ -913,7 +913,8 @@ void onDidChangeDocument(DocumentLinkParams params)
 	doDscanner(params);
 }
 
-@protocolNotification("coded/doDscanner")
+@protocolNotification("coded/doDscanner") // deprecated alias
+@protocolNotification("served/doDscanner")
 void doDscanner(DocumentLinkParams params)
 {
 	auto document = documents[params.textDocument.uri];

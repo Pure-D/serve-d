@@ -233,6 +233,7 @@ int main(string[] args)
 
 	foreach (provide; provides)
 	{
+		// don't forget to update README.md if adding stuff!
 		switch (provide)
 		{
 		case "http":

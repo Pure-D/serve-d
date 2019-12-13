@@ -178,6 +178,7 @@ Command[] provideCodeActions(CodeActionParams params)
 	return ret;
 }
 
+/// Command to sort all user imports in a block at a given position in given code. Returns a list of changes to apply. (Replaces the whole block currently if anything changed, otherwise empty)
 @protocolMethod("served/sortImports")
 TextEdit[] sortImports(SortImportsParams params)
 {
@@ -201,6 +202,7 @@ TextEdit[] sortImports(SortImportsParams params)
 /// Flag to make dcdext.implementAll return snippets
 __gshared bool implementInterfaceSnippets;
 
+/// Implements the interfaces or abstract classes of a specified class/interface. The given position must be on/inside the identifier of any subclass after the colon (`:`) in a class definition.
 @protocolMethod("served/implementMethods")
 TextEdit[] implementMethods(ImplementMethodsParams params)
 {
@@ -215,8 +217,6 @@ TextEdit[] implementMethods(ImplementMethodsParams params)
 
 	if (gFormattingOptionsApplyOn != params.textDocument.uri)
 		tryFindFormattingSettings(config, document);
-
-	string indent = gFormattingOptions.indentString;
 
 	auto eol = document.eolAt(0);
 	auto eolStr = eol.toString;

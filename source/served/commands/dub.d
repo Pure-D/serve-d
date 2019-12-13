@@ -37,7 +37,7 @@ bool switchConfig(string value)
 }
 
 @protocolMethod("served/getConfig")
-string getConfig(string value)
+string getConfig()
 {
 	if (!activeInstance || !activeInstance.has!DubComponent)
 		return null;
@@ -63,7 +63,7 @@ bool switchArchType(string value)
 }
 
 @protocolMethod("served/getArchType")
-string getArchType(string value)
+string getArchType()
 {
 	if (!activeInstance || !activeInstance.has!DubComponent)
 		return null;

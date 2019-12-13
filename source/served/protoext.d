@@ -7,69 +7,103 @@ import std.json;
 
 struct AddImportParams
 {
+	/// Text document to look in
 	TextDocumentIdentifier textDocument;
+	/// The name of the import to add
 	string name;
+	/// Location of cursor as standard offset
 	int location;
+	/// if `false`, the import will get added to the innermost block
 	bool insertOutermost = true;
 }
 
 struct SortImportsParams
 {
+	/// Text document to look in
 	TextDocumentIdentifier textDocument;
+	/// Location of cursor as standard offset
 	int location;
 }
 
 struct ImplementMethodsParams
 {
+	/// Text document to look in
 	TextDocumentIdentifier textDocument;
+	/// Location of cursor as standard offset
 	int location;
 }
 
 struct UpdateSettingParams
 {
+	/// The configuration section to update in (e.g. "d" or "dfmt")
 	string section;
+	/// The value to set the configuration value to
 	JSONValue value;
+	/// `true` if this is a configuration change across all instances and not just the active one
 	bool global;
 }
 
+/// Represents a dependency of a dub project
 struct DubDependency
 {
+	/// The name of this package
 	string name;
+	/// The installed version of this dependency or null if it isn't downloaded/installed yet
 	@SerializedName("version")
 	string version_;
+	/// Path to the directory in which the package resides or null if it's not stored in the local file system.
 	string path;
+	/** Description as given in dub package file */
 	string description;
+	/// Homepage as given in dub package file
 	string homepage;
+	/// Authors as given in dub package file
 	const(string)[] authors;
+	/// Copyright as given in dub package file
 	string copyright;
+	/// License as given in dub package file
 	string license;
+	/// List of the names of subPackages as defined in the package 
 	const(string)[] subPackages;
+	/// `true` if this dependency has other dependencies
 	bool hasDependencies;
+	/// `true` if no package name was given and thus this dependency is a root dependency of the active project.
 	bool root;
 }
 
+/// Parameters for a dub recipe conversion call
 struct DubConvertRequest
 {
+	/// Text document to look in
 	TextDocumentIdentifier textDocument;
+	/// The format to convert the dub recipe to. (json, sdl)
 	string newFormat;
 }
 
+///
 struct InstallRequest
 {
+	/// Name of the dub dependency
 	string name;
+	/// Version to install in the dub recipe file
 	@SerializedName("version")
 	string version_;
 }
 
+///
 struct UpdateRequest
 {
+	/// Name of the dub dependency
 	string name;
+	/// Version to install in the dub recipe file
 	@SerializedName("version")
 	string version_;
 }
 
+///
 struct UninstallRequest
 {
+	/// Name of the dub dependency
 	string name;
 }
 
