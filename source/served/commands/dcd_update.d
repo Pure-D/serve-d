@@ -1,8 +1,8 @@
 module served.commands.dcd_update;
 
 import served.extension;
-import served.git_build;
-import served.http_wrap;
+import served.io.git_build;
+import served.io.http_wrap;
 import served.types;
 
 import workspaced.api;

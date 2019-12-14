@@ -1,4 +1,4 @@
-module served.jsonrpc;
+module served.lsp.jsonrpc;
 
 import core.exception;
 import core.thread;
@@ -13,8 +13,8 @@ import std.stdio;
 import std.string;
 import std.typecons;
 
-import served.filereader;
-import served.protocol;
+import served.lsp.filereader;
+import served.lsp.protocol;
 
 import tinyevent;
 

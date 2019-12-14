@@ -1,4 +1,4 @@
-module served.memory;
+module served.io.memory;
 
 /// Calls `destro!false` on the value or just `destroy` if not supported.
 /// Makes the value undefined/unset after calling so it shouldn't be used anymore.

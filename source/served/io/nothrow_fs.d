@@ -1,4 +1,4 @@
-module served.nothrow_fs;
+module served.io.nothrow_fs;
 
 public import fs = std.file;
 

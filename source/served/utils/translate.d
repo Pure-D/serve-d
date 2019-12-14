@@ -1,4 +1,4 @@
-module served.translate;
+module served.utils.translate;
 
 import std.algorithm;
 import std.ascii;

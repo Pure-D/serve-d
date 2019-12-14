@@ -1,10 +1,10 @@
-module served.diet;
+module served.utils.diet;
 
 import dietc.complete;
 import dietc.lexer;
 import dietc.parser;
 
-import vscode = served.protocol;
+import vscode = served.lsp.protocol;
 
 import ext = served.extension;
 import served.types : documents;

@@ -1,4 +1,4 @@
-module served.filereader;
+module served.lsp.filereader;
 
 import core.thread;
 import core.sync.mutex;

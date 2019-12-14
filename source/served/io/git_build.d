@@ -1,4 +1,4 @@
-module served.git_build;
+module served.io.git_build;
 
 import served.types;
 

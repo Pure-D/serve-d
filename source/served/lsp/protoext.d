@@ -1,6 +1,6 @@
-module served.protoext;
+module served.lsp.protoext;
 
-import served.protocol;
+import served.lsp.protocol;
 
 import painlessjson;
 import std.json;

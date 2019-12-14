@@ -1,4 +1,4 @@
-module served.textdocumentmanager;
+module served.lsp.textdocumentmanager;
 
 import std.algorithm;
 import std.experimental.logger;
@@ -6,8 +6,8 @@ import std.json;
 import std.string;
 import std.utf : codeLength, decode, UseReplacementDchar;
 
-import served.jsonrpc;
-import served.protocol;
+import served.lsp.jsonrpc;
+import served.lsp.protocol;
 
 import painlessjson;
 

@@ -1,10 +1,10 @@
 module served.commands.complete;
 
 import served.commands.format : formatCode, formatSnippet;
-import served.ddoc;
 import served.extension;
-import served.fibermanager;
 import served.types;
+import served.utils.ddoc;
+import served.utils.fibermanager;
 
 import workspaced.api;
 import workspaced.com.dfmt : DfmtComponent;
@@ -406,7 +406,7 @@ CompletionList provideDMLSourceComplete(TextDocumentPositionParams params,
 CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 		WorkspaceD.Instance instance, ref Document document)
 {
-	import served.diet;
+	import served.utils.diet;
 	import dc = dietc.complete;
 
 	auto completion = updateDietFile(document.uri.uriToFile, document.rawText.idup);

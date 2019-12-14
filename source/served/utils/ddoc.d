@@ -1,6 +1,6 @@
-module served.ddoc;
+module served.utils.ddoc;
 
-import served.protocol;
+import served.lsp.protocol;
 
 import ddoc;
 import std.format;

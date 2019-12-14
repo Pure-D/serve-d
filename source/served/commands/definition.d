@@ -1,8 +1,8 @@
 module served.commands.definition;
 
-import served.ddoc;
 import served.extension;
 import served.types;
+import served.utils.ddoc;
 
 import workspaced.api;
 import workspaced.com.dcd;

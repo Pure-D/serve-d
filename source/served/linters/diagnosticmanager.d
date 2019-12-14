@@ -3,7 +3,7 @@ module served.linters.diagnosticmanager;
 import std.array : array;
 import std.algorithm : map, sort;
 
-import served.memory;
+import served.io.memory;
 import served.types;
 
 import painlessjson;

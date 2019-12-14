@@ -1,11 +1,11 @@
 module served.extension;
 
-import served.fibermanager;
-import served.nothrow_fs;
-import served.translate;
+import served.io.nothrow_fs;
 import served.types;
+import served.utils.fibermanager;
+import served.utils.translate;
 
-public import served.async;
+public import served.utils.async;
 
 import core.time : msecs, seconds;
 

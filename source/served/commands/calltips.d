@@ -1,8 +1,8 @@
 module served.commands.calltips;
 
-import served.ddoc;
 import served.extension;
 import served.types;
+import served.utils.ddoc;
 
 import workspaced.api;
 import workspaced.com.dcd;
@@ -155,7 +155,7 @@ SignatureHelp provideDSignatureHelp(TextDocumentPositionParams params,
 SignatureHelp provideDietSignatureHelp(TextDocumentPositionParams params,
 		string file, ref Document document)
 {
-	import served.diet;
+	import served.utils.diet;
 	import dc = dietc.complete;
 
 	auto completion = updateDietFile(file, document.rawText.idup);

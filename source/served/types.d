@@ -1,8 +1,8 @@
 module served.types;
 
-public import served.protocol;
-public import served.protoext;
-public import served.textdocumentmanager;
+public import served.lsp.protocol;
+public import served.lsp.protoext;
+public import served.lsp.textdocumentmanager;
 
 import std.algorithm;
 import std.array;
@@ -23,7 +23,7 @@ import io = std.stdio;
 
 import workspaced.api;
 
-import served.jsonrpc;
+import served.lsp.jsonrpc;
 
 struct protocolMethod
 {

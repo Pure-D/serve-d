@@ -1,9 +1,9 @@
-module served.async;
+module served.utils.async;
 
 import core.sync.mutex : Mutex;
 import core.time : Duration;
 
-import served.fibermanager;
+import served.utils.fibermanager;
 
 import std.datetime.stopwatch : msecs, StopWatch;
 import std.experimental.logger;

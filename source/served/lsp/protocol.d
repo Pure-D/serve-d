@@ -1,4 +1,4 @@
-module served.protocol;
+module served.lsp.protocol;
 
 import std.conv;
 import std.json;

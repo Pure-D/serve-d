@@ -14,12 +14,12 @@ import std.path;
 import std.string;
 import std.traits;
 
-import served.fibermanager;
-import served.filereader;
-import served.http_wrap;
-import served.jsonrpc;
-import served.translate;
+import served.io.http_wrap;
+import served.lsp.filereader;
+import served.lsp.jsonrpc;
 import served.types;
+import served.utils.fibermanager;
+import served.utils.translate;
 
 import painlessjson;
 

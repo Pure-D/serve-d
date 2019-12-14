@@ -1,8 +1,8 @@
 module served.commands.code_actions;
 
 import served.extension;
-import served.fibermanager;
 import served.types;
+import served.utils.fibermanager;
 
 import workspaced.api;
 import workspaced.com.dcdext;

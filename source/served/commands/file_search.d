@@ -1,7 +1,7 @@
 module served.commands.file_search;
 
 import served.extension;
-import served.filereader;
+import served.lsp.filereader;
 import served.types;
 
 import workspaced.api;

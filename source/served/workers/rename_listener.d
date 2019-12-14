@@ -8,8 +8,8 @@ import std.path;
 import std.string;
 
 import served.extension;
-import served.translate;
 import served.types;
+import served.utils.translate;
 
 import workspaced.com.moduleman : ModulemanComponent;
 

@@ -1,4 +1,4 @@
-module served.http_wrap;
+module served.io.http_wrap;
 
 import served.http;
 import served.types;

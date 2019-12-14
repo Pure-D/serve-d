@@ -1,4 +1,4 @@
-module served.fibermanager;
+module served.utils.fibermanager;
 
 // debug = Fibers;
 
@@ -8,7 +8,7 @@ import std.algorithm;
 import std.experimental.logger;
 import std.range;
 
-import served.memory;
+import served.io.memory;
 
 import workspaced.api : Future;
 

@@ -1,8 +1,8 @@
 module served.commands.dub;
 
 import served.extension;
-import served.translate;
 import served.types;
+import served.utils.translate;
 
 import workspaced.api;
 import workspaced.coms;
