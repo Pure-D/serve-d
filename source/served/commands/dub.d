@@ -158,18 +158,40 @@ void onDidSaveDubRecipe(DidSaveTextDocumentParams params)
 		if (!backend.has!DubComponent(workspaceRoot))
 		{
 			Exception err;
-			bool success = backend.attach(backend.getInstance(workspaceRoot), "dub", err);
+			const success = backend.attach(backend.getInstance(workspaceRoot), "dub", err);
 			if (!success)
 			{
-				rpc.window.showMessage(MessageType.warning, translate!"d.ext.dubUpgradeFail");
+				rpc.window.showMessage(MessageType.error, translate!"d.ext.dubUpgradeFail");
 				error(err);
+				reportProgress(ProgressType.importUpgrades, 10, 10, workspaceUri);
+				return;
 			}
 		}
 		else
 		{
 			if (backend.get!DubComponent(workspaceRoot).isRunning)
+			{
+				string syntaxCheck = backend.get!DubComponent(workspaceRoot)
+					.validateRecipeSyntaxOnFileSystem();
+
+				if (syntaxCheck.length)
+				{
+					rpc.window.showMessage(MessageType.error,
+							translate!"d.ext.dubInvalidRecipeSyntax"(syntaxCheck));
+					error(syntaxCheck);
+					reportProgress(ProgressType.importUpgrades, 10, 10, workspaceUri);
+					return;
+				}
+
 				rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
 						.upgrade(), MessageType.warning, translate!"d.ext.dubUpgradeFail");
+			}
+			else
+			{
+				rpc.window.showMessage(MessageType.error, translate!"d.ext.dubUpgradeFail");
+				reportProgress(ProgressType.importUpgrades, 10, 10, workspaceUri);
+				return;
+			}
 		}
 		reportProgress(ProgressType.importUpgrades, 6, 10, workspaceUri);
 

@@ -89,7 +89,6 @@ d.ext.config.invalid.configuration: Configuration '{0}' which is specified in th
 d.ext.config.invalid.archType: Arch Type '{0}' which is specified in the config is not available!
 d.ext.config.invalid.buildType: Build Type '{0}' which is specified in the config is not available!
 d.ext.config.invalid.compiler: Compiler '{0}' which is specified in the config is not available!
-d.ext.dubFail: Could not initialize dub for {0}. Falling back to limited functionality!
 d.ext.fsworkspaceFail: Could not initialize fsworkspace for {0}. See console for details!
 d.ext.dcdFail: Could not initialize DCD for {0}.{1}
 d.ext.gcLens: {0} bytes allocated / {1} allocations
@@ -101,6 +100,8 @@ d.ext.exeIsDir: {0} points to a directory
 d.ext.exeENOENT: {0} is not installed or couldn't be found
 d.ext.compileProgram: Compile {0}
 d.ext.downloadProgram: Download {0}
+d.ext.dubFail: Could not initialize dub for {0}. Falling back to limited functionality!
+d.ext.dubInvalidRecipeSyntax: There is an issue in your dub.json/dub.sdl package recipe syntax. {0}
 d.ext.dubRecipeMaybeBroken: Dub could not be started. Your dub.json/dub.sdl package recipe might be faulty! Fix it and save the file again.
 d.ext.dubUpgradeFail: Could not upgrade dub project
 d.ext.dubImportFail: Could not update import paths. Please check your build settings in the status bar.
