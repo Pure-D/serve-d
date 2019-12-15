@@ -29,11 +29,14 @@ enum ProgressType
 	/// sent for every auto completion server starting up. Sent after all workspaceStartups for a workspace.
 	/// sent with root.uri argument
 	@withProgress completionStartup,
-	/// sent when the import paths and possibly also dub are being reloaded
+	/// sent when dub is being reloaded
+	/// sent with instance.uri argument
+	@withProgress dubReload,
+	/// sent when the import paths are being indexed
 	/// sent with instance.uri argument
 	@withProgress importReload,
-	/// sent when dub is being upgraded and imports reloading
-	/// sent with instance.uri argument (progress 0 = upgrade, 6 = update)
+	/// sent when dub is being upgraded before imports are being reloading
+	/// sent with instance.uri argument
 	@withProgress importUpgrades,
 }
 

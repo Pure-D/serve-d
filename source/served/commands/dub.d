@@ -129,7 +129,7 @@ bool updateImports(UpdateImportsParams params)
 	auto instance = activeInstance;
 	bool success;
 
-	reportProgress(params.reportProgress, ProgressType.importReload, 0, 5, instance.cwd.uriFromFile);
+	reportProgress(params.reportProgress, ProgressType.dubReload, 0, 5, instance.cwd.uriFromFile);
 
 	if (instance.has!DubComponent)
 	{
@@ -440,14 +440,10 @@ void installDependency(InstallRequest req)
 	reportProgress(ProgressType.importUpgrades, 0, 10, uri);
 	injectDependency(instance, req);
 	if (instance.has!DubComponent)
-	{
 		instance.get!DubComponent.upgrade();
-		reportProgress(ProgressType.importUpgrades, 6, 10, uri);
-		instance.get!DubComponent.updateImportPaths(true);
-	}
-	reportProgress(ProgressType.importUpgrades, 8, 10, uri);
+	reportProgress(ProgressType.dubReload, 7, 10, uri);
 	updateImports(UpdateImportsParams(false));
-	reportProgress(ProgressType.importUpgrades, 10, 10, uri);
+	reportProgress(ProgressType.dubReload, 10, 10, uri);
 }
 
 @protocolNotification("served/updateDependency")
@@ -459,15 +455,11 @@ void updateDependency(UpdateRequest req)
 	if (changeDependency(instance, req))
 	{
 		if (instance.has!DubComponent)
-		{
 			instance.get!DubComponent.upgrade();
-			reportProgress(ProgressType.importUpgrades, 6, 10, uri);
-			instance.get!DubComponent.updateImportPaths(true);
-		}
-		reportProgress(ProgressType.importUpgrades, 8, 10, uri);
+		reportProgress(ProgressType.dubReload, 7, 10, uri);
 		updateImports(UpdateImportsParams(false));
 	}
-	reportProgress(ProgressType.importUpgrades, 10, 10, uri);
+	reportProgress(ProgressType.dubReload, 10, 10, uri);
 }
 
 @protocolNotification("served/uninstallDependency")
@@ -479,14 +471,10 @@ void uninstallDependency(UninstallRequest req)
 	// TODO: add workspace argument
 	removeDependency(instance, req.name);
 	if (instance.has!DubComponent)
-	{
 		instance.get!DubComponent.upgrade();
-		reportProgress(ProgressType.importUpgrades, 6, 10, uri);
-		instance.get!DubComponent.updateImportPaths(true);
-	}
-	reportProgress(ProgressType.importUpgrades, 8, 10, uri);
+	reportProgress(ProgressType.dubReload, 7, 10, uri);
 	updateImports(UpdateImportsParams(false));
-	reportProgress(ProgressType.importUpgrades, 10, 10, uri);
+	reportProgress(ProgressType.dubReload, 10, 10, uri);
 }
 
 void injectDependency(WorkspaceD.Instance instance, InstallRequest req)
