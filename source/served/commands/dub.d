@@ -9,6 +9,8 @@ import workspaced.coms;
 
 import painlessjson : toJSON;
 
+import core.time;
+
 import std.algorithm : among, canFind, count, endsWith, map, remove, startsWith;
 import std.array : array;
 import std.experimental.logger;
@@ -134,6 +136,72 @@ bool updateImports()
 	if (instance.has!DCDComponent)
 		instance.get!DCDComponent.refreshImports();
 	return success;
+}
+
+@protocolNotification("textDocument/didSave")
+void onDidSaveDubRecipe(DidSaveTextDocumentParams params)
+{
+	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
+	auto config = workspace(params.textDocument.uri).config;
+	auto document = documents[params.textDocument.uri];
+	auto fileName = params.textDocument.uri.uriToFile.baseName;
+
+	if (fileName == "dub.json" || fileName == "dub.sdl")
+	{
+		info("Updating dependencies");
+		if (!backend.has!DubComponent(workspaceRoot))
+		{
+			Exception err;
+			bool success = backend.attach(backend.getInstance(workspaceRoot), "dub", err);
+			if (!success)
+			{
+				rpc.window.showMessage(MessageType.warning, translate!"d.ext.dubUpgradeFail");
+				error(err);
+			}
+		}
+		else
+		{
+			if (backend.get!DubComponent(workspaceRoot).isRunning)
+				rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
+						.upgrade(), MessageType.warning, translate!"d.ext.dubUpgradeFail");
+		}
+
+		setTimeout({
+			const successfulUpdate = rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
+				.updateImportPaths(true), MessageType.warning, translate!"d.ext.dubImportFail");
+			if (successfulUpdate)
+			{
+				rpc.window.runOrMessage(updateImports(), MessageType.warning,
+					translate!"d.ext.dubImportFail");
+			}
+			else
+			{
+				try
+				{
+					updateImports();
+				}
+				catch (Exception e)
+				{
+					errorf("Failed updating imports: %s", e);
+				}
+			}
+		}, 500.msecs);
+
+		setTimeout({
+			if (!backend.get!DubComponent(workspaceRoot).isRunning)
+			{
+				Exception err;
+				if (backend.attach(backend.getInstance(workspaceRoot), "dub", err))
+				{
+					rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
+						.updateImportPaths(true), MessageType.warning,
+						translate!"d.ext.dubRecipeMaybeBroken");
+					error(err);
+				}
+			}
+		}, 1.seconds);
+		rpc.notifyMethod("coded/updateDubTree");
+	}
 }
 
 @protocolMethod("served/listDependencies")

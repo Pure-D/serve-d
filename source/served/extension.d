@@ -895,8 +895,6 @@ void doDscanner(DocumentLinkParams params)
 @protocolNotification("textDocument/didSave")
 void onDidSaveDocument(DidSaveTextDocumentParams params)
 {
-	import dub = served.commands.dub;
-
 	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	auto config = workspace(params.textDocument.uri).config;
 	auto document = documents[params.textDocument.uri];
@@ -924,62 +922,6 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 				lint(document);
 			}
 		});
-	}
-	else if (fileName == "dub.json" || fileName == "dub.sdl")
-	{
-		info("Updating dependencies");
-		if (!backend.has!DubComponent(workspaceRoot))
-		{
-			Exception err;
-			bool success = backend.attach(backend.getInstance(workspaceRoot), "dub", err);
-			if (!success)
-			{
-				rpc.window.showMessage(MessageType.warning, translate!"d.ext.dubUpgradeFail");
-				error(err);
-			}
-		}
-		else
-		{
-			if (backend.get!DubComponent(workspaceRoot).isRunning)
-				rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
-						.upgrade(), MessageType.warning, translate!"d.ext.dubUpgradeFail");
-		}
-
-		setTimeout({
-			const successfulUpdate = rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
-				.updateImportPaths(true), MessageType.warning, translate!"d.ext.dubImportFail");
-			if (successfulUpdate)
-			{
-				rpc.window.runOrMessage(dub.updateImports(), MessageType.warning,
-					translate!"d.ext.dubImportFail");
-			}
-			else
-			{
-				try
-				{
-					dub.updateImports();
-				}
-				catch (Exception e)
-				{
-					errorf("Failed updating imports: %s", e);
-				}
-			}
-		}, 500.msecs);
-
-		setTimeout({
-			if (!backend.get!DubComponent(workspaceRoot).isRunning)
-			{
-				Exception err;
-				if (backend.attach(backend.getInstance(workspaceRoot), "dub", err))
-				{
-					rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
-						.updateImportPaths(true), MessageType.warning,
-						translate!"d.ext.dubRecipeMaybeBroken");
-					error(err);
-				}
-			}
-		}, 1.seconds);
-		rpc.notifyMethod("coded/updateDubTree");
 	}
 }
 
