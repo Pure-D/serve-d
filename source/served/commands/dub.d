@@ -2,6 +2,7 @@ module served.commands.dub;
 
 import served.extension;
 import served.types;
+import served.utils.progress;
 import served.utils.translate;
 
 import workspaced.api;
@@ -123,32 +124,37 @@ auto addImport(AddImportParams params)
 }
 
 @protocolMethod("served/updateImports")
-bool updateImports()
+bool updateImports(UpdateImportsParams params)
 {
 	auto instance = activeInstance;
 	bool success;
+
+	reportProgress(params.reportProgress, ProgressType.importReload, 0, 5, instance.cwd.uriFromFile);
+
 	if (instance.has!DubComponent)
 	{
 		success = instance.get!DubComponent.update.getYield;
 		if (success)
 			rpc.notifyMethod("coded/updateDubTree");
 	}
+	reportProgress(params.reportProgress, ProgressType.importReload, 4, 5, instance.cwd.uriFromFile);
 	if (instance.has!DCDComponent)
 		instance.get!DCDComponent.refreshImports();
+	reportProgress(params.reportProgress, ProgressType.importReload, 5, 5, instance.cwd.uriFromFile);
 	return success;
 }
 
 @protocolNotification("textDocument/didSave")
 void onDidSaveDubRecipe(DidSaveTextDocumentParams params)
 {
-	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
-	auto config = workspace(params.textDocument.uri).config;
-	auto document = documents[params.textDocument.uri];
+	auto workspaceUri = workspace(params.textDocument.uri).folder.uri;
+	auto workspaceRoot = workspaceUri.uriToFile;
 	auto fileName = params.textDocument.uri.uriToFile.baseName;
 
 	if (fileName == "dub.json" || fileName == "dub.sdl")
 	{
 		info("Updating dependencies");
+		reportProgress(ProgressType.importUpgrades, 0, 10, workspaceUri);
 		if (!backend.has!DubComponent(workspaceRoot))
 		{
 			Exception err;
@@ -165,27 +171,29 @@ void onDidSaveDubRecipe(DidSaveTextDocumentParams params)
 				rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
 						.upgrade(), MessageType.warning, translate!"d.ext.dubUpgradeFail");
 		}
+		reportProgress(ProgressType.importUpgrades, 6, 10, workspaceUri);
 
 		setTimeout({
 			const successfulUpdate = rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
 				.updateImportPaths(true), MessageType.warning, translate!"d.ext.dubImportFail");
 			if (successfulUpdate)
 			{
-				rpc.window.runOrMessage(updateImports(), MessageType.warning,
-					translate!"d.ext.dubImportFail");
+				rpc.window.runOrMessage(updateImports(UpdateImportsParams(false)),
+					MessageType.warning, translate!"d.ext.dubImportFail");
 			}
 			else
 			{
 				try
 				{
-					updateImports();
+					updateImports(UpdateImportsParams(false));
 				}
 				catch (Exception e)
 				{
 					errorf("Failed updating imports: %s", e);
 				}
 			}
-		}, 500.msecs);
+			reportProgress(ProgressType.importUpgrades, 10, 10, workspaceUri);
+		}, 200.msecs);
 
 		setTimeout({
 			if (!backend.get!DubComponent(workspaceRoot).isRunning)
@@ -199,7 +207,7 @@ void onDidSaveDubRecipe(DidSaveTextDocumentParams params)
 					error(err);
 				}
 			}
-		}, 1.seconds);
+		}, 500.msecs);
 		rpc.notifyMethod("coded/updateDubTree");
 	}
 }
@@ -428,42 +436,57 @@ void convertDubFormat(DubConvertRequest req)
 void installDependency(InstallRequest req)
 {
 	auto instance = activeInstance;
+	auto uri = instance.cwd.uriFromFile;
+	reportProgress(ProgressType.importUpgrades, 0, 10, uri);
 	injectDependency(instance, req);
 	if (instance.has!DubComponent)
 	{
 		instance.get!DubComponent.upgrade();
+		reportProgress(ProgressType.importUpgrades, 6, 10, uri);
 		instance.get!DubComponent.updateImportPaths(true);
 	}
-	updateImports();
+	reportProgress(ProgressType.importUpgrades, 8, 10, uri);
+	updateImports(UpdateImportsParams(false));
+	reportProgress(ProgressType.importUpgrades, 10, 10, uri);
 }
 
 @protocolNotification("served/updateDependency")
 void updateDependency(UpdateRequest req)
 {
 	auto instance = activeInstance;
+	auto uri = instance.cwd.uriFromFile;
+	reportProgress(ProgressType.importUpgrades, 0, 10, uri);
 	if (changeDependency(instance, req))
 	{
 		if (instance.has!DubComponent)
 		{
 			instance.get!DubComponent.upgrade();
+			reportProgress(ProgressType.importUpgrades, 6, 10, uri);
 			instance.get!DubComponent.updateImportPaths(true);
 		}
-		updateImports();
+		reportProgress(ProgressType.importUpgrades, 8, 10, uri);
+		updateImports(UpdateImportsParams(false));
 	}
+	reportProgress(ProgressType.importUpgrades, 10, 10, uri);
 }
 
 @protocolNotification("served/uninstallDependency")
 void uninstallDependency(UninstallRequest req)
 {
 	auto instance = activeInstance;
+	auto uri = instance.cwd.uriFromFile;
+	reportProgress(ProgressType.importUpgrades, 0, 10, uri);
 	// TODO: add workspace argument
 	removeDependency(instance, req.name);
 	if (instance.has!DubComponent)
 	{
 		instance.get!DubComponent.upgrade();
+		reportProgress(ProgressType.importUpgrades, 6, 10, uri);
 		instance.get!DubComponent.updateImportPaths(true);
 	}
-	updateImports();
+	reportProgress(ProgressType.importUpgrades, 8, 10, uri);
+	updateImports(UpdateImportsParams(false));
+	reportProgress(ProgressType.importUpgrades, 10, 10, uri);
 }
 
 void injectDependency(WorkspaceD.Instance instance, InstallRequest req)

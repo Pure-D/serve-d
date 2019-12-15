@@ -46,11 +46,11 @@ TextDocumentManager documents;
 
 string[] compare(string prefix, T)(ref T a, ref T b)
 {
-	string[] changed;
+	auto changed = appender!(string[]);
 	foreach (member; __traits(allMembers, T))
 		if (__traits(getMember, a, member) != __traits(getMember, b, member))
-			changed ~= prefix ~ member;
-	return changed;
+			changed ~= (prefix ~ member);
+	return changed.data;
 }
 
 alias configurationTypes = AliasSeq!(Configuration.D, Configuration.DFmt,
@@ -264,6 +264,17 @@ struct Configuration
 		auto ret = compare!"git."(git, newGit);
 		git = newGit;
 		return ret;
+	}
+
+	string[] replaceAllSections(JSONValue[] settings)
+	{
+		import painlessjson : fromJSON;
+
+		assert(settings.length >= configurationSections.length);
+		auto changed = appender!(string[]);
+		static foreach (n, section; configurationSections)
+			changed ~= this.replaceSection!section(settings[n].fromJSON!(configurationTypes[n]));
+		return changed.data;
 	}
 }
 

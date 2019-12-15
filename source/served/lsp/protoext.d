@@ -177,3 +177,10 @@ struct SerializablePlainSnippet
 	/// Plain text to insert assuming global level indentation. Optional if snippet is a simple string only using plain variables and snippet locations.
 	string plain;
 }
+
+/// Parameters to pass when updating dub imports
+struct UpdateImportsParams
+{
+	/// set this to false to not emit progress updates for the UI
+	bool reportProgress = true;
+}

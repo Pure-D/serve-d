@@ -277,13 +277,21 @@ interface CodeReplacement
 
 #### Request `served/updateImports`
 
-**Parameter**: none
+**Parameter**: `UpdateImportsParams`
 
 **Returns**: `boolean`
 
 Refreshes the dub dependencies from the local filesystem. Triggers a `coded/updateDubTree` notification on success and updates imports in DCD.
 
 Returns true on success.
+
+```ts
+interface UpdateImportsParams
+{
+	/// set this to false to not emit progress updates for the UI
+	reportProgress?: bool;
+}
+```
 
 #### Request `served/listDependencies`
 

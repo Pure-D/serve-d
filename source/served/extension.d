@@ -3,6 +3,7 @@ module served.extension;
 import served.io.nothrow_fs;
 import served.types;
 import served.utils.fibermanager;
+import served.utils.progress;
 import served.utils.translate;
 
 public import served.utils.async;
@@ -50,11 +51,13 @@ else version = DCDFromSource;
 /// Set to true when shutdown is called
 __gshared bool shutdownRequested;
 
-void changedConfig(string workspaceUri, string[] paths,
-		served.types.Configuration config, bool allowFallback = false)
+void changedConfig(string workspaceUri, string[] paths, served.types.Configuration config,
+		bool allowFallback = false, size_t index = 0, size_t numConfigs = 0)
 {
 	StopWatch sw;
 	sw.start();
+
+	reportProgress(ProgressType.configLoad, index, numConfigs, workspaceUri);
 
 	if (!workspaceUri.length)
 	{
@@ -209,32 +212,28 @@ void processConfigChange(served.types.Configuration configuration)
 	if (capabilities.workspace.configuration && workspaces.length >= 2)
 	{
 		ConfigurationItem[] items;
-		foreach (section; configurationSections)
-			items ~= ConfigurationItem(Optional!string.init, opt(section)); // default workspace
+		items = getGlobalConfigurationItems(); // default workspace
+		const stride = configurationSections.length;
 
 		foreach (workspace; workspaces)
-			foreach (section; configurationSections)
-				items ~= ConfigurationItem(opt(workspace.folder.uri), opt(section));
+			items ~= getConfigurationItems(workspace.folder.uri);
+
 		trace("Re-requesting configuration from client because there is more than 1 workspace");
 		auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
-		if (res.result.type == JSONType.array && res.result.array.length >= 1)
+
+		const expected = workspaces.length + 1;
+		JSONValue[] settings = res.validateConfigurationItemsResponse(expected);
+		if (!settings.length)
+			return;
+
+		for (size_t i = 0; i < expected; i++)
 		{
-			JSONValue[] settings = res.result.array;
-			if (settings.length % configurationSections.length != 0)
-			{
-				error("Got invalid configuration response from language client.");
-				trace("Response: ", res);
-				return;
-			}
-			for (size_t i = 0; i < settings.length; i += configurationSections.length)
-			{
-				auto workspace = i == 0 ? &fallbackWorkspace : &.workspace(items[i].scopeUri.get, false);
-				string[] changed;
-				static foreach (n, section; configurationSections)
-					changed ~= workspace.config.replaceSection!section(
-							settings[i + n].fromJSON!(configurationTypes[n]));
-				changedConfig(i == 0 ? null : workspace.folder.uri, changed, workspace.config, i == 0);
-			}
+			const isDefault = i == 0;
+			auto workspace = isDefault ? &fallbackWorkspace : &.workspace(items[i * stride].scopeUri.get,
+					false);
+			string[] changed = workspace.config.replaceAllSections(settings[i * stride .. $]);
+			changedConfig(isDefault ? null : workspace.folder.uri, changed,
+					workspace.config, isDefault, i, expected);
 		}
 	}
 	else if (workspaces.length)
@@ -243,12 +242,13 @@ void processConfigChange(served.types.Configuration configuration)
 			error(
 					"Client does not support configuration request, only applying config for first workspace.");
 		auto changed = workspaces[0].config.replace(configuration);
-		changedConfig(workspaces[0].folder.uri, changed, workspaces[0].config);
+		changedConfig(workspaces[0].folder.uri, changed, workspaces[0].config, false, 0, 1);
 		fallbackWorkspace.config = workspaces[0].config;
 	}
+	reportProgress(ProgressType.configFinish, 0, 0);
 }
 
-bool syncConfiguration(string workspaceUri)
+bool syncConfiguration(string workspaceUri, size_t index = 0, size_t numConfigs = 0)
 {
 	import painlessjson : fromJSON;
 
@@ -260,33 +260,77 @@ bool syncConfiguration(string workspaceUri)
 			error("Did not find workspace ", workspaceUri, " when syncing config?");
 			return false;
 		}
+
 		ConfigurationItem[] items;
-		foreach (section; configurationSections)
-			items ~= ConfigurationItem(workspaceUri.length
-					? opt(proj.folder.uri) : Optional!string.init, opt(section));
-		auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
-		trace("Sending workspace/configuration request for ", workspaceUri);
-		if (res.result.type == JSONType.array)
-		{
-			JSONValue[] settings = res.result.array;
-			if (settings.length % configurationSections.length != 0)
-			{
-				error("Got invalid configuration response from language client.");
-				trace("Response: ", res);
-				return false;
-			}
-			string[] changed;
-			static foreach (n, section; configurationSections)
-				changed ~= proj.config.replaceSection!section(
-						settings[n].fromJSON!(configurationTypes[n]));
-			changedConfig(proj.folder.uri, changed, proj.config, workspaceUri.length == 0);
-			return true;
-		}
+		if (workspaceUri.length)
+			items = getConfigurationItems(proj.folder.uri);
 		else
+			items = getGlobalConfigurationItems();
+
+		trace("Sending workspace/configuration request for ", workspaceUri);
+		auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
+
+		JSONValue[] settings = res.validateConfigurationItemsResponse();
+		if (!settings.length)
 			return false;
+
+		string[] changed = proj.config.replaceAllSections(settings);
+		changedConfig(proj.folder.uri, changed, proj.config,
+				workspaceUri.length == 0, index, numConfigs);
+		return true;
 	}
 	else
 		return false;
+}
+
+ConfigurationItem[] getGlobalConfigurationItems()
+{
+	ConfigurationItem[] items = new ConfigurationItem[configurationSections.length];
+	foreach (i, section; configurationSections)
+		items[i] = ConfigurationItem(Optional!string.init, opt(section));
+	return items;
+}
+
+ConfigurationItem[] getConfigurationItems(DocumentUri uri)
+{
+	ConfigurationItem[] items = new ConfigurationItem[configurationSections.length];
+	foreach (i, section; configurationSections)
+		items[i] = ConfigurationItem(opt(uri), opt(section));
+	return items;
+}
+
+JSONValue[] validateConfigurationItemsResponse(scope return ref ResponseMessage res,
+		size_t expected = size_t.max)
+{
+	if (res.result.type != JSONType.array)
+	{
+		error("Got invalid configuration response from language client. (not an array)");
+		trace("Response: ", res);
+		return null;
+	}
+
+	JSONValue[] settings = res.result.array;
+	if (settings.length % configurationSections.length != 0)
+	{
+		error("Got invalid configuration response from language client. (invalid length)");
+		trace("Response: ", res);
+		return null;
+	}
+	if (expected != size_t.max)
+	{
+		auto total = settings.length / configurationSections.length;
+		if (total > expected)
+		{
+			warning("Loading different amount of workspaces than requested: requested ",
+					expected, " but loading ", total);
+		}
+		else if (total < expected)
+		{
+			error("Didn't get all configs we asked for: requested ", expected, " but loading ", total);
+			return null;
+		}
+	}
+	return settings;
 }
 
 string[] getPossibleSourceRoots(string workspaceFolder)
@@ -359,14 +403,14 @@ InitializeResult initialize(InitializeParams params)
 		{
 			if (capabilities.workspace.configuration)
 			{
-				if (!syncConfiguration(null))
+				if (!syncConfiguration(null, 0, workspaces.length + 1))
 					error("Syncing user configuration failed!");
 
 				warning(
 					"Didn't receive any configuration notification, manually requesting all configurations now");
 
-				foreach (ref workspace; workspaces)
-					syncConfiguration(workspace.folder.uri);
+				foreach (i, ref workspace; workspaces)
+					syncConfiguration(workspace.folder.uri, i + 1, workspaces.length + 1);
 			}
 			else
 			{
@@ -399,6 +443,8 @@ void doGlobalStartup()
 				]);
 
 		trace("Setup global configuration as " ~ backend.globalConfiguration.base.toString);
+
+		reportProgress(ProgressType.globalStartup, 0, 0, "Initializing serve-d...");
 
 		trace("Registering dub");
 		backend.register!DubComponent(false);
@@ -463,9 +509,12 @@ void doGlobalStartup()
 	}
 }
 
+/// A root which could be started up on load
 struct RootSuggestion
 {
+	/// Absolute filesystem path to the project root (assuming passed in root was absolute)
 	string dir;
+	///
 	bool useDub;
 }
 
@@ -558,10 +607,13 @@ void doStartup(string workspaceUri)
 	bool gotOneDub;
 	scope roots = appender!(Root[]);
 
-	foreach (root; rootsForProject(workspaceUri.uriToFile, proj.config.d.scanAllFolders,
+	auto rootSuggestions = rootsForProject(workspaceUri.uriToFile, proj.config.d.scanAllFolders,
 			proj.config.d.disabledRootGlobs, proj.config.d.extraRoots,
-			proj.config.d.manyProjectsAction, proj.config.d.manyProjectsThreshold))
+			proj.config.d.manyProjectsAction, proj.config.d.manyProjectsThreshold);
+
+	foreach (i, root; rootSuggestions)
 	{
+		reportProgress(ProgressType.workspaceStartup, i, rootSuggestions.length, root.dir.uriFromFile);
 		info("Initializing instance for root ", root);
 		StopWatch rootTimer;
 		rootTimer.start();
@@ -646,8 +698,13 @@ void doStartup(string workspaceUri)
 	trace("Starting auto completion service...");
 	StopWatch dcdTimer;
 	dcdTimer.start();
-	foreach (root; roots.data)
+	foreach (i, root; roots.data)
+	{
+		reportProgress(ProgressType.completionStartup, i, roots.data.length,
+				root.instance.cwd.uriFromFile);
+
 		startDCDServer(root.instance, root.uri);
+	}
 	dcdTimer.stop();
 	trace("Started all completion servers in ", dcdTimer.peek);
 
@@ -824,10 +881,10 @@ void didChangeWorkspaceFolders(DidChangeWorkspaceFoldersParams params)
 {
 	foreach (toRemove; params.event.removed)
 		removeWorkspace(toRemove.uri);
-	foreach (toAdd; params.event.added)
+	foreach (i, toAdd; params.event.added)
 	{
 		workspaces ~= Workspace(toAdd);
-		syncConfiguration(toAdd.uri);
+		syncConfiguration(toAdd.uri, i, params.event.added.length);
 		doStartup(toAdd.uri);
 	}
 }
