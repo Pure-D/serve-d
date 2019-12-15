@@ -2,6 +2,7 @@
 docs.json
 __dummy.html
 *.o
+*.a
 *.obj
 *-test-library
 dub.selections.json
