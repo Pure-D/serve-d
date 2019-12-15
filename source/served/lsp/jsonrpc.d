@@ -120,7 +120,7 @@ class RPCProcessor : Fiber
 		send(JSONValue([
 					"jsonrpc": JSONValue("2.0"),
 					"method": JSONValue("window/logMessage"),
-					"params": args.toJSON
+					"params": LogMessageParams(type, text(args)).toJSON
 				]));
 	}
 
