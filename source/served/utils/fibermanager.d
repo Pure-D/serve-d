@@ -58,7 +58,8 @@ struct FiberManager
 	}
 }
 
-void joinAll(size_t fiberSize = 4096 * 24, Fibers...)(Fibers fibers)
+// ridiculously high fiber size (192 KiB per fiber to create), but for parsing big files this is needed to not segfault in libdparse
+void joinAll(size_t fiberSize = 4096 * 48, Fibers...)(Fibers fibers)
 {
 	FiberManager f;
 	int i;
