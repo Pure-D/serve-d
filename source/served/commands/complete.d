@@ -28,6 +28,11 @@ import painlessjson : fromJSON, toJSON;
 import fs = std.file;
 import io = std.stdio;
 
+static immutable sortPrefixDoc = "0_";
+static immutable sortPrefixSnippets = "2_3_";
+// dcd additionally sorts inside with sortFromDCDType return value (appends to this)
+static immutable sortPrefixDCD = "2_";
+
 CompletionItemKind convertFromDCDType(string type)
 {
 	switch (type)
@@ -66,6 +71,37 @@ CompletionItemKind convertFromDCDType(string type)
 		return CompletionItemKind.typeParameter;
 	default:
 		return CompletionItemKind.text;
+	}
+}
+
+string sortFromDCDType(string type)
+{
+	switch (type)
+	{
+	case "m": // member variable
+	case "e": // enum member
+		return "2_";
+	case "k": // keyword
+	case "v": // variable name
+	case "f": // function
+		return "3_";
+	case "c": // class name
+	case "i": // interface name
+	case "s": // struct name
+	case "u": // union name
+	case "a": // array
+	case "A": // associative array
+	case "g": // enum name
+	case "P": // package name
+	case "M": // module name
+	case "l": // alias name
+	case "t": // template name
+	case "T": // mixin template name
+	case "h": // template type parameter
+	case "p": // template variadic parameter
+		return "4_";
+	default:
+		return "9_";
 	}
 }
 
@@ -586,6 +622,10 @@ private void provideDocComplete(TextDocumentPositionParams params, WorkspaceD.In
 		doc3.label = "/++";
 		doc3.insertText = "/++ " ~ eol ~ docs.map!(a => " + " ~ a ~ eol).join() ~ " +/";
 
+		doc.sortText = opt(sortPrefixDoc ~ "0");
+		doc2.sortText = opt(sortPrefixDoc ~ "1");
+		doc3.sortText = opt(sortPrefixDoc ~ "2");
+
 		completion.addDocComplete(doc, lineStripped);
 		completion.addDocComplete(doc2, lineStripped);
 		completion.addDocComplete(doc3, lineStripped);
@@ -721,6 +761,7 @@ CompletionItem snippetToCompletionItem(Snippet snippet)
 {
 	CompletionItem item;
 	item.label = snippet.shortcut;
+	item.sortText = opt(sortPrefixSnippets ~ snippet.shortcut);
 	item.detail = snippet.title.opt;
 	item.kind = CompletionItemKind.snippet.opt;
 	item.documentation = MarkupContent(MarkupKind.markdown,
@@ -826,6 +867,12 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 				}
 			}
 		}
+
+		if (item.sortText.isNull)
+			item.sortText = item.label.opt;
+
+		item.sortText = opt(sortPrefixDCD ~ identifier.type.sortFromDCDType ~ item.sortText.get);
+
 		completion ~= item;
 	}
 
