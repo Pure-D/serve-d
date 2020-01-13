@@ -95,11 +95,12 @@ string ddocToMarkdown(const Comment comment)
 	{
 		import std.uni : toLower;
 
+		string content = section.content.postProcessContent;
 		switch (section.name.toLower)
 		{
 		case "":
 		case "summary":
-			output ~= section.content ~ "\n\n";
+			output ~= content ~ "\n\n";
 			break;
 		case "params":
 			output ~= "**Params**\n\n";
@@ -119,13 +120,14 @@ string ddocToMarkdown(const Comment comment)
 			// line sections go on the line below.
 			import std.algorithm : canFind;
 
-			if (!section.content.chomp.canFind("\n"))
+			content = content.chomp();
+			if (!content.canFind("\n"))
 			{
-				output ~= format!"**%s** — %s\n\n"(section.name, section.content.chomp());
+				output ~= format!"**%s** — %s\n\n"(section.name, content);
 			}
 			else
 			{
-				output ~= format!"**%s**\n\n%s\n\n"(section.name, section.content.chomp());
+				output ~= format!"**%s**\n\n%s\n\n"(section.name, content);
 			}
 			break;
 		}
@@ -178,6 +180,40 @@ private string preProcessContent(string content)
 				newContent.put(line);
 	}
 	return newContent.data;
+}
+
+/// Fixes code-d specific placeholders inserted during ddoc translation for better IDE integration.
+private string postProcessContent(string content)
+{
+	while (true)
+	{
+		auto index = content.indexOf(inlineRefPrefix);
+		if (index != -1)
+		{
+			auto end = content.indexOf('.', index);
+			if (end == -1)
+				break; // malformed
+			content = content[0 .. index]
+				~ content[index + inlineRefPrefix.length .. end].postProcessInlineRefPrefix
+				~ content[end .. $];
+		}
+
+		if (index == -1)
+			break;
+	}
+	return content;
+}
+
+private string postProcessInlineRefPrefix(string content)
+{
+	auto ret = appender!string;
+	foreach (part; content.splitter(','))
+	{
+		if (ret.data.length)
+			ret.put('.');
+		ret.put(part.strip);
+	}
+	return ret.data;
 }
 
 /**
@@ -283,6 +319,8 @@ private string prepareDDoc(string str)
 	return output;
 }
 
+static immutable inlineRefPrefix = "__CODED_INLINE_REF__:";
+
 string[string] markdownMacros;
 static this()
 {
@@ -314,7 +352,11 @@ $0
 		`RPAREN`: `)`,
 		`DOLLAR`: `$`,
 		`BACKTICK`: "`",
+		`COLON`: ":",
 		`DEPRECATED`: `$0`,
+		`LREF`: `[$(BACKTICK)$0$(BACKTICK)](command$(COLON)code-d.navigateLocal?$0)`,
+		`REF`: `[$(BACKTICK)` ~ inlineRefPrefix ~ `$+.$1$(BACKTICK)](command$(COLON)code-d.navigateGlobal?`
+		~ inlineRefPrefix ~ `$+.$1)`,
 		`RED`: `<font color=red>**$0**</font>`,
 		`BLUE`: `<font color=blue>$0</font>`,
 		`GREEN`: `<font color=green>$0</font>`,
@@ -406,6 +448,19 @@ unittest
 		~ "**Params**\n\n"
 		~ "`a` **param**\n\n"
 		~ "**Returns** — nothing of consequence\n\n";
+	//dfmt on
+
+	shouldEqual(ddocToMarkdown(comment), commentMarkdown);
+}
+
+@("ddoc with inline references")
+unittest
+{
+	//dfmt off
+	auto comment = "creates a $(REF Exception,std, object) for this $(LREF error).";
+
+	auto commentMarkdown = "creates a [`std.object.Exception`](command:code-d.navigateGlobal?std.object.Exception) "
+			~ "for this [`error`](command:code-d.navigateLocal?error).\n\n\n\n";
 	//dfmt on
 
 	shouldEqual(ddocToMarkdown(comment), commentMarkdown);
