@@ -3,7 +3,11 @@ module served.utils.ddoc;
 import served.lsp.protocol;
 
 import ddoc;
+
+import std.algorithm;
+import std.array;
 import std.format;
+import std.range.primitives;
 import std.string;
 import std.uni : sicmp;
 
@@ -129,6 +133,53 @@ string ddocToMarkdown(const Comment comment)
 	return output.replace("&#36;", "$");
 }
 
+/// Removes leading */+ characters from each line per section if the entire section only consists of them. Sections are separated with lines starting with ---
+private string preProcessContent(string content)
+{
+	auto newContent = appender!string();
+	// TODO: optimize to not allocate when not changing content
+	newContent.reserve(content.length);
+	foreach (chunk; content.lineSplitter!(KeepTerminator.yes)
+			.chunkBy!(a => a.startsWith("---")))
+	{
+		auto c = chunk[1].save;
+
+		bool isStrippable = true;
+		foreach (line; c)
+		{
+			auto l = line.stripLeft;
+			if (!l.length)
+				continue;
+			if (!l.startsWith("*", "+"))
+			{
+				isStrippable = false;
+				break;
+			}
+		}
+
+		if (isStrippable)
+		{
+			foreach (line; chunk[1])
+			{
+				auto stripped = line.stripLeft;
+				if (!stripped.length)
+					stripped = line;
+
+				if (stripped.startsWith("* ", "+ ", "*\t", "+\t"))
+					newContent.put(stripped[2 .. $]);
+				else if (stripped.startsWith("*", "+"))
+					newContent.put(stripped[1 .. $]);
+				else
+					newContent.put(line);
+			}
+		}
+		else
+			foreach (line; chunk[1])
+				newContent.put(line);
+	}
+	return newContent.data;
+}
+
 /**
  * Convert a DDoc comment string to MarkedString (as defined in the language
  * server spec)
@@ -206,6 +257,8 @@ string getParamDocumentation(const Comment comment, string searchParam)
 private string prepareDDoc(string str)
 {
 	import ddoc.lexer : Lexer;
+
+	str = str.preProcessContent;
 
 	auto lex = Lexer(str, true);
 	string output;
@@ -325,10 +378,10 @@ $(BODY)`,
 	];
 }
 
+version (unittest) import unit_threaded.assertions;
+
 unittest
 {
-	import unit_threaded.assertions;
-
 	//dfmt off
 	auto comment = "Quick example of a comment\n"
 		~ "&#36;(D something, else) is *a\n"
@@ -353,6 +406,29 @@ unittest
 		~ "**Params**\n\n"
 		~ "`a` **param**\n\n"
 		~ "**Returns** — nothing of consequence\n\n";
+	//dfmt on
+
+	shouldEqual(ddocToMarkdown(comment), commentMarkdown);
+}
+
+@("messed up formatting")
+unittest
+{
+	//dfmt off
+	auto comment = ` * this documentation didn't have the stars stripped
+ * so we need to remove them.
+ * There is more content.
+---
+// example code
+---`;
+
+	auto commentMarkdown = `this documentation didn't have the stars stripped
+so we need to remove them.
+There is more content.
+
+` ~ "```" ~ `d
+// example code
+` ~ "```\n\n";
 	//dfmt on
 
 	shouldEqual(ddocToMarkdown(comment), commentMarkdown);
