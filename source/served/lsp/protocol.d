@@ -1138,7 +1138,7 @@ enum MarkupKind : string
 
 struct MarkupContent
 {
-	MarkupKind kind;
+	string kind;
 	string value;
 
 	this(MarkupKind kind, string value)
