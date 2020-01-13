@@ -209,6 +209,13 @@ void processConfigChange(served.types.Configuration configuration)
 	scope (exit)
 		syncingConfiguration = false;
 
+	if (!workspaces.length)
+	{
+		info("initializing config for temporary fallback workspace");
+		workspaces = [fallbackWorkspace];
+		workspaces[0].initialized = false;
+	}
+
 	if (capabilities.workspace.configuration && workspaces.length >= 2)
 	{
 		ConfigurationItem[] items;
@@ -245,6 +252,9 @@ void processConfigChange(served.types.Configuration configuration)
 		changedConfig(workspaces[0].folder.uri, changed, workspaces[0].config, false, 0, 1);
 		fallbackWorkspace.config = workspaces[0].config;
 	}
+	else
+		error("unexpected state: got ", workspaces.length, " workspaces and ",
+				capabilities.workspace.configuration ? "" : "no ", "configuration request support");
 	reportProgress(ProgressType.configFinish, 0, 0);
 }
 
@@ -373,9 +383,21 @@ InitializeResult initialize(InitializeParams params)
 			Workspace(WorkspaceFolder(params.rootPath.uriFromFile, "Root"),
 					served.types.Configuration.init)
 		];
+
 	if (workspaces.length)
 	{
 		fallbackWorkspace.folder = workspaces[0].folder;
+		fallbackWorkspace.initialized = true;
+	}
+	else
+	{
+		import std.path : buildPath;
+		import std.file : tempDir, exists, mkdir;
+
+		auto tmpFolder = buildPath(tempDir, "serve-d-dummy-workspace");
+		if (!tmpFolder.exists)
+			mkdir(tmpFolder);
+		fallbackWorkspace.folder = WorkspaceFolder(tmpFolder.uriFromFile, "serve-d dummy tmp folder");
 		fallbackWorkspace.initialized = true;
 	}
 
@@ -420,6 +442,8 @@ InitializeResult initialize(InitializeParams params)
 				changedConfig(workspaces[0].folder.uri, null, workspaces[0].config);
 				fallbackWorkspace.config = workspaces[0].config;
 			}
+
+			reportProgress(ProgressType.configFinish, 0, 0);
 		}
 	}, 1000);
 
@@ -988,9 +1012,17 @@ shared static this()
 
 	backend.onBroadcast = (&handleBroadcast).toDelegate;
 	backend.onBindFail = (WorkspaceD.Instance instance, ComponentFactory factory, Exception err) {
-		rpc.window.showErrorMessage(
-				"Failed to load component " ~ factory.info.name ~ " for workspace "
-				~ instance.cwd ~ "\n\nError: " ~ err.msg);
+		if (!instance && err.msg.canFind("requires to be instanced"))
+			return;
+
+		tracef("bind fail:\n\tinstance %s\n\tfactory %s\n\tstacktrace:\n%s\n------",
+				instance, factory.info.name, err);
+		if (instance)
+		{
+			rpc.window.showErrorMessage(
+					"Failed to load component " ~ factory.info.name ~ " for workspace "
+					~ instance.cwd ~ "\n\nError: " ~ err.msg);
+		}
 	};
 }
 
