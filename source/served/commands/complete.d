@@ -596,6 +596,9 @@ private void provideSnippetComplete(TextDocumentPositionParams params, Workspace
 		ref Document document, ref const UserConfiguration config,
 		ref CompletionItem[] completion, int byteOff)
 {
+	if (byteOff > 0 && document.rawText[byteOff - 1 .. $].startsWith("."))
+		return; // no snippets after '.' character
+
 	auto snippets = instance.get!SnippetsComponent;
 	auto ret = snippets.getSnippetsYield(document.uri.uriToFile, document.rawText, byteOff);
 	trace("got ", ret.snippets.length, " snippets fitting in this context: ",
