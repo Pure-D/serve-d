@@ -48,12 +48,12 @@ Comment parseDdoc(string ddoc, bool throwError = false)
 		return Comment.init;
 
 	if (throwError)
-		return parseComment(prepareDDoc(ddoc), markdownMacros, true);
+		return parseComment(prepareDDoc(ddoc), markdownMacros, false);
 	else
 	{
 		try
 		{
-			return parseComment(prepareDDoc(ddoc), markdownMacros, true);
+			return parseComment(prepareDDoc(ddoc), markdownMacros, false);
 		}
 		catch (Exception e)
 		{
@@ -74,7 +74,7 @@ string ddocToMarkdown(string ddoc)
 	Comment comment;
 	try
 	{
-		comment = parseComment(prepareDDoc(ddoc), markdownMacros, true);
+		comment = parseComment(prepareDDoc(ddoc), markdownMacros, false);
 	}
 	catch (Exception e)
 	{
