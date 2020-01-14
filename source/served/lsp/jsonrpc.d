@@ -21,8 +21,11 @@ import tinyevent;
 alias RequestHandler = ResponseMessage delegate(RequestMessage);
 alias EventRequestHandler = void delegate(RequestMessage);
 
+/// Fiber which runs in the background, reading from a FileReader, and calling methods when requested over the RPC interface.
 class RPCProcessor : Fiber
 {
+	/// Constructs this RPC processor using a FileReader to read RPC commands from and a std.stdio.File to write RPC commands to.
+	/// Creates this fiber with a reasonable fiber size.
 	this(FileReader reader, File writer)
 	{
 		super(&run, 4096 * 8);
@@ -30,11 +33,19 @@ class RPCProcessor : Fiber
 		this.writer = writer;
 	}
 
+	/// Instructs the RPC processor to stop at the next IO read instruction.
 	void stop()
 	{
 		stopped = true;
 	}
 
+	/// Sends an RPC response or error.
+	/// If `id`, `result` or `error` is not given on the response message, they won't be sent.
+	/// However according to the RPC specification, `id` must be set in order for this to be a response object.
+	/// Otherwise on success `result` must be set or on error `error` must be set.
+	/// This also logs the error to stderr if it is given.
+	/// Params:
+	///   res = the response message to send.
 	void send(ResponseMessage res)
 	{
 		auto msg = JSONValue(["jsonrpc": JSONValue("2.0")]);
@@ -53,11 +64,15 @@ class RPCProcessor : Fiber
 		send(msg);
 	}
 
+	/// Sends an RPC request (method call) to the other side. Doesn't do any additional processing.
+	/// Params:
+	///   req = The request to send
 	void send(RequestMessage req)
 	{
 		send(req.toJSON);
 	}
 
+	/// Sends a raw JSON object to the other RPC side. 
 	void send(JSONValue raw)
 	{
 		if (!("jsonrpc" in raw))
@@ -65,7 +80,7 @@ class RPCProcessor : Fiber
 			error(raw);
 			throw new Exception("Sent objects must have a jsonrpc");
 		}
-		const content = raw.toString().replace("\\/", "/");
+		const content = raw.toString(JSONOptions.doNotEscapeSlashes);
 		// Log on client side instead! (vscode setting: "serve-d.trace.server": "verbose")
 		//trace(content);
 		string data = "Content-Length: " ~ content.length.to!string ~ "\r\n\r\n" ~ content;
@@ -73,6 +88,7 @@ class RPCProcessor : Fiber
 		writer.flush();
 	}
 
+	/// Sends a notification with the given `method` name to the other RPC side without any parameters.
 	void notifyMethod(string method)
 	{
 		RequestMessage req;
@@ -80,6 +96,7 @@ class RPCProcessor : Fiber
 		send(req);
 	}
 
+	/// Sends a notification with the given `method` name to the other RPC side with the given `value` parameter serialized to JSON.
 	void notifyMethod(T)(string method, T value)
 	{
 		RequestMessage req;
@@ -88,33 +105,46 @@ class RPCProcessor : Fiber
 		send(req);
 	}
 
-	void sendMethod(string method)
+	/// Sends a request with the given `method` name to the other RPC side without any parameters.
+	/// Doesn't handle the response by the other RPC side.
+	/// Returns: a RequestToken to use with $(LREF awaitResponse) to get the response. Can be ignored if the response isn't important.
+	RequestToken sendMethod(string method)
 	{
 		RequestMessage req;
 		req.id = RequestToken.random;
 		req.method = method;
 		send(req);
+		return req.id;
 	}
 
-	void sendMethod(T)(string method, T value)
+	/// Sends a request with the given `method` name to the other RPC side with the given `value` parameter serialized to JSON.
+	/// Doesn't handle the response by the other RPC side.
+	/// Returns: a RequestToken to use with $(LREF awaitResponse) to get the response. Can be ignored if the response isn't important.
+	RequestToken sendMethod(T)(string method, T value)
 	{
 		RequestMessage req;
 		req.id = RequestToken.random;
 		req.method = method;
 		req.params = value.toJSON;
 		send(req);
+		return req.id;
 	}
 
+	/// Sends a request with the given `method` name to the other RPC side with the given `value` parameter serialized to JSON.
+	/// Awaits the response (using yield) and returns once it's there.
+	///
+	/// This is a small wrapper to call `awaitResponse(sendMethod(method, value))`
+	///
+	/// Returns: The response deserialized from the RPC.
 	ResponseMessage sendRequest(T)(string method, T value)
 	{
-		RequestMessage req;
-		req.id = RequestToken.random;
-		req.method = method;
-		req.params = value.toJSON;
-		send(req);
-		return awaitResponse(req.id);
+		return awaitResponse(sendMethod(method, value));
 	}
 
+	/// Calls the `window/logMessage` method with all arguments concatenated together using text()
+	/// Params:
+	///   type = the $(REF MessageType, served,lsp,protocol) to use as $(REF LogMessageParams, served,lsp,protocol) type
+	///   args = the message parts to send
 	void log(MessageType type = MessageType.log, Args...)(Args args)
 	{
 		send(JSONValue([
@@ -124,11 +154,14 @@ class RPCProcessor : Fiber
 				]));
 	}
 
-	bool hasData()
+	/// Returns: `true` if there has been any messages been sent to us from the other RPC side, otherwise `false`.
+	bool hasData() const @property
 	{
 		return !messageQueue.empty;
 	}
 
+	/// Returns: the first message from the message queue. Removes it from the message queue so it will no longer be processed.
+	/// Throws: Exception if $(LREF hasData) is false.
 	RequestMessage poll()
 	{
 		if (!hasData)
@@ -138,13 +171,15 @@ class RPCProcessor : Fiber
 		return ret;
 	}
 
-	bool running = true;
-
+	/// Convenience wrapper around $(LREF WindowFunctions) for `this`.
 	WindowFunctions window()
 	{
 		return WindowFunctions(this);
 	}
 
+	/// Waits for a response message to a request from the other RPC side.
+	/// If this is called after the response has already been sent and processed by yielding after sending the request, this will yield forever and use up memory.
+	/// So it is important, if you are going to await a response, to do it immediately when sending any request.
 	ResponseMessage awaitResponse(RequestToken tok)
 	{
 		size_t i;
@@ -271,11 +306,15 @@ private:
 	}
 }
 
+/// Utility functions for common LSP methods performing UI things.
 struct WindowFunctions
 {
+	/// The RPC processor to use for sending/receiving
 	RPCProcessor rpc;
 	private bool safeShowMessage;
 
+	/// Runs window/showMessage which typically shows a notification box, without any buttons or feedback.
+	/// Logs the message to stderr too.
 	void showMessage(MessageType type, string message)
 	{
 		if (!safeShowMessage)
@@ -284,6 +323,7 @@ struct WindowFunctions
 		safeShowMessage = false;
 	}
 
+	/// Runs window/showMessageRequest which typically shows a message box with possible action buttons to click. Returns the action which got clicked or one with null title if it has been dismissed.
 	MessageActionItem requestMessage(MessageType type, string message, MessageActionItem[] actions)
 	{
 		auto res = rpc.sendRequest("window/showMessageRequest",
@@ -293,6 +333,7 @@ struct WindowFunctions
 		return res.result.fromJSON!MessageActionItem;
 	}
 
+	/// ditto
 	string requestMessage(MessageType type, string message, string[] actions)
 	{
 		MessageActionItem[] a = new MessageActionItem[actions.length];
@@ -319,6 +360,8 @@ struct WindowFunctions
 		}
 	}
 
+	/// Calls $(LREF showMessage) with MessageType.error
+	/// Also logs the message to stderr in a more readable way.
 	void showErrorMessage(string message)
 	{
 		error("Error message: ", message);
@@ -326,6 +369,8 @@ struct WindowFunctions
 		showMessage(MessageType.error, message);
 	}
 
+	/// Calls $(LREF showMessage) with MessageType.warning
+	/// Also logs the message to stderr in a more readable way.
 	void showWarningMessage(string message)
 	{
 		warning("Warning message: ", message);
@@ -333,6 +378,8 @@ struct WindowFunctions
 		showMessage(MessageType.warning, message);
 	}
 
+	/// Calls $(LREF showMessage) with MessageType.info
+	/// Also logs the message to stderr in a more readable way.
 	void showInformationMessage(string message)
 	{
 		info("Info message: ", message);
@@ -340,6 +387,8 @@ struct WindowFunctions
 		showMessage(MessageType.info, message);
 	}
 
+	/// Calls $(LREF showMessage) with MessageType.log
+	/// Also logs the message to stderr in a more readable way.
 	void showLogMessage(string message)
 	{
 		trace("Log message: ", message);
