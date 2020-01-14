@@ -96,7 +96,7 @@ struct Configuration
 		bool scanAllFolders = true;
 		string[] disabledRootGlobs;
 		string[] extraRoots;
-		ManyProjectsAction manyProjectsAction = ManyProjectsAction.ask;
+		string manyProjectsAction = ManyProjectsAction.ask;
 		int manyProjectsThreshold = 4;
 		string lintOnFileOpen = "project";
 		bool dietContextCompletion = false;

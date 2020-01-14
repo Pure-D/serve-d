@@ -633,7 +633,8 @@ void doStartup(string workspaceUri)
 
 	auto rootSuggestions = rootsForProject(workspaceUri.uriToFile, proj.config.d.scanAllFolders,
 			proj.config.d.disabledRootGlobs, proj.config.d.extraRoots,
-			proj.config.d.manyProjectsAction, proj.config.d.manyProjectsThreshold);
+			cast(ManyProjectsAction) proj.config.d.manyProjectsAction,
+			proj.config.d.manyProjectsThreshold);
 
 	foreach (i, root; rootSuggestions)
 	{
