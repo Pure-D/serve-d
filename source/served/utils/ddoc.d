@@ -106,7 +106,8 @@ string ddocToMarkdown(const Comment comment)
 			output ~= "**Params**\n\n";
 			foreach (parameter; section.mapping)
 			{
-				output ~= format!"`%s` %s\n\n"(parameter[0], parameter[1]);
+				output ~= format!"`%s` %s\n\n"(parameter[0].postProcessContent,
+						parameter[1].postProcessContent);
 			}
 			break;
 		case "author":
@@ -190,7 +191,7 @@ private string postProcessContent(string content)
 		auto index = content.indexOf(inlineRefPrefix);
 		if (index != -1)
 		{
-			auto end = content.indexOf('.', index);
+			auto end = content.indexOf('.', index + inlineRefPrefix.length);
 			if (end == -1)
 				break; // malformed
 			content = content[0 .. index]
@@ -206,14 +207,7 @@ private string postProcessContent(string content)
 
 private string postProcessInlineRefPrefix(string content)
 {
-	auto ret = appender!string;
-	foreach (part; content.splitter(','))
-	{
-		if (ret.data.length)
-			ret.put('.');
-		ret.put(part.strip);
-	}
-	return ret.data;
+	return content.splitter(',').map!strip.join('.');
 }
 
 /**
