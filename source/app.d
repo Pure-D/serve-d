@@ -408,11 +408,20 @@ void delegate() gotRequest(RequestMessage msg)
 		{
 			res = processRequest(msg);
 		}
-		catch (Throwable e)
+		catch (Exception e)
 		{
+			res.id = msg.id;
 			res.error = ResponseError(e);
 			res.error.code = ErrorCode.internalError;
-			error("Failed processing request: ", e);
+		}
+		catch (Throwable e)
+		{
+			res.id = msg.id;
+			res.error = ResponseError(e);
+			res.error.code = ErrorCode.internalError;
+			rpc.window.showMessage(MessageType.error,
+					"A fatal internal error occured in serve-d handling this request but it will attempt to keep running: "
+					~ e.msg);
 		}
 		rpc.send(res);
 	};
@@ -425,9 +434,16 @@ void delegate() gotNotify(RequestMessage msg)
 		{
 			processNotify(msg);
 		}
-		catch (Throwable e)
+		catch (Exception e)
 		{
 			error("Failed processing notification: ", e);
+		}
+		catch (Throwable e)
+		{
+			error("Attempting to recover from fatal issue: ", e);
+			rpc.window.showMessage(MessageType.error,
+					"A fatal internal error has occured in serve-d, but it will attempt to keep running: "
+					~ e.msg);
 		}
 	};
 }
