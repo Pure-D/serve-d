@@ -34,6 +34,20 @@ struct Document
 		text = doc.text.dup;
 	}
 
+	static Document nullDocument(scope const(char)[] content)
+	{
+		Document ret;
+		ret.setContent(content);
+		return ret;
+	}
+
+	version (unittest) private static Document nullDocumentOwnMemory(char[] content)
+	{
+		Document ret;
+		ret.text = content;
+		return ret;
+	}
+
 	const(char)[] rawText()
 	{
 		return cast(const(char)[]) text;
@@ -102,7 +116,7 @@ struct Document
 	{
 		size_t bytes;
 		size_t index;
-		while (index < offset)
+		while (index < offset && bytes < text.length)
 		{
 			const c = decode!(UseReplacementDchar.yes)(text, bytes);
 			index += c.codeLength!wchar;
@@ -513,4 +527,189 @@ size_t countUTF16Length(const(char)[] s)
 		offset += c.codeLength!wchar;
 	}
 	return offset;
+}
+
+version (unittest)
+{
+	Document testUnicodeDocument = Document.nullDocumentOwnMemory(cast(char[]) `///
+/// Copyright © 2020 Somebody (not actually™) x3
+///
+module some.file;
+
+enum Food : int
+{
+	pizza = '\U0001F355', // 🍕
+	burger = '\U0001F354', // 🍔
+	chicken = '\U0001F357', // 🍗
+	taco = '\U0001F32E', // 🌮
+	wrap = '\U0001F32F', // 🌯
+	salad = '\U0001F957', // 🥗
+	pasta = '\U0001F35D', // 🍝
+	sushi = '\U0001F363', // 🍣
+	oden = '\U0001F362', // 🍢
+	egg = '\U0001F373', // 🍳
+	croissant = '\U0001F950', // 🥐
+	baguette = '\U0001F956', // 🥖
+	popcorn = '\U0001F37F', // 🍿
+	coffee = '\u2615', // ☕
+	cookie = '\U0001F36A', // 🍪
+}
+
+void main() {
+	// taken from https://github.com/DlangRen/Programming-in-D/blob/master/ddili/src/ders/d.cn/aa.d
+	int[string] colorCodes = [ /* ... */ ];
+
+	if ("purple" in colorCodes) {
+		// ü®™🍳键 “purple” 在表中
+
+	} else { // line 31
+		//表中不存在 键 “purple” 
+	}
+
+	string x;
+}`);
+
+	enum testSOF_byte = 0;
+	enum testSOF_offset = 0;
+	enum testSOF_position = Position(0, 0);
+
+	enum testEOF_byte = 872;
+	enum testEOF_offset = 805;
+	enum testEOF_position = Position(36, 1);
+
+	// in line before unicode
+	enum testLinePreUni_byte = 757;
+	enum testLinePreUni_offset = 724;
+	enum testLinePreUni_position = Position(29, 4); // after `//`
+
+	// in line after unicode
+	enum testLinePostUni_byte = 789;
+	enum testLinePostUni_offset = 742;
+	enum testLinePostUni_position = Position(29, 22); // after `purple” 在`
+
+	// ascii line after unicode line
+	enum testMidAsciiLine_byte = 804;
+	enum testMidAsciiLine_offset = 753;
+	enum testMidAsciiLine_position = Position(31, 7);
+
+	@("{offset, bytes, position} -> {offset, bytes, position}")
+	unittest
+	{
+		import std.conv;
+		import std.stdio;
+
+		static foreach (test; [
+				"SOF", "EOF", "LinePreUni", "LinePostUni", "MidAsciiLine"
+			])
+		{
+			{
+				enum testOffset = mixin("test" ~ test ~ "_offset");
+				enum testByte = mixin("test" ~ test ~ "_byte");
+				enum testPosition = mixin("test" ~ test ~ "_position");
+
+				writeln(" === Test ", test, " ===");
+
+				writeln(testByte, " byte -> offset ", testOffset);
+				assert(testUnicodeDocument.bytesToOffset(testByte) == testOffset,
+						"fail " ~ test ~ " byte->offset = " ~ testUnicodeDocument.bytesToOffset(testByte)
+						.to!string);
+				writeln(testByte, " byte -> position ", testPosition);
+				assert(testUnicodeDocument.bytesToPosition(testByte) == testPosition,
+						"fail " ~ test ~ " byte->position = " ~ testUnicodeDocument.bytesToPosition(testByte)
+						.to!string);
+
+				writeln(testOffset, " offset -> byte ", testByte);
+				assert(testUnicodeDocument.offsetToBytes(testOffset) == testByte,
+						"fail " ~ test ~ " offset->byte = " ~ testUnicodeDocument.offsetToBytes(testOffset)
+						.to!string);
+				writeln(testOffset, " offset -> position ", testPosition);
+				assert(testUnicodeDocument.offsetToPosition(testOffset) == testPosition,
+						"fail " ~ test ~ " offset->position = " ~ testUnicodeDocument.offsetToPosition(testOffset)
+						.to!string);
+
+				writeln(testPosition, " position -> offset ", testOffset);
+				assert(testUnicodeDocument.positionToOffset(testPosition) == testOffset,
+						"fail " ~ test ~ " position->offset = " ~ testUnicodeDocument.positionToOffset(testPosition)
+						.to!string);
+				writeln(testPosition, " position -> byte ", testByte);
+				assert(testUnicodeDocument.positionToBytes(testPosition) == testByte,
+						"fail " ~ test ~ " position->byte = " ~ testUnicodeDocument.positionToBytes(testPosition)
+						.to!string);
+
+				writeln();
+			}
+		}
+
+		const size_t maxBytes = testEOF_byte;
+		const size_t maxOffset = testEOF_offset;
+		const Position maxPosition = testEOF_position;
+
+		writeln("max offset -> byte");
+		assert(testUnicodeDocument.offsetToBytes(size_t.max) == maxBytes);
+		writeln("max offset -> position");
+		assert(testUnicodeDocument.offsetToPosition(size_t.max) == maxPosition);
+		writeln("max byte -> offset");
+		assert(testUnicodeDocument.bytesToOffset(size_t.max) == maxOffset);
+		writeln("max byte -> position");
+		assert(testUnicodeDocument.bytesToPosition(size_t.max) == maxPosition);
+		writeln("max position -> offset");
+		assert(testUnicodeDocument.positionToOffset(Position(uint.max, uint.max)) == maxOffset);
+		writeln("max position -> byte");
+		assert(testUnicodeDocument.positionToBytes(Position(uint.max, uint.max)) == maxBytes);
+	}
+
+	@("character transform benchmarks")
+	unittest
+	{
+		import std.datetime.stopwatch;
+		import std.random;
+		import std.stdio;
+
+		enum PositionCount = 32;
+		size_t[PositionCount] testBytes;
+		size_t[PositionCount] testOffsets;
+		Position[PositionCount] testPositions;
+
+		size_t lengthUtf16 = testUnicodeDocument.text.codeLength!wchar;
+
+		foreach (i, ref v; testOffsets)
+		{
+			v = uniform(0, lengthUtf16);
+			testBytes[i] = testUnicodeDocument.offsetToBytes(v);
+			testPositions[i] = testUnicodeDocument.offsetToPosition(v);
+		}
+
+		StopWatch sw;
+		static foreach (iterations; [1e2, 1e3, 1e4, 1e5])
+		{
+			writeln("==================");
+			writeln("Timing ", iterations, "x", PositionCount, " iterations:");
+			static foreach (fun; [
+					"offsetToBytes", "offsetToPosition", "bytesToOffset",
+					"bytesToPosition", "positionToOffset", "positionToBytes"
+				])
+			{
+				sw.reset();
+				sw.start();
+				foreach (i; 0 .. iterations)
+				{
+					foreach (v; 0 .. PositionCount)
+					{
+						static if (fun[0] == 'b')
+							mixin("testUnicodeDocument." ~ fun ~ "(testBytes[v]);");
+						else static if (fun[0] == 'o')
+							mixin("testUnicodeDocument." ~ fun ~ "(testOffsets[v]);");
+						else static if (fun[0] == 'p')
+							mixin("testUnicodeDocument." ~ fun ~ "(testPositions[v]);");
+						else
+							static assert(false);
+					}
+				}
+				sw.stop();
+				writeln(fun, ": ", sw.peek);
+			}
+			writeln();
+			writeln();
+		}
+	}
 }
