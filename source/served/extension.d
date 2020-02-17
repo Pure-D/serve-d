@@ -679,6 +679,8 @@ void doStartup(string workspaceUri)
 
 			if (!loadedDub)
 				error("Exception starting dub: ", err);
+			else
+				trace("Started dub with root dependencies ", instance.get!DubComponent.rootDependencies);
 		}
 		if (!loadedDub)
 		{
@@ -815,16 +817,16 @@ void startDCDServer(WorkspaceD.Instance instance, string workspaceUri)
 	trace("Running DCD setup");
 	try
 	{
+		auto dcd = instance.get!DCDComponent;
 		trace("findAndSelectPort 9166");
-		auto port = backend.get!DCDComponent(instance.cwd)
-			.findAndSelectPort(cast(ushort) 9166).getYield;
+		auto port = dcd.findAndSelectPort(cast(ushort) 9166).getYield;
 		trace("Setting port to ", port);
 		instance.config.set("dcd", "port", cast(int) port);
 		auto stdlibPath = proj.stdlibPath;
 		trace("startServer ", stdlibPath);
-		backend.get!DCDComponent(instance.cwd).startServer(stdlibPath);
+		dcd.startServer(stdlibPath);
 		trace("refreshImports");
-		backend.get!DCDComponent(instance.cwd).refreshImports();
+		dcd.refreshImports();
 	}
 	catch (Exception e)
 	{
@@ -834,7 +836,7 @@ void startDCDServer(WorkspaceD.Instance instance, string workspaceUri)
 		trace("Instance Config: ", instance.config);
 		return;
 	}
-	info("Imports for ", instance.cwd, ": ", backend.getInstance(instance.cwd).importPaths);
+	info("Imports for ", instance.cwd, ": ", instance.importPaths);
 }
 
 string determineOutputFolder()
