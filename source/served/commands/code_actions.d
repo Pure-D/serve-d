@@ -189,7 +189,7 @@ TextEdit[] sortImports(SortImportsParams params)
 	if (sorted == ImportBlock.init)
 		return ret;
 	auto start = document.bytesToPosition(sorted.start);
-	auto end = document.bytesToPosition(sorted.end);
+	auto end = document.movePositionBytes(start, sorted.start, sorted.end);
 	auto lines = sorted.imports.to!(string[]);
 	if (!lines.length)
 		return null;

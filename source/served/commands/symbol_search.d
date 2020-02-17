@@ -81,13 +81,22 @@ SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParams params)
 	auto result = backend.best!DscannerComponent(params.textDocument.uri.uriToFile)
 		.listDefinitions(uriToFile(params.textDocument.uri), document.rawText).getYield;
 	auto ret = appender!(SymbolInformationEx[]);
+
+	size_t cacheByte = size_t.max;
+	Position cachePosition;
+
 	foreach (def; result)
 	{
 		SymbolInformationEx info;
 		info.name = def.name;
 		info.location.uri = params.textDocument.uri;
-		info.location.range = TextRange(document.bytesToPosition(def.range[0]),
-				document.bytesToPosition(def.range[1]));
+
+		auto startPosition = document.movePositionBytes(cachePosition, cacheByte, def.range[0]);
+		auto endPosition = document.movePositionBytes(startPosition, def.range[0], def.range[1]);
+		cacheByte = def.range[1];
+		cachePosition = endPosition;
+
+		info.location.range = TextRange(startPosition, endPosition);
 		info.kind = convertFromDscannerType(def.type);
 		if (def.type == "f" && def.name == "this")
 			info.kind = SymbolKind.constructor;

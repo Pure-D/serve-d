@@ -27,10 +27,17 @@ CodeLens[] provideCodeLens(CodeLensParams params)
 		return [];
 	CodeLens[] ret;
 	if (workspace(params.textDocument.uri).config.d.enableDMDImportTiming)
+	{
+		size_t lastIndex = size_t.max;
+		Position lastPosition;
+
 		foreach (match; document.rawText.matchAll(importRegex))
 		{
 			size_t index = match.pre.length;
-			auto pos = document.bytesToPosition(index);
+			auto pos = document.movePositionBytes(lastPosition, lastIndex, index);
+			lastIndex = index;
+			lastPosition = pos;
+
 			ret ~= CodeLens(TextRange(pos), Optional!Command.init,
 					JSONValue([
 							"type": JSONValue("importcompilecheck"),
@@ -39,6 +46,7 @@ CodeLens[] provideCodeLens(CodeLensParams params)
 							"file": JSONValue(file)
 						]));
 		}
+	}
 	return ret;
 }
 
