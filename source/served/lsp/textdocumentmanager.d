@@ -256,16 +256,20 @@ struct Document
 			if (c == '\n')
 			{
 				line--;
-				if (line == 0)
-					return [start, index];
-				else
-					start = index;
+				start = index;
 			}
 		}
 		// if !found
 		if (line != 0)
 			return [0, 0];
-		return [start, text.length];
+
+		auto end = text.indexOf('\n', start);
+		if (end == -1)
+			end = text.length;
+		else
+			end++;
+
+		return [start, end];
 	}
 
 	/// Returns the text of a line at the given position.
