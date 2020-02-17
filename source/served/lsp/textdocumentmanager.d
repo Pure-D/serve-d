@@ -215,42 +215,30 @@ struct Document
 
 	TextRange wordRangeAt(Position position)
 	{
-		auto chars = wordInLine(lineAt(position), position.character);
+		auto chars = wordInLine(lineAtScope(position), position.character);
 		return TextRange(Position(position.line, chars[0]), Position(position.line, chars[1]));
 	}
 
 	size_t[2] lineByteRangeAt(uint line)
 	{
+		size_t start = 0;
 		size_t index = 0;
-		size_t lineStart = 0;
-		bool wasStart = true;
-		bool found = false;
-		Position cur;
-		while (index < text.length)
+		while (line > 0 && index < text.length)
 		{
-			if (wasStart)
-			{
-				if (cur.line == line)
-				{
-					lineStart = index;
-					found = true;
-				}
-				if (cur.line == line + 1)
-					break;
-			}
-			wasStart = false;
-			const c = decode!(UseReplacementDchar.yes)(text, index);
-			cur.character += c.codeLength!wchar;
+			const c = text.ptr[index++];
 			if (c == '\n')
 			{
-				wasStart = true;
-				cur.character = 0;
-				cur.line++;
+				line--;
+				if (line == 0)
+					return [start, index];
+				else
+					start = index;
 			}
 		}
-		if (!found)
+		// if !found
+		if (line != 0)
 			return [0, 0];
-		return [lineStart, index];
+		return [start, text.length];
 	}
 
 	/// Returns the text of a line at the given position.
@@ -262,8 +250,22 @@ struct Document
 	/// Returns the text of a line starting at line 0.
 	string lineAt(uint line)
 	{
+		return lineAtScope(line).idup;
+	}
+
+	/// Returns the line text which is only in this scope if text isn't modified
+	/// See_Also: $(LREF lineAt)
+	scope const(char)[] lineAtScope(Position position)
+	{
+		return lineAtScope(position.line);
+	}
+
+	/// Returns the line text which is only in this scope if text isn't modified
+	/// See_Also: $(LREF lineAt)
+	scope const(char)[] lineAtScope(uint line)
+	{
 		auto range = lineByteRangeAt(line);
-		return text[range[0] .. range[1]].idup;
+		return text[range[0] .. range[1]];
 	}
 
 	unittest
@@ -433,7 +435,7 @@ struct PerDocumentCache(T)
 }
 
 /// Returns a range of the identifier/word at the given position.
-uint[2] wordInLine(string line, uint character)
+uint[2] wordInLine(const(char)[] line, uint character)
 {
 	size_t index = 0;
 	uint offs = 0;

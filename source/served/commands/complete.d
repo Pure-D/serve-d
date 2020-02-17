@@ -35,39 +35,42 @@ static immutable sortPrefixDCD = "2_";
 
 CompletionItemKind convertFromDCDType(string type)
 {
-	switch (type)
+	if (type.length != 1)
+		return CompletionItemKind.text;
+
+	switch (type[0])
 	{
-	case "c": // class name
+	case 'c': // class name
 		return CompletionItemKind.class_;
-	case "i": // interface name
+	case 'i': // interface name
 		return CompletionItemKind.interface_;
-	case "s": // struct name
-	case "u": // union name
+	case 's': // struct name
+	case 'u': // union name
 		return CompletionItemKind.struct_;
-	case "a": // array
-	case "A": // associative array
-	case "v": // variable name
+	case 'a': // array
+	case 'A': // associative array
+	case 'v': // variable name
 		return CompletionItemKind.variable;
-	case "m": // member variable
+	case 'm': // member variable
 		return CompletionItemKind.field;
-	case "e": // enum member
+	case 'e': // enum member
 		return CompletionItemKind.enumMember;
-	case "k": // keyword
+	case 'k': // keyword
 		return CompletionItemKind.keyword;
-	case "f": // function
+	case 'f': // function
 		return CompletionItemKind.function_;
-	case "g": // enum name
+	case 'g': // enum name
 		return CompletionItemKind.enum_;
-	case "P": // package name
-	case "M": // module name
+	case 'P': // package name
+	case 'M': // module name
 		return CompletionItemKind.module_;
-	case "l": // alias name
+	case 'l': // alias name
 		return CompletionItemKind.reference;
-	case "t": // template name
-	case "T": // mixin template name
+	case 't': // template name
+	case 'T': // mixin template name
 		return CompletionItemKind.property;
-	case "h": // template type parameter
-	case "p": // template variadic parameter
+	case 'h': // template type parameter
+	case 'p': // template variadic parameter
 		return CompletionItemKind.typeParameter;
 	default:
 		return CompletionItemKind.text;
@@ -76,29 +79,32 @@ CompletionItemKind convertFromDCDType(string type)
 
 string sortFromDCDType(string type)
 {
-	switch (type)
+	if (type.length != 1)
+		return "9_";
+
+	switch (type[0])
 	{
-	case "m": // member variable
-	case "e": // enum member
+	case 'm': // member variable
+	case 'e': // enum member
 		return "2_";
-	case "k": // keyword
-	case "v": // variable name
-	case "f": // function
+	case 'k': // keyword
+	case 'v': // variable name
+	case 'f': // function
 		return "3_";
-	case "c": // class name
-	case "i": // interface name
-	case "s": // struct name
-	case "u": // union name
-	case "a": // array
-	case "A": // associative array
-	case "g": // enum name
-	case "P": // package name
-	case "M": // module name
-	case "l": // alias name
-	case "t": // template name
-	case "T": // mixin template name
-	case "h": // template type parameter
-	case "p": // template variadic parameter
+	case 'c': // class name
+	case 'i': // interface name
+	case 's': // struct name
+	case 'u': // union name
+	case 'a': // array
+	case 'A': // associative array
+	case 'g': // enum name
+	case 'P': // package name
+	case 'M': // module name
+	case 'l': // alias name
+	case 't': // template name
+	case 'T': // mixin template name
+	case 'h': // template type parameter
+	case 'p': // template variadic parameter
 		return "4_";
 	default:
 		return "9_";
@@ -107,34 +113,36 @@ string sortFromDCDType(string type)
 
 SymbolKind convertFromDCDSearchType(string type)
 {
-	switch (type)
+	if (type.length != 1)
+		return cast(SymbolKind) 0;
+	switch (type[0])
 	{
-	case "c":
+	case 'c':
 		return SymbolKind.class_;
-	case "i":
+	case 'i':
 		return SymbolKind.interface_;
-	case "s":
-	case "u":
+	case 's':
+	case 'u':
 		return SymbolKind.package_;
-	case "a":
-	case "A":
-	case "v":
+	case 'a':
+	case 'A':
+	case 'v':
 		return SymbolKind.variable;
-	case "m":
-	case "e":
+	case 'm':
+	case 'e':
 		return SymbolKind.field;
-	case "f":
-	case "l":
+	case 'f':
+	case 'l':
 		return SymbolKind.function_;
-	case "g":
+	case 'g':
 		return SymbolKind.enum_;
-	case "P":
-	case "M":
+	case 'P':
+	case 'M':
 		return SymbolKind.namespace;
-	case "t":
-	case "T":
+	case 't':
+	case 'T':
 		return SymbolKind.property;
-	case "k":
+	case 'k':
 	default:
 		return cast(SymbolKind) 0;
 	}
@@ -142,27 +150,29 @@ SymbolKind convertFromDCDSearchType(string type)
 
 SymbolKind convertFromDscannerType(string type)
 {
-	switch (type)
+	if (type.length != 1)
+		return cast(SymbolKind) 0;
+	switch (type[0])
 	{
-	case "g":
+	case 'g':
 		return SymbolKind.enum_;
-	case "e":
+	case 'e':
 		return SymbolKind.field;
-	case "v":
+	case 'v':
 		return SymbolKind.variable;
-	case "i":
+	case 'i':
 		return SymbolKind.interface_;
-	case "c":
+	case 'c':
 		return SymbolKind.class_;
-	case "s":
+	case 's':
 		return SymbolKind.class_;
-	case "f":
+	case 'f':
 		return SymbolKind.function_;
-	case "u":
+	case 'u':
 		return SymbolKind.class_;
-	case "T":
+	case 'T':
 		return SymbolKind.property;
-	case "a":
+	case 'a':
 		return SymbolKind.field;
 	default:
 		return cast(SymbolKind) 0;
@@ -327,7 +337,7 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 	if (document.uri.toLower.endsWith("dscanner.ini"))
 	{
 		auto possibleFields = backend.get!DscannerComponent.listAllIniFields;
-		auto line = document.lineAt(params.position).strip;
+		scope line = document.lineAtScope(params.position).strip;
 		auto defaultList = CompletionList(false, possibleFields.map!(a => CompletionItem(a.name,
 				CompletionItemKind.field.opt, Optional!string.init,
 				MarkupContent(a.documentation).opt, Optional!bool.init, Optional!bool.init,
