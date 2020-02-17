@@ -560,7 +560,18 @@ ref Workspace selectedWorkspace()
 	return fallbackWorkspace;
 }
 
-WorkspaceD.Instance activeInstance;
+WorkspaceD.Instance _activeInstance;
+
+WorkspaceD.Instance activeInstance(WorkspaceD.Instance value) @property
+{
+	trace("Setting active instance to ", value ? value.cwd : "<null>", ".");
+	return _activeInstance = value;
+}
+
+WorkspaceD.Instance activeInstance() @property
+{
+	return _activeInstance;
+}
 
 string workspaceRootFor(string uri)
 {
