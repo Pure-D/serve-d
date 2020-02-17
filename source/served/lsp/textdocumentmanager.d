@@ -114,47 +114,38 @@ struct Document
 
 	size_t offsetToBytes(size_t offset)
 	{
-		size_t bytes;
-		size_t index;
-		while (index < offset && bytes < text.length)
-		{
-			const c = decode!(UseReplacementDchar.yes)(text, bytes);
-			index += c.codeLength!wchar;
-		}
-		return bytes;
+		return .countBytesUntilUTF16Index(text, offset);
 	}
 
 	size_t bytesToOffset(size_t bytes)
 	{
-		size_t offset;
-		size_t index;
-		while (index < bytes)
-		{
-			const c = decode!(UseReplacementDchar.yes)(text, index);
-			offset += c.codeLength!wchar;
-		}
-		return offset;
+		return .countUTF16Length(text[0 .. min($, bytes)]);
 	}
 
 	size_t positionToOffset(Position position)
 	{
-		size_t index = 0;
 		size_t offset = 0;
-		Position cur;
-		while (index < text.length)
+		size_t bytes = 0;
+		while (bytes < text.length && position.line > 0)
 		{
-			if (position == cur)
-				return offset;
-			const c = decode!(UseReplacementDchar.yes)(text, index);
-			offset += c.codeLength!wchar;
-			cur.character += c.codeLength!wchar;
+			const c = text.ptr[bytes];
 			if (c == '\n')
-			{
-				if (cur.line == position.line)
-					return offset - 1; // end of line
-				cur.character = 0;
-				cur.line++;
-			}
+				position.line--;
+			utf16DecodeUtf8Length(c, offset, bytes);
+		}
+
+		while (bytes < text.length && position.character > 0)
+		{
+			const c = text.ptr[bytes];
+			if (c == '\n')
+				break;
+			size_t utf16Size;
+			utf16DecodeUtf8Length(c, utf16Size, bytes);
+			if (utf16Size < position.character)
+				position.character -= utf16Size;
+			else
+				position.character = 0;
+			offset += utf16Size;
 		}
 		return offset;
 	}
@@ -162,62 +153,64 @@ struct Document
 	size_t positionToBytes(Position position)
 	{
 		size_t index = 0;
-		Position cur;
-		while (index < text.length)
+		while (index < text.length && position.line > 0)
+			if (text.ptr[index++] == '\n')
+				position.line--;
+
+		while (index < text.length && position.character > 0)
 		{
-			if (position == cur)
-				return index;
-			const c = decode!(UseReplacementDchar.yes)(text, index);
-			cur.character += c.codeLength!wchar;
+			const c = text.ptr[index];
 			if (c == '\n')
-			{
-				if (cur.line == position.line)
-					return index - 1; // end of line
-				cur.character = 0;
-				cur.line++;
-			}
+				break;
+			size_t utf16Size;
+			utf16DecodeUtf8Length(c, utf16Size, index);
+			if (utf16Size < position.character)
+				position.character -= utf16Size;
+			else
+				position.character = 0;
 		}
-		return text.length;
+		return index;
 	}
 
 	Position offsetToPosition(size_t offset)
 	{
-		size_t index = 0;
-		size_t offs = 0;
-		Position cur;
-		while (index < text.length)
+		size_t bytes;
+		size_t index;
+		size_t lastNl = -1;
+
+		Position ret;
+		while (bytes < text.length && index < offset)
 		{
-			if (offs >= offset)
-				return cur;
-			const c = decode!(UseReplacementDchar.yes)(text, index);
-			offs += c.codeLength!wchar;
-			cur.character += c.codeLength!wchar;
+			const c = text.ptr[bytes];
 			if (c == '\n')
 			{
-				cur.character = 0;
-				cur.line++;
+				ret.line++;
+				lastNl = index;
 			}
+			utf16DecodeUtf8Length(c, index, bytes);
 		}
-		return cur;
+		const start = lastNl + 1;
+		ret.character = cast(uint)(index - start);
+		return ret;
 	}
 
-	Position bytesToPosition(size_t offset)
+	Position bytesToPosition(size_t bytes)
 	{
-		size_t index = 0;
-		Position cur;
-		while (index < text.length)
+		if (bytes > text.length)
+			bytes = text.length;
+		auto part = text.ptr[0 .. bytes].representation;
+		size_t lastNl = -1;
+		Position ret;
+		foreach (i; 0 .. bytes)
 		{
-			if (index >= offset)
-				return cur;
-			const c = decode!(UseReplacementDchar.yes)(text, index);
-			cur.character += c.codeLength!wchar;
-			if (c == '\n')
+			if (part.ptr[i] == '\n')
 			{
-				cur.character = 0;
-				cur.line++;
+				ret.line++;
+				lastNl = i;
 			}
 		}
-		return cur;
+		ret.character = cast(uint)(cast(const(char)[]) part[lastNl + 1 .. $]).countUTF16Length;
+		return ret;
 	}
 
 	TextRange wordRangeAt(Position position)
@@ -517,20 +510,54 @@ unittest
 	assert(ptr is doc.text.ptr);
 }
 
-size_t countUTF16Length(const(char)[] s)
+pragma(inline, true) private void utf16DecodeUtf8Length(char c,
+		ref size_t utf16Index, ref size_t utf8Index) @safe nothrow @nogc
+{
+	switch (c & 0b1111_0000)
+	{
+	case 0b1110_0000:
+		// assume valid encoding (no wrong surrogates)
+		utf16Index++;
+		utf8Index += 3;
+		break;
+	case 0b1111_0000:
+		utf16Index += 2;
+		utf8Index += 4;
+		break;
+	case 0b1100_0000:
+	case 0b1101_0000:
+		utf16Index++;
+		utf8Index += 2;
+		break;
+	default:
+		utf16Index++;
+		utf8Index++;
+		break;
+	}
+}
+
+pragma(inline, true) size_t countUTF16Length(scope const(char)[] text) @safe nothrow @nogc
 {
 	size_t offset;
 	size_t index;
-	while (index < s.length)
-	{
-		const c = decode!(UseReplacementDchar.yes)(s, index);
-		offset += c.codeLength!wchar;
-	}
+	while (index < text.length)
+		utf16DecodeUtf8Length((() @trusted => text.ptr[index])(), offset, index);
 	return offset;
+}
+
+pragma(inline, true) size_t countBytesUntilUTF16Index(scope const(char)[] text, size_t utf16Offset) @safe nothrow @nogc
+{
+	size_t bytes;
+	size_t offset;
+	while (offset < utf16Offset && bytes < text.length)
+		utf16DecodeUtf8Length((() @trusted => text.ptr[bytes])(), offset, bytes);
+	return bytes;
 }
 
 version (unittest)
 {
+	import core.time;
+
 	Document testUnicodeDocument = Document.nullDocumentOwnMemory(cast(char[]) `///
 /// Copyright © 2020 Somebody (not actually™) x3
 ///
@@ -670,46 +697,93 @@ void main() {
 		size_t[PositionCount] testOffsets;
 		Position[PositionCount] testPositions;
 
-		size_t lengthUtf16 = testUnicodeDocument.text.codeLength!wchar;
+		static immutable funs = [
+			"offsetToBytes", "offsetToPosition", "bytesToOffset", "bytesToPosition",
+			"positionToOffset", "positionToBytes"
+		];
 
-		foreach (i, ref v; testOffsets)
-		{
-			v = uniform(0, lengthUtf16);
-			testBytes[i] = testUnicodeDocument.offsetToBytes(v);
-			testPositions[i] = testUnicodeDocument.offsetToPosition(v);
-		}
+		size_t debugSum;
+
+		size_t lengthUtf16 = testUnicodeDocument.text.codeLength!wchar;
+		enum TestRepeats = 10;
+		Duration[TestRepeats][funs.length] times;
 
 		StopWatch sw;
-		static foreach (iterations; [1e2, 1e3, 1e4, 1e5])
+		static foreach (iterations; [
+				1e3, 1e4, /* 1e5 */
+			])
 		{
 			writeln("==================");
-			writeln("Timing ", iterations, "x", PositionCount, " iterations:");
-			static foreach (fun; [
-					"offsetToBytes", "offsetToPosition", "bytesToOffset",
-					"bytesToPosition", "positionToOffset", "positionToBytes"
-				])
+			writeln("Timing ", iterations, "x", PositionCount, "x", TestRepeats, " iterations:");
+			foreach (ref row; times)
+				foreach (ref col; row)
+					col = Duration.zero;
+
+			static foreach (t; 0 .. TestRepeats)
 			{
-				sw.reset();
-				sw.start();
-				foreach (i; 0 .. iterations)
+				foreach (i, ref v; testOffsets)
 				{
-					foreach (v; 0 .. PositionCount)
-					{
-						static if (fun[0] == 'b')
-							mixin("testUnicodeDocument." ~ fun ~ "(testBytes[v]);");
-						else static if (fun[0] == 'o')
-							mixin("testUnicodeDocument." ~ fun ~ "(testOffsets[v]);");
-						else static if (fun[0] == 'p')
-							mixin("testUnicodeDocument." ~ fun ~ "(testPositions[v]);");
-						else
-							static assert(false);
-					}
+					v = uniform(0, lengthUtf16);
+					testBytes[i] = testUnicodeDocument.offsetToBytes(v);
+					testPositions[i] = testUnicodeDocument.offsetToPosition(v);
 				}
-				sw.stop();
-				writeln(fun, ": ", sw.peek);
+				static foreach (fi, fun; funs)
+				{
+					sw.reset();
+					sw.start();
+					foreach (i; 0 .. iterations)
+					{
+						foreach (v; 0 .. PositionCount)
+						{
+							static if (fun[0] == 'b')
+								mixin("debugSum |= testUnicodeDocument." ~ fun ~ "(testBytes[v]).sumVal;");
+							else static if (fun[0] == 'o')
+								mixin("debugSum |= testUnicodeDocument." ~ fun ~ "(testOffsets[v]).sumVal;");
+							else static if (fun[0] == 'p')
+								mixin("debugSum |= testUnicodeDocument." ~ fun ~ "(testPositions[v]).sumVal;");
+							else
+								static assert(false);
+						}
+					}
+					sw.stop();
+					times[fi][t] = sw.peek;
+				}
+			}
+			static foreach (fi, fun; funs)
+			{
+				writeln(fun, ": ", formatDurationDistribution(times[fi]));
 			}
 			writeln();
 			writeln();
 		}
+
+		writeln("tricking the optimizer", debugSum);
+	}
+
+	private pragma(inline, true) size_t sumVal(size_t v) pure @safe nothrow @nogc
+	{
+		return v;
+	}
+
+	private pragma(inline, true) size_t sumVal(Position v) pure @trusted nothrow @nogc
+	{
+		return cast(size_t)*(cast(ulong*)&v);
+	}
+
+	private string formatDurationDistribution(size_t n)(Duration[n] durs)
+	{
+		import std.algorithm : fold, map, sort, sum;
+		import std.format : format;
+		import std.math : sqrt;
+
+		Duration total = durs[].fold!"a+b";
+		sort!"a<b"(durs[]);
+		double msAvg = cast(double) total.total!"hnsecs" / 10_000.0 / n;
+		double msMedian = cast(double) durs[$ / 2].total!"hnsecs" / 10_000.0;
+		double[n] diffs = 0;
+		foreach (i, dur; durs)
+			diffs[i] = (cast(double) dur.total!"hnsecs" / 10_000.0) - msAvg;
+		double msStdDeviation = diffs[].map!"a*a".sum.sqrt;
+		return format!"[avg=%.4fms, median=%.4f, sd=%.4f]"(msAvg, msMedian, msStdDeviation);
 	}
 }

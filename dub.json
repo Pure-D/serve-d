@@ -40,6 +40,19 @@
 			"dependencies": {
 				"unit-threaded": "*"
 			}
+		},
+		{
+			"name": "unittest-optimized",
+			"buildOptions": ["optimize", "debugInfo", "unittests"],
+			"targetType": "executable",
+			"mainSourceFile": "bin/ut.d",
+			"excludedSourceFiles": [
+				"source/app.d",
+				"source/served/info.d"
+			],
+			"dependencies": {
+				"unit-threaded": "*"
+			}
 		}
 	]
 }
