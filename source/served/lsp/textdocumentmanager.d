@@ -574,7 +574,11 @@ pragma(inline, true) size_t countUTF16Length(scope const(char)[] text) @safe not
 	size_t offset;
 	size_t index;
 	while (index < text.length)
-		utf16DecodeUtf8Length((() @trusted => text.ptr[index])(), offset, index);
+	{
+		const c = (() @trusted => text.ptr[index++])();
+		if (cast(byte)c >= -0x40) offset++;
+		if (c >= 0xf0) offset++;
+	}
 	return offset;
 }
 
@@ -583,7 +587,17 @@ pragma(inline, true) size_t countBytesUntilUTF16Index(scope const(char)[] text, 
 	size_t bytes;
 	size_t offset;
 	while (offset < utf16Offset && bytes < text.length)
-		utf16DecodeUtf8Length((() @trusted => text.ptr[bytes])(), offset, bytes);
+	{
+		char c = (() @trusted => text.ptr[bytes++])();
+		if (cast(byte)c >= -0x40) offset++;
+		if (c >= 0xf0) offset++;
+	}
+	while (bytes < text.length)
+	{
+		char c = (() @trusted => text.ptr[bytes])();
+		if (cast(byte)c >= -0x40) break;
+		bytes++;
+	}
 	return bytes;
 }
 
