@@ -4,10 +4,10 @@
 	"license": "MIT",
 	"targetType": "executable",
 	"dependencies": {
-		"workspace-d": "3.6.0-pre.1",
+		"workspace-d": "3.6.0-pre.2",
 		"eventsystem": "~>1.2.0",
 		"painlessjson": "1.4.0",
-		"libddoc": "0.7.0",
+		"libddoc": "0.7.1",
 		"rm-rf": "~>0.1.0",
 		"diet-complete": "~>0.0.3",
 		"emsi_containers": "0.8.0-alpha.19",
