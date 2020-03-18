@@ -74,14 +74,7 @@ void lint(Document document)
 		result ~= d;
 	}
 
-	foreach (ref existing; diagnostics[DiagnosticSlot])
-		if (existing.uri == document.uri)
-		{
-			existing.diagnostics = result;
-			updateDiagnostics(document.uri);
-			return;
-		}
-	diagnostics[DiagnosticSlot] ~= PublishDiagnosticsParams(document.uri, result);
+	createDiagnosticsFor!DiagnosticSlot(document.uri) = result;
 	updateDiagnostics(document.uri);
 }
 

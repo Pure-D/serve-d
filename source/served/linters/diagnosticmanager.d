@@ -38,6 +38,26 @@ void combineDiagnostics()
 	}
 }
 
+/// Returns a reference to existing diagnostics for a given url in a given slot or creates a new array for them and returns the reference for it.
+/// Params:
+///   slot = the diagnostic provider slot to edit
+///   uri = the document uri to attach the diagnostics array for
+ref auto createDiagnosticsFor(int slot)(string uri)
+{
+	static assert(slot < NumDiagnosticProviders);
+	foreach (ref existing; diagnostics[slot])
+		if (existing.uri == uri)
+			return existing.diagnostics;
+
+	return pushRef(diagnostics[slot], PublishDiagnosticsParams(uri, null)).diagnostics;
+}
+
+private ref T pushRef(T)(ref T[] arr, T value)
+{
+	auto len = arr.length++;
+	return arr[len] = value;
+}
+
 void updateDiagnostics(string uriHint = "")
 {
 	combineDiagnostics();
