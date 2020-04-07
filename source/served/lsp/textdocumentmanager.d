@@ -213,7 +213,7 @@ struct Document
 		return ret;
 	}
 
-	/// Returns an the position at "end" starting from the given "src" position which is assumed to be at byte "start"
+	/// Returns the position at "end" starting from the given "src" position which is assumed to be at byte "start"
 	/// Faster to quickly calculate nearby positions of known byte positions.
 	/// Falls back to $(LREF bytesToPosition) if end is before start.
 	Position movePositionBytes(Position src, size_t start, size_t end)
@@ -223,7 +223,7 @@ struct Document
 		if (end < start)
 			return bytesToPosition(end);
 
-		auto t = text[start .. end];
+		auto t = text[min($, start) .. min($, end)];
 		size_t bytes;
 		while (bytes < t.length)
 		{
