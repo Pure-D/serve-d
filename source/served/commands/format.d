@@ -43,8 +43,7 @@ string[] generateDfmtArgs(const ref UserConfiguration config, EolType overrideEo
 		int softMaxLineLength = 80;
 		if (config.editor.rulers.length == 1)
 		{
-			maxLineLength = config.editor.rulers[0];
-			softMaxLineLength = maxLineLength - 40;
+			softMaxLineLength = maxLineLength = config.editor.rulers[0];
 		}
 		else if (config.editor.rulers.length >= 2)
 		{
