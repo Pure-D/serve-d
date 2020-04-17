@@ -176,6 +176,8 @@ struct SerializablePlainSnippet
 	string documentation;
 	/// Plain text to insert assuming global level indentation. Optional if snippet is a simple string only using plain variables and snippet locations.
 	string plain;
+	/// true if this snippet shouldn't be formatted before inserting.
+	bool unformatted;
 }
 
 /// Parameters to pass when updating dub imports

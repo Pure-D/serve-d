@@ -658,7 +658,8 @@ private void provideSnippetComplete(TextDocumentPositionParams params, Workspace
 	{
 		auto item = snippet.snippetToCompletionItem;
 		item.data["level"] = JSONValue(ret.info.level.to!string);
-		item.data["format"] = toJSON(generateDfmtArgs(config, eol));
+		if (!snippet.unformatted)
+			item.data["format"] = toJSON(generateDfmtArgs(config, eol));
 		item.data["params"] = toJSON(params);
 		completion ~= item;
 	}
