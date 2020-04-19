@@ -128,6 +128,10 @@ void onFullyCreate(DocumentUri uri)
 
 void onFullyCreateDSource(DocumentUri uri)
 {
+	auto fileConfig = config(uri);
+	if (!fileConfig.d.generateModuleNames)
+		return;
+
 	string workspace = workspaceRootFor(uri);
 	auto document = documents[uri];
 	// Sending applyEdit so it is undoable

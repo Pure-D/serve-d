@@ -100,6 +100,7 @@ struct Configuration
 		int manyProjectsThreshold = 4;
 		string lintOnFileOpen = "project";
 		bool dietContextCompletion = false;
+		bool generateModuleNames = true;
 	}
 
 	struct DFmt
