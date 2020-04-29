@@ -336,6 +336,7 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 
 	if (document.uri.toLower.endsWith("dscanner.ini"))
 	{
+		trace("Providing dscanner.ini completion");
 		auto possibleFields = backend.get!DscannerComponent.listAllIniFields;
 		scope line = document.lineAtScope(params.position).strip;
 		auto defaultList = CompletionList(false, possibleFields.map!(a => CompletionItem(a.name,
@@ -375,7 +376,10 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 	else
 	{
 		if (!instance)
+		{
+			trace("Providing no completion because no instance");
 			return CompletionList.init;
+		}
 
 		if (document.languageId == "d")
 			return provideDSourceComplete(params, instance, document);
@@ -384,7 +388,10 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 		else if (document.languageId == "dml")
 			return provideDMLSourceComplete(params, instance, document);
 		else
+		{
+			tracef("Providing no completion for unknown language ID %s.", document.languageId);
 			return CompletionList.init;
+		}
 	}
 }
 
@@ -505,6 +512,7 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 	if (document.rawText.isInComment(byteOff, backend))
 		if (prefix.startsWith("///", "*", "+"))
 		{
+			trace("Providing comment completion");
 			int prefixLen = prefix[0] == '/' ? 3 : 1;
 			auto remaining = prefix[prefixLen .. $].stripLeft;
 
@@ -519,29 +527,39 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 			}
 			return CompletionList(false, completion);
 		}
+
+	bool completeDCD = instance.has!DCDComponent;
+	bool completeDoc = instance.has!DscannerComponent;
+	bool completeSnippets = doCompleteSnippets && instance.has!SnippetsComponent;
+
+	tracef("Performing regular D comment completion (DCD=%s, Documentation=%s, Snippets=%s)",
+			completeDCD, completeDoc, completeSnippets);
 	const config = workspace(params.textDocument.uri).config;
 	DCDCompletions result = DCDCompletions.empty;
 	joinAll({
-		if (instance.has!DCDComponent)
+		if (completeDCD)
 			result = instance.get!DCDComponent.listCompletion(document.rawText, byteOff).getYield;
 	}, {
-		if (instance.has!DscannerComponent)
+		if (completeDoc)
 			provideDocComplete(params, instance, document, completion, line, lineRange);
 	}, {
-		if (doCompleteSnippets && instance.has!SnippetsComponent)
+		if (completeSnippets)
 			provideSnippetComplete(params, instance, document, config, completion, byteOff);
 	});
-	switch (result.type)
+
+	if (completeDCD)
 	{
-	case DCDCompletions.Type.identifiers:
-		auto d = config.d;
-		completion ~= convertDCDIdentifiers(result.identifiers, d.argumentSnippets, d.completeNoDupes);
-		goto case;
-	case DCDCompletions.Type.calltips:
-		return CompletionList(false, completion);
-	default:
-		throw new Exception("Unexpected result from DCD:\n\t" ~ result.raw.join("\n\t"));
+		if (result.type == DCDCompletions.Type.identifiers)
+		{
+			auto d = config.d;
+			completion ~= convertDCDIdentifiers(result.identifiers, d.argumentSnippets, d.completeNoDupes);
+		}
+		else if (result.type != DCDCompletions.Type.calltips)
+		{
+			trace("Unexpected result from DCD: ", result);
+		}
 	}
+	return CompletionList(false, completion);
 }
 
 private void provideDocComplete(TextDocumentPositionParams params, WorkspaceD.Instance instance,
