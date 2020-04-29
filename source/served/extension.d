@@ -581,7 +581,6 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 		switch (manyAction)
 		{
 		case ManyProjectsAction.ask:
-			// TODO: translate
 			auto loadButton = translate!"d.served.tooManySubprojects.load";
 			auto skipButton = translate!"d.served.tooManySubprojects.skip";
 			auto res = rpc.window.requestMessage(MessageType.warning,
@@ -669,7 +668,13 @@ void doStartup(string workspaceUri)
 			try
 			{
 				if (backend.attach(instance, "dub", err))
+				{
+					scope (failure)
+						instance.detach!DubComponent;
+
+					instance.get!DubComponent.validateConfiguration();
 					loadedDub = true;
+				}
 			}
 			catch (Exception e)
 			{
