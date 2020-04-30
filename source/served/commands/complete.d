@@ -547,7 +547,7 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 			provideSnippetComplete(params, instance, document, config, completion, byteOff);
 	});
 
-	if (completeDCD)
+	if (completeDCD && result != DCDCompletions.init)
 	{
 		if (result.type == DCDCompletions.Type.identifiers)
 		{

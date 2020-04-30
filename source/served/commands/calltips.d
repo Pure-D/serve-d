@@ -10,8 +10,9 @@ import workspaced.com.dcdext;
 import workspaced.coms;
 
 import std.algorithm : max;
-import std.string : strip, stripRight;
+import std.experimental.logger;
 import std.json;
+import std.string : strip, stripRight;
 
 /**
  * Convert DCD calltips to LSP compatible `SignatureHelp` objects
@@ -140,15 +141,20 @@ SignatureHelp provideDSignatureHelp(TextDocumentPositionParams params,
 
 	DCDCompletions result = backend.best!DCDComponent(file)
 		.listCompletion(codeText, callParams.functionParensRange[0] + 1).getYield;
+
+	if (result == DCDCompletions.init)
+		return SignatureHelp.init;
+
 	switch (result.type)
 	{
 	case DCDCompletions.Type.calltips:
 		return convertDCDCalltips(dcdext,
 				result.calltips, result.symbols, callParams);
+	default:
+		trace("Unexpected result from DCD: ", result);
+		goto case;
 	case DCDCompletions.Type.identifiers:
 		return SignatureHelp.init;
-	default:
-		throw new Exception("Unexpected result from DCD");
 	}
 }
 
