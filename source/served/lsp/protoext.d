@@ -186,3 +186,25 @@ struct UpdateImportsParams
 	/// set this to false to not emit progress updates for the UI
 	bool reportProgress = true;
 }
+
+/// An ini section of the dscanner.ini which is written in form [name]
+struct DScannerIniSection
+{
+	/// A textual human readable description of the section
+	string description;
+	/// The name of the section as written in the ini
+	string name;
+	/// Features which are children of this section
+	DScannerIniFeature[] features;
+}
+
+/// A single feature in a dscanner.ini which can be turned on/off
+struct DScannerIniFeature
+{
+	/// A textual human readable description of the value
+	string description;
+	/// The name of the value
+	string name;
+	/// disabled | enabled | skip-unittest
+	string enabled;
+}

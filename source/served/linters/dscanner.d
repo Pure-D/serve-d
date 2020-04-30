@@ -14,6 +14,8 @@ import served.types;
 import workspaced.api;
 import workspaced.coms;
 
+import workspaced.com.dscanner;
+
 static immutable string DScannerDiagnosticSource = "DScanner";
 
 enum DiagnosticSlot = 0;
@@ -31,9 +33,7 @@ void lint(Document document)
 
 	auto ignoredKeys = fileConfig.dscanner.ignoredKeys;
 
-	auto ini = buildPath(instance.cwd, "dscanner.ini");
-	if (!exists(ini))
-		ini = "dscanner.ini";
+	auto ini = getDscannerIniForDocument(document.uri, instance);
 	auto issues = instance.get!DscannerComponent.lint(document.uri.uriToFile,
 			ini, document.rawText).getYield;
 	Diagnostic[] result;
@@ -82,4 +82,18 @@ void clear()
 {
 	diagnostics[DiagnosticSlot] = null;
 	updateDiagnostics();
+}
+
+string getDscannerIniForDocument(DocumentUri document, WorkspaceD.Instance instance = null)
+{
+	if (!instance)
+		instance = backend.getBestInstance!DscannerComponent(document.uriToFile);
+
+	if (!instance)
+		return "dscanner.ini";
+
+	auto ini = buildPath(instance.cwd, "dscanner.ini");
+	if (!exists(ini))
+		ini = "dscanner.ini";
+	return ini;
 }

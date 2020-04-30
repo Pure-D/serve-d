@@ -981,6 +981,43 @@ void doDscanner(DocumentLinkParams params)
 	}, delay);
 }
 
+@protocolMethod("served/getDscannerConfig")
+DScannerIniSection[] getDscannerConfig(DocumentLinkParams params)
+{
+	import served.linters.dscanner : getDscannerIniForDocument;
+
+	auto instance = backend.getBestInstance!DscannerComponent(
+			params.textDocument.uri.uriToFile);
+
+	if (!instance)
+		return null;
+
+	string ini = "dscanner.ini";
+	if (params.textDocument.uri.length)
+		ini = getDscannerIniForDocument(params.textDocument.uri, instance);
+
+	auto config = instance.get!DscannerComponent.getConfig(ini);
+
+	DScannerIniSection sec;
+	sec.description = __traits(getAttributes, typeof(config))[0].msg;
+	sec.name = __traits(getAttributes, typeof(config))[0].name;
+
+	DScannerIniFeature feature;
+	foreach (i, ref val; config.tupleof)
+	{
+		static if (is(typeof(val) == string))
+		{
+			feature = DScannerIniFeature.init;
+			feature.description = __traits(getAttributes, config.tupleof[i])[0].msg;
+			feature.name = __traits(identifier, config.tupleof[i]);
+			feature.enabled = val;
+			sec.features ~= feature;
+		}
+	}
+
+	return [sec];
+}
+
 @protocolNotification("textDocument/didSave")
 void onDidSaveDocument(DidSaveTextDocumentParams params)
 {

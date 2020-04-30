@@ -459,6 +459,38 @@ Searches for a given filename (optionally also with subfolders) and returns all 
 
 Lists all files with a given module name in the project and all dependencies and standard library.
 
+#### Request `served/doDscanner`
+
+**Params**: `DocumentLinkParams`
+
+**Returns**: `DScannerIniSection[]`
+
+Returns the current D-Scanner configuration for a given URI.
+
+```ts
+/// An ini section of the dscanner.ini which is written in form [name]
+interface DScannerIniSection
+{
+	/// A textual human readable description of the section
+	description: string;
+	/// The name of the section as written in the ini
+	name: string;
+	/// Features which are children of this section
+	features: DScannerIniFeature[]
+}
+
+/// A single feature in a dscanner.ini which can be turned on/off
+interface DScannerIniFeature
+{
+	/// A textual human readable description of the value
+	description: string;
+	/// The name of the value
+	name: string;
+	/// Enables/disables the feature or enables it with being disabled in unittests
+	enabled: "disabled" | "enabled" | "skip-unittest"
+}
+```
+
 ------
 
 #### Client notification `coded/updateSetting`
