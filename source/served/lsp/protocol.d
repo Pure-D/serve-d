@@ -404,6 +404,20 @@ struct TextRange
 		this.start = pos;
 		this.end = pos;
 	}
+
+	/// Returns: true if this range contains the position or the position is at
+	/// the edges of this range.
+	bool contains(Position position)
+	{
+		int minLine = start.line;
+		int minCol = start.character;
+		int maxLine = end.line;
+		int maxCol = end.character;
+
+		return !(position.line < minLine || position.line > maxLine
+			|| (position.line == minLine && position.character < minCol)
+			|| (position.line == maxLine && position.character > maxCol));
+	}
 }
 
 struct Location
