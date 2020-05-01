@@ -18,6 +18,7 @@ import std.algorithm : canFind, map, min, sort, startsWith, uniq;
 import std.array : array;
 import std.conv : to;
 import std.experimental.logger;
+import std.format : format;
 import std.json : JSONType, JSONValue;
 import std.path : buildNormalizedPath, isAbsolute;
 import std.regex : matchFirst, regex, replaceAll;
@@ -160,6 +161,29 @@ void addDubDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 					JSONValue(mod),
 					JSONValue(document.positionToOffset(params.range[0]))
 					]));
+	}
+
+	if (diagnostic.message.startsWith("use `is` instead of `==`",
+			"use `!is` instead of `!=`")
+		&& diagnostic.range.end.character - diagnostic.range.start.character == 2)
+	{
+		auto b = document.positionToBytes(diagnostic.range.start);
+		auto text = document.rawText[b .. $];
+
+		string target = diagnostic.message[5] == '!' ? "!=" : "==";
+		string replacement = diagnostic.message[5] == '!' ? "!is" : "is";
+
+		if (text.startsWith(target))
+		{
+			string title = format!"Change '%s' to '%s'"(target, replacement);
+			TextEditCollection[DocumentUri] changes;
+			changes[document.uri] = [TextEdit(diagnostic.range, replacement)];
+			auto action = CodeAction(title, WorkspaceEdit(changes));
+			action.isPreferred = true;
+			action.diagnostics = [diagnostic];
+			action.kind = CodeActionKind.quickfix;
+			ret ~= action;
+		}
 	}
 }
 
