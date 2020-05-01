@@ -175,12 +175,12 @@ void lint(Document document)
 						instance.get!DubComponent.path.toString, other.file, imports)) : uri;
 						related.location = Location(otherUri, TextRange(other.line - 1,
 						other.column - 1, other.line - 1, other.column));
-						extendErrorRange(related.location.range, otherUri);
+						extendErrorRange(related.location.range, instance, otherUri);
 						related.message = other.text;
 						return related;
 					}).array);
 
-			extendErrorRange(error.range, uri);
+			extendErrorRange(error.range, instance, uri, error);
 			pushError(error, uri);
 
 			foreach (i, suppl; supplemental)
@@ -202,7 +202,7 @@ void lint(Document document)
 					supplError.message = issue.text ~ "\n" ~ suppl.text;
 					if (i + 1 < supplemental.length)
 						supplError.relatedInformation = opt(error.relatedInformation.get[i + 1 .. $]);
-					extendErrorRange(supplError.range, supplUri);
+					extendErrorRange(supplError.range, instance, supplUri, supplError);
 					pushError(supplError, supplUri);
 				}
 			}
@@ -218,11 +218,26 @@ void lint(Document document)
 	}
 }
 
-void extendErrorRange(ref TextRange range, string uri)
+void extendErrorRange(ref TextRange range, WorkspaceD.Instance instance,
+	string uri, Diagnostic info = Diagnostic.init)
 {
 	auto doc = documents.tryGet(uri);
 	if (!doc.rawText.length)
 		return;
+
+	if (info.message.length)
+	{
+		auto loc = doc.positionToBytes(range.start);
+		auto result = instance.get!DubComponent.resolveDiagnosticRange(
+				doc.rawText, cast(int)loc, info.message);
+		if (result[0] != result[1])
+		{
+			auto start = doc.movePositionBytes(range.start, loc, result[0]);
+			auto end = doc.movePositionBytes(start, result[0], result[1]);
+			range = TextRange(start, end);
+			return;
+		}
+	}
 
 	range = doc.wordRangeAt(range.start);
 }
