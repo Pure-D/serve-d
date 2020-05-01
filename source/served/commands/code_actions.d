@@ -40,13 +40,13 @@ package auto moduleRegex = regex(
 package auto whitespace = regex(`\s*`);
 
 @protocolMethod("textDocument/codeAction")
-Command[] provideCodeActions(CodeActionParams params)
+CodeAction[] provideCodeActions(CodeActionParams params)
 {
 	auto document = documents[params.textDocument.uri];
 	auto instance = activeInstance = backend.getBestInstance(document.uri.uriToFile);
 	if (document.languageId != "d" || !instance)
 		return [];
-	Command[] ret;
+	CodeAction[] ret;
 	if (instance.has!DCDExtComponent) // check if extends
 	{
 		scope codeText = document.rawText.idup;
@@ -59,8 +59,8 @@ Command[] provideCodeActions(CodeActionParams params)
 				// probably extends
 				if (instance.get!DCDExtComponent.implementAll(codeText,
 						cast(int) startIndex).getYield.length > 0)
-					ret ~= Command("Implement base classes/interfaces", "code-d.implementMethods",
-							[JSONValue(document.positionToOffset(params.range.start))]);
+					ret ~= CodeAction(Command("Implement base classes/interfaces", "code-d.implementMethods",
+							[JSONValue(document.positionToOffset(params.range.start))]));
 				break;
 			}
 			if (codeText[idx] == ';' || codeText[idx] == '{' || codeText[idx] == '}')
@@ -72,110 +72,122 @@ Command[] provideCodeActions(CodeActionParams params)
 	{
 		if (diagnostic.source == DubDiagnosticSource)
 		{
-			auto match = diagnostic.message.matchFirst(importRegex);
-			if (diagnostic.message.canFind("import ") && match)
-			{
-				ret ~= Command("Import " ~ match[1], "code-d.addImport",
-						[
-							JSONValue(match[1]),
-							JSONValue(document.positionToOffset(params.range[0]))
-						]);
-			}
-			if (cast(bool)(match = diagnostic.message.matchFirst(undefinedIdentifier))
-					|| cast(bool)(match = diagnostic.message.matchFirst(undefinedTemplate))
-					|| cast(bool)(match = diagnostic.message.matchFirst(noProperty)))
-			{
-				string[] files;
-				string[] modules;
-				int lineNo;
-				joinAll({
-					files ~= instance.get!DscannerComponent.findSymbol(match[1])
-						.getYield.map!"a.file".array;
-				}, {
-					if (instance.has!DCDComponent)
-						files ~= instance.get!DCDComponent.searchSymbol(match[1]).getYield.map!"a.file".array;
-				} /*, {
-					struct Symbol
-					{
-						string project, package_;
-					}
-
-					StopWatch sw;
-					bool got;
-					Symbol[] symbols;
-					sw.start();
-					info("asking the interwebs for ", match[1]);
-					new Thread({
-						import std.net.curl : get;
-						import std.uri : encodeComponent;
-
-						auto str = get(
-						"https://symbols.webfreak.org/symbols?limit=60&identifier=" ~ encodeComponent(match[1]));
-						foreach (symbol; parseJSON(str).array)
-							symbols ~= Symbol(symbol["project"].str, symbol["package"].str);
-						got = true;
-					}).start();
-					while (sw.peek < 3.seconds && !got)
-						Fiber.yield();
-					foreach (v; symbols.sort!"a.project < b.project"
-						.uniq!"a.project == b.project")
-						ret ~= Command("Import " ~ v.package_ ~ " from dub package " ~ v.project);
-				}*/
-				);
-				info("Files: ", files);
-				foreach (file; files.sort().uniq)
-				{
-					if (!isAbsolute(file))
-						file = buildNormalizedPath(instance.cwd, file);
-					if (!fs.exists(file))
-						continue;
-					lineNo = 0;
-					foreach (line; io.File(file).byLine)
-					{
-						if (++lineNo >= 100)
-							break;
-						auto match2 = line.matchFirst(moduleRegex);
-						if (match2)
-						{
-							modules ~= match2[1].replaceAll(whitespace, "").idup;
-							break;
-						}
-					}
-				}
-				foreach (mod; modules.sort().uniq)
-					ret ~= Command("Import " ~ mod, "code-d.addImport", [
-							JSONValue(mod),
-							JSONValue(document.positionToOffset(params.range[0]))
-							]);
-			}
+			addDubDiagnostics(ret, instance, document, diagnostic, params);
 		}
 		else if (diagnostic.source == DScannerDiagnosticSource)
 		{
-			import dscanner.analysis.imports_sortedness : ImportSortednessCheck;
-
-			string key = diagnostic.code.type == JSONType.string ? diagnostic.code.str : null;
-
-			info("Diagnostic: ", diagnostic);
-
-			if (key == ImportSortednessCheck.KEY)
-			{
-				ret ~= Command("Sort imports", "code-d.sortImports",
-						[JSONValue(document.positionToOffset(params.range[0]))]);
-			}
-
-			if (key.length)
-			{
-				if (key.startsWith("dscanner."))
-					key = key["dscanner.".length .. $];
-				ret ~= Command("Ignore " ~ key ~ " warnings", "code-d.ignoreDscannerKey", [
-						diagnostic.code
-						]);
-				ret ~= Command("Ignore " ~ key ~ " warnings (this line)",
-						"code-d.ignoreDscannerKey", [diagnostic.code, JSONValue("line")]);
-			}
+			addDScannerDiagnostics(ret, instance, document, diagnostic, params);
 		}
 	}
 	return ret;
+}
+
+void addDubDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
+	Document document, Diagnostic diagnostic, CodeActionParams params)
+{
+	auto match = diagnostic.message.matchFirst(importRegex);
+	if (diagnostic.message.canFind("import ") && match)
+	{
+		ret ~= CodeAction(Command("Import " ~ match[1], "code-d.addImport",
+				[
+					JSONValue(match[1]),
+					JSONValue(document.positionToOffset(params.range[0]))
+				]));
+	}
+	if (cast(bool)(match = diagnostic.message.matchFirst(undefinedIdentifier))
+			|| cast(bool)(match = diagnostic.message.matchFirst(undefinedTemplate))
+			|| cast(bool)(match = diagnostic.message.matchFirst(noProperty)))
+	{
+		string[] files;
+		string[] modules;
+		int lineNo;
+		joinAll({
+			files ~= instance.get!DscannerComponent.findSymbol(match[1])
+				.getYield.map!"a.file".array;
+		}, {
+			if (instance.has!DCDComponent)
+				files ~= instance.get!DCDComponent.searchSymbol(match[1]).getYield.map!"a.file".array;
+		} /*, {
+			struct Symbol
+			{
+				string project, package_;
+			}
+
+			StopWatch sw;
+			bool got;
+			Symbol[] symbols;
+			sw.start();
+			info("asking the interwebs for ", match[1]);
+			new Thread({
+				import std.net.curl : get;
+				import std.uri : encodeComponent;
+
+				auto str = get(
+				"https://symbols.webfreak.org/symbols?limit=60&identifier=" ~ encodeComponent(match[1]));
+				foreach (symbol; parseJSON(str).array)
+					symbols ~= Symbol(symbol["project"].str, symbol["package"].str);
+				got = true;
+			}).start();
+			while (sw.peek < 3.seconds && !got)
+				Fiber.yield();
+			foreach (v; symbols.sort!"a.project < b.project"
+				.uniq!"a.project == b.project")
+				ret ~= Command("Import " ~ v.package_ ~ " from dub package " ~ v.project);
+		}*/
+		);
+		info("Files: ", files);
+		foreach (file; files.sort().uniq)
+		{
+			if (!isAbsolute(file))
+				file = buildNormalizedPath(instance.cwd, file);
+			if (!fs.exists(file))
+				continue;
+			lineNo = 0;
+			foreach (line; io.File(file).byLine)
+			{
+				if (++lineNo >= 100)
+					break;
+				auto match2 = line.matchFirst(moduleRegex);
+				if (match2)
+				{
+					modules ~= match2[1].replaceAll(whitespace, "").idup;
+					break;
+				}
+			}
+		}
+		foreach (mod; modules.sort().uniq)
+			ret ~= CodeAction(Command("Import " ~ mod, "code-d.addImport", [
+					JSONValue(mod),
+					JSONValue(document.positionToOffset(params.range[0]))
+					]));
+	}
+}
+
+void addDScannerDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
+	Document document, Diagnostic diagnostic, CodeActionParams params)
+{
+	import dscanner.analysis.imports_sortedness : ImportSortednessCheck;
+
+	string key = diagnostic.code.type == JSONType.string ? diagnostic.code.str : null;
+
+	info("Diagnostic: ", diagnostic);
+
+	if (key == ImportSortednessCheck.KEY)
+	{
+		ret ~= CodeAction(Command("Sort imports", "code-d.sortImports",
+				[JSONValue(document.positionToOffset(params.range[0]))]));
+	}
+
+	if (key.length)
+	{
+		if (key.startsWith("dscanner."))
+			key = key["dscanner.".length .. $];
+		ret ~= CodeAction(Command("Ignore " ~ key ~ " warnings", "code-d.ignoreDscannerKey", [
+				diagnostic.code
+				]));
+		ret ~= CodeAction(Command("Ignore " ~ key ~ " warnings (this line)",
+				"code-d.ignoreDscannerKey", [diagnostic.code, JSONValue("line")]));
+	}
 }
 
 /// Command to sort all user imports in a block at a given position in given code. Returns a list of changes to apply. (Replaces the whole block currently if anything changed, otherwise empty)

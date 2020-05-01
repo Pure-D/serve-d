@@ -428,10 +428,12 @@ struct Location
 
 struct Diagnostic
 {
+	mixin StrictOptionalSerializer;
+
 	TextRange range;
-	DiagnosticSeverity severity;
-	JSONValue code;
-	string source;
+	Optional!DiagnosticSeverity severity;
+	Optional!JSONValue code;
+	Optional!string source;
 	string message;
 	Optional!(DiagnosticRelatedInformation[]) relatedInformation;
 	Optional!(DiagnosticTag[]) tags;
@@ -728,6 +730,25 @@ struct TextDocumentClientCapabilities
 		Optional!bool relatedInformation;
 	}
 
+	struct CodeActionClientCapabilities
+	{
+		struct CodeActionLiteralSupport
+		{
+			struct CodeActionKinds
+			{
+				// CodeActionKind[]
+				string[] valueSet;
+			}
+
+			CodeActionKinds codeActionKind;
+		}
+
+		mixin StrictOptionalSerializer;
+
+		Optional!bool dynamicRegistration;
+		Optional!CodeActionLiteralSupport codeActionLiteralSupport;
+	}
+
 	Optional!SyncInfo synchronization;
 	Optional!CompletionInfo completion;
 	Optional!DynamicRegistration hover;
@@ -741,12 +762,49 @@ struct TextDocumentClientCapabilities
 	Optional!DynamicRegistration definition;
 	Optional!DynamicRegistration typeDefinition;
 	Optional!DynamicRegistration implementation;
-	Optional!DynamicRegistration codeAction;
+	Optional!CodeActionClientCapabilities codeAction;
 	Optional!DynamicRegistration codeLens;
 	Optional!DynamicRegistration documentLink;
 	Optional!DynamicRegistration colorProvider;
 	Optional!DynamicRegistration rename;
 	Optional!PublishDiagnosticsCap publishDiagnostics;
+}
+
+enum CodeActionKind : string
+{
+	empty = "",
+	quickfix = "quickfix",
+	refactor = "refactor",
+	refactorExtract = "refactor.extract",
+	refactorInline = "refactor.inline",
+	refactorRewrite = "refactor.rewrite",
+	refactorSource = "source",
+	sourceOrganizeImports = "source.organizeImports",
+}
+
+struct CodeAction
+{
+	mixin StrictOptionalSerializer;
+
+	this(Command command)
+	{
+		title = command.title;
+		this.command = command;
+	}
+
+	this(string title, WorkspaceEdit edit)
+	{
+		this.title = title;
+		this.edit = edit;
+	}
+
+	string title;
+	// CodeActionKind
+	Optional!string kind;
+	Optional!(Diagnostic[]) diagnostics;
+	Optional!bool isPreferred;
+	Optional!WorkspaceEdit edit;
+	Optional!Command command;
 }
 
 struct ClientCapabilities
