@@ -206,11 +206,11 @@ void addDScannerDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 	{
 		if (key.startsWith("dscanner."))
 			key = key["dscanner.".length .. $];
+		ret ~= CodeAction(Command("Ignore " ~ key ~ " warnings (this line)",
+				"code-d.ignoreDscannerKey", [diagnostic.code, JSONValue("line")]));
 		ret ~= CodeAction(Command("Ignore " ~ key ~ " warnings", "code-d.ignoreDscannerKey", [
 				diagnostic.code
 				]));
-		ret ~= CodeAction(Command("Ignore " ~ key ~ " warnings (this line)",
-				"code-d.ignoreDscannerKey", [diagnostic.code, JSONValue("line")]));
 	}
 }
 
