@@ -90,14 +90,15 @@ string getDscannerIniForDocument(DocumentUri document, WorkspaceD.Instance insta
 /// Returns: `false` if this issue should be discarded (handled by other issues)
 bool adjustRangeForType(ref Diagnostic d, Document document, DScannerIssue issue)
 {
+	auto p = Position(cast(uint) issue.line - 1, cast(uint) issue.column - 1);
+	d.range = TextRange(p, p);
 	switch (issue.key)
 	{
 	case null:
 		// syntax errors
 		return adjustRangeForSyntaxError(d, document, issue);
 	default:
-		d.range = document.wordRangeAt(Position(cast(uint) issue.line - 1,
-				cast(uint) issue.column - 1));
+		d.range = document.wordRangeAt(p);
 		return true;
 	}
 }
@@ -106,7 +107,7 @@ private bool adjustRangeForSyntaxError(ref Diagnostic d, Document document, DSca
 {
 	auto s = issue.description;
 
-	auto pos = Position(cast(uint) issue.line - 1, cast(uint) issue.column - 1);
+	auto pos = d.range.start;
 
 	if (s.startsWith("Line is longer than ") && s.endsWith(" characters"))
 	{
