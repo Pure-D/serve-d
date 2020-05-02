@@ -20,6 +20,7 @@ import dscanner.analysis.local_imports : LocalImportCheck;
 static immutable LocalImportCheckKEY = "dscanner.suspicious.local_imports";
 
 static immutable string DScannerDiagnosticSource = "DScanner";
+static immutable string SyntaxHintDiagnosticSource = "serve-d";
 
 enum DiagnosticSlot = 0;
 
@@ -58,6 +59,13 @@ void lint(Document document)
 		if (!d.adjustRangeForType(document, issue))
 			continue;
 		d.adjustSeverityForType(document, issue);
+
+		if (!d.source.isNull && d.source.get.length)
+		{
+			// handled by previous functions
+			result ~= d;
+			continue;
+		}
 
 		d.source = DScannerDiagnosticSource;
 		d.message = issue.description;
@@ -223,7 +231,34 @@ private bool adjustRangeForSyntaxError(ref Diagnostic d, Document document, DSca
 	}
 	else
 	{
-		d.range = document.wordRangeAt(pos);
+		const range = document.lineByteRangeAt(pos.line);
+		scope const line = document.rawText[range[0] .. range[1]];
+		auto chars = wordInLine(line, pos.character);
+
+		if (line[chars[0] .. chars[1]] == "auto")
+		{
+			// syntax error on the word "auto"
+			// check for foreach (auto key; value)
+
+			auto leading = line[0 .. chars[0]].stripRight;
+			if (leading.endsWith("("))
+			{
+				leading = leading[0 .. $ - 1].stripRight;
+				if (leading.endsWith("foreach", "foreach_reverse"))
+				{
+					// this is foreach (auto
+					d.source = SyntaxHintDiagnosticSource;
+					d.message = "foreach (auto key; value) is not valid D "
+						~ "syntax. Use foreach (key; value) instead.";
+					d.code = JSONValue("served.foreach-auto").opt;
+					// range is used in code_actions to remove auto
+					d.range = TextRange(pos.line, chars[0], pos.line, chars[1]);
+					return true;
+				}
+			}
+		}
+
+		d.range = TextRange(pos.line, chars[0], pos.line, chars[1]);
 	}
 	return true;
 }
@@ -338,8 +373,17 @@ version (unittest)
 			foreach (issue; issues)
 			{
 				Diagnostic d;
-				d.adjustRangeForType(document, issue);
+				if (!d.adjustRangeForType(document, issue))
+					continue;
 				d.adjustSeverityForType(document, issue);
+
+				if (!d.source.isNull && d.source.get.length)
+				{
+					// handled by previous functions
+					diagnostics ~= d;
+					continue;
+				}
+
 				d.code = JSONValue(issue.key).opt;
 				d.message = issue.description;
 				diagnostics ~= d;
@@ -395,6 +439,26 @@ void main()
 	shouldEqual(test.syntaxErrorsAt(Position(3, 10)).length, 1);
 	shouldEqual(test.syntaxErrorsAt(Position(3, 10))[0].message, "Expected `;` instead of `{`");
 	shouldEqual(test.syntaxErrorsAt(Position(3, 10))[0].range, TextRange(3, 10, 3, 15));
+}
+
+unittest
+{
+	DiagnosticTester test = new DiagnosticTester("test-syntax-issues");
+
+	Document document = Document.nullDocument(q{
+void main()
+{
+	foreach (auto key; value)
+	{
+	}
+}
+});
+
+	test.build(document);
+	shouldEqual(test.diagnosticsAt(Position(0, 0), "served.foreach-auto").length, 0);
+	auto diag = test.diagnosticsAt(Position(3, 11), "served.foreach-auto");
+	shouldEqual(diag.length, 1);
+	shouldEqual(diag[0].range, TextRange(3, 10, 3, 14));
 }
 
 unittest

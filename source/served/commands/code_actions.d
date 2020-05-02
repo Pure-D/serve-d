@@ -11,7 +11,7 @@ import workspaced.coms;
 
 import served.commands.format : generateDfmtArgs;
 
-import served.linters.dscanner : DScannerDiagnosticSource;
+import served.linters.dscanner : DScannerDiagnosticSource, SyntaxHintDiagnosticSource;
 import served.linters.dub : DubDiagnosticSource;
 
 import std.algorithm : canFind, map, min, sort, startsWith, uniq;
@@ -78,6 +78,10 @@ CodeAction[] provideCodeActions(CodeActionParams params)
 		else if (diagnostic.source == DScannerDiagnosticSource)
 		{
 			addDScannerDiagnostics(ret, instance, document, diagnostic, params);
+		}
+		else if (diagnostic.source == SyntaxHintDiagnosticSource)
+		{
+			addSyntaxDiagnostics(ret, instance, document, diagnostic, params);
 		}
 	}
 	return ret;
@@ -211,6 +215,44 @@ void addDScannerDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 		ret ~= CodeAction(Command("Ignore " ~ key ~ " warnings", "code-d.ignoreDscannerKey", [
 				diagnostic.code
 				]));
+	}
+}
+
+void addSyntaxDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
+	Document document, Diagnostic diagnostic, CodeActionParams params)
+{
+	string key = diagnostic.code.type == JSONType.string ? diagnostic.code.str : null;
+	switch (key)
+	{
+	case "served.foreach-auto":
+		auto b = document.positionToBytes(diagnostic.range.start);
+		auto text = document.rawText[b .. $];
+
+		if (text.startsWith("auto"))
+		{
+			auto range = diagnostic.range;
+			size_t offset = 4;
+			foreach (i, dchar c; text[4 .. $])
+			{
+				offset = 4 + i;
+				if (!isIdentifierSeparatingChar(c))
+					break;
+			}
+			range.end = range.start;
+			range.end.character += offset;
+			string title = "Remove 'auto' to fix syntax";
+			TextEditCollection[DocumentUri] changes;
+			changes[document.uri] = [TextEdit(range, "")];
+			auto action = CodeAction(title, WorkspaceEdit(changes));
+			action.isPreferred = true;
+			action.diagnostics = [diagnostic];
+			action.kind = CodeActionKind.quickfix;
+			ret ~= action;
+		}
+		break;
+	default:
+		warning("No diagnostic fix for our own diagnostic: ", diagnostic);
+		break;
 	}
 }
 
