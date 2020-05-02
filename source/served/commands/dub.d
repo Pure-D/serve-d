@@ -320,26 +320,6 @@ Task[] provideBuildTasks()
 			t.source = "dub";
 			t.definition = JSONValue([
 					"type": JSONValue("dub"),
-					"run": JSONValue(false),
-					"compiler": JSONValue(dub.compiler),
-					"archType": JSONValue(dub.archType),
-					"buildType": JSONValue(dub.buildType),
-					"configuration": JSONValue(dub.configuration)
-					]);
-			t.group = Task.Group.build;
-			t.exec = [
-				workspace.config.d.dubPath.userPath, "build", "--compiler=" ~ dub.compiler,
-				"-a=" ~ dub.archType, "-b=" ~ dub.buildType, "-c=" ~ dub.configuration
-			].fixEmptyArgs;
-			t.scope_ = uri;
-			t.name = "Build " ~ dub.name;
-			ret ~= t;
-		}
-		{
-			Task t;
-			t.source = "dub";
-			t.definition = JSONValue([
-					"type": JSONValue("dub"),
 					"run": JSONValue(true),
 					"compiler": JSONValue(dub.compiler),
 					"archType": JSONValue(dub.archType),
@@ -353,6 +333,46 @@ Task[] provideBuildTasks()
 			].fixEmptyArgs;
 			t.scope_ = uri;
 			t.name = "Run " ~ dub.name;
+			ret ~= t;
+		}
+		{
+			Task t;
+			t.source = "dub";
+			t.definition = JSONValue([
+					"type": JSONValue("dub"),
+					"test": JSONValue(true),
+					"compiler": JSONValue(dub.compiler),
+					"archType": JSONValue(dub.archType),
+					"buildType": JSONValue(dub.buildType),
+					"configuration": JSONValue(dub.configuration)
+					]);
+			t.group = Task.Group.test;
+			t.exec = [
+				workspace.config.d.dubPath.userPath, "test", "--compiler=" ~ dub.compiler,
+				"-a=" ~ dub.archType, "-b=" ~ dub.buildType, "-c=" ~ dub.configuration
+			].fixEmptyArgs;
+			t.scope_ = uri;
+			t.name = "Test " ~ dub.name;
+			ret ~= t;
+		}
+		{
+			Task t;
+			t.source = "dub";
+			t.definition = JSONValue([
+					"type": JSONValue("dub"),
+					"run": JSONValue(false),
+					"compiler": JSONValue(dub.compiler),
+					"archType": JSONValue(dub.archType),
+					"buildType": JSONValue(dub.buildType),
+					"configuration": JSONValue(dub.configuration)
+					]);
+			t.group = Task.Group.build;
+			t.exec = [
+				workspace.config.d.dubPath.userPath, "build", "--compiler=" ~ dub.compiler,
+				"-a=" ~ dub.archType, "-b=" ~ dub.buildType, "-c=" ~ dub.configuration
+			].fixEmptyArgs;
+			t.scope_ = uri;
+			t.name = "Build " ~ dub.name;
 			ret ~= t;
 		}
 		{
@@ -375,26 +395,6 @@ Task[] provideBuildTasks()
 			].fixEmptyArgs;
 			t.scope_ = uri;
 			t.name = "Rebuild " ~ dub.name;
-			ret ~= t;
-		}
-		{
-			Task t;
-			t.source = "dub";
-			t.definition = JSONValue([
-					"type": JSONValue("dub"),
-					"test": JSONValue(true),
-					"compiler": JSONValue(dub.compiler),
-					"archType": JSONValue(dub.archType),
-					"buildType": JSONValue(dub.buildType),
-					"configuration": JSONValue(dub.configuration)
-					]);
-			t.group = Task.Group.test;
-			t.exec = [
-				workspace.config.d.dubPath.userPath, "test", "--compiler=" ~ dub.compiler,
-				"-a=" ~ dub.archType, "-b=" ~ dub.buildType, "-c=" ~ dub.configuration
-			].fixEmptyArgs;
-			t.scope_ = uri;
-			t.name = "Test " ~ dub.name;
 			ret ~= t;
 		}
 	}
