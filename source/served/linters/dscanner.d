@@ -236,7 +236,7 @@ void adjustSeverityForType(ref Diagnostic d, Document, DScannerIssue issue)
 	}
 }
 
-unittest
+version (unittest)
 {
 	import dscanner.analysis.config : defaultStaticAnalysisConfig;
 	import inifiled : writeINIFile;
@@ -244,55 +244,71 @@ unittest
 	import std.file : tempDir, write;
 	import std.path : buildPath;
 	import std.range : enumerate;
-	import unit_threaded.assertions; // @suppress(dscanner.suspicious.local_imports)
+	import unit_threaded.assertions;
 
-	auto backend = new WorkspaceD();
-	// use instance-less
-	DscannerComponent dscanner = new DscannerComponent();
-	dscanner.workspaced = backend;
-
-	auto config = defaultStaticAnalysisConfig;
-	foreach (ref value; config.tupleof)
-		static if (is(typeof(value) == string))
-			value = "enabled";
-
-	auto dscannerIni = buildPath(tempDir(), "dscanner.ini");
-	writeINIFile(config, dscannerIni);
-
-	DScannerIssue[] lint(scope const(char)[] code)
+	private class DiagnosticTester
 	{
-		return dscanner.lint("", dscannerIni, code).getBlocking();
-	}
+		WorkspaceD backend;
+		DscannerComponent dscanner;
+		string dscannerIni;
 
-	DScannerIssue[] issues;
-	Diagnostic[] diagnostics;
+		DScannerIssue[] issues;
+		Diagnostic[] diagnostics;
 
-	auto diagnosticsAt(Position location)
-	{
-		return diagnostics.enumerate.filter!(a => a.value.range.contains(location));
-	}
-
-	Diagnostic[] syntaxErrorsAt(Position location)
-	{
-		return diagnosticsAt(location).filter!(a => !issues[a.index].key.length)
-			.map!"a.value"
-			.array;
-	}
-
-	void build(Document document)
-	{
-		issues = lint(document.rawText);
-
-		diagnostics = null;
-		foreach (issue; issues)
+		this(string id)
 		{
-			Diagnostic d;
-			d.adjustRangeForType(document, issue);
-			d.adjustSeverityForType(document, issue);
-			d.message = issue.description;
-			diagnostics ~= d;
+			backend = new WorkspaceD();
+			// use instance-less
+			dscanner = new DscannerComponent();
+			dscanner.workspaced = backend;
+
+			auto config = defaultStaticAnalysisConfig;
+			foreach (ref value; config.tupleof)
+				static if (is(typeof(value) == string))
+					value = "enabled";
+
+			dscannerIni = buildPath(tempDir(), id ~ "-dscanner.ini");
+			writeINIFile(config, dscannerIni);
+		}
+
+		DScannerIssue[] lint(scope const(char)[] code)
+		{
+			return dscanner.lint("", dscannerIni, code).getBlocking();
+		}
+
+		auto diagnosticsAt(Position location)
+		{
+			return diagnostics.enumerate.filter!(a
+				=> a.value.range.contains(location));
+		}
+
+		Diagnostic[] syntaxErrorsAt(Position location)
+		{
+			return diagnosticsAt(location).filter!(a => !issues[a.index].key.length)
+				.map!"a.value"
+				.array;
+		}
+
+		void build(Document document)
+		{
+			issues = lint(document.rawText);
+
+			diagnostics = null;
+			foreach (issue; issues)
+			{
+				Diagnostic d;
+				d.adjustRangeForType(document, issue);
+				d.adjustSeverityForType(document, issue);
+				d.message = issue.description;
+				diagnostics ~= d;
+			}
 		}
 	}
+}
+
+unittest
+{
+	DiagnosticTester test = new DiagnosticTester("test-syntax-errors");
 
 	Document document = Document.nullDocument(q{
 void main()
@@ -302,11 +318,11 @@ void main()
 }
 });
 
-	build(document);
-	shouldEqual(syntaxErrorsAt(Position(0, 0)).length, 0);
-	shouldEqual(syntaxErrorsAt(Position(3, 4)).length, 1);
-	shouldEqual(syntaxErrorsAt(Position(3, 4))[0].message, "Expected `(` instead of `x`");
-	shouldEqual(syntaxErrorsAt(Position(3, 4))[0].range, TextRange(3, 1, 3, 5));
+	test.build(document);
+	shouldEqual(test.syntaxErrorsAt(Position(0, 0)).length, 0);
+	shouldEqual(test.syntaxErrorsAt(Position(3, 4)).length, 1);
+	shouldEqual(test.syntaxErrorsAt(Position(3, 4))[0].message, "Expected `(` instead of `x`");
+	shouldEqual(test.syntaxErrorsAt(Position(3, 4))[0].range, TextRange(3, 1, 3, 5));
 
 	document = Document.nullDocument(q{
 void main()
@@ -315,12 +331,12 @@ void main()
 }
 });
 
-	build(document);
-	shouldEqual(syntaxErrorsAt(Position(0, 0)).length, 0);
-	shouldEqual(syntaxErrorsAt(Position(3, 3)).length, 0);
-	shouldEqual(syntaxErrorsAt(Position(3, 4)).length, 1);
-	shouldEqual(syntaxErrorsAt(Position(3, 4))[0].message, "Expected `;` instead of `}`");
-	shouldEqual(syntaxErrorsAt(Position(3, 4))[0].range, TextRange(3, 4, 3, 6));
+	test.build(document);
+	shouldEqual(test.syntaxErrorsAt(Position(0, 0)).length, 0);
+	shouldEqual(test.syntaxErrorsAt(Position(3, 3)).length, 0);
+	shouldEqual(test.syntaxErrorsAt(Position(3, 4)).length, 1);
+	shouldEqual(test.syntaxErrorsAt(Position(3, 4))[0].message, "Expected `;` instead of `}`");
+	shouldEqual(test.syntaxErrorsAt(Position(3, 4))[0].range, TextRange(3, 4, 3, 6));
 
 	document = Document.nullDocument(q{
 void main()
@@ -329,12 +345,12 @@ void main()
 }
 });
 
-	build(document);
-	shouldEqual(syntaxErrorsAt(Position(3, 3)).length, 0);
-	shouldEqual(syntaxErrorsAt(Position(3, 3)).length, 0);
-	shouldEqual(syntaxErrorsAt(Position(3, 4)).length, 0);
-	shouldEqual(syntaxErrorsAt(Position(3, 9)).length, 0);
-	shouldEqual(syntaxErrorsAt(Position(3, 10)).length, 1);
-	shouldEqual(syntaxErrorsAt(Position(3, 10))[0].message, "Expected `;` instead of `{`");
-	shouldEqual(syntaxErrorsAt(Position(3, 10))[0].range, TextRange(3, 10, 3, 15));
+	test.build(document);
+	shouldEqual(test.syntaxErrorsAt(Position(3, 3)).length, 0);
+	shouldEqual(test.syntaxErrorsAt(Position(3, 3)).length, 0);
+	shouldEqual(test.syntaxErrorsAt(Position(3, 4)).length, 0);
+	shouldEqual(test.syntaxErrorsAt(Position(3, 9)).length, 0);
+	shouldEqual(test.syntaxErrorsAt(Position(3, 10)).length, 1);
+	shouldEqual(test.syntaxErrorsAt(Position(3, 10))[0].message, "Expected `;` instead of `{`");
+	shouldEqual(test.syntaxErrorsAt(Position(3, 10))[0].range, TextRange(3, 10, 3, 15));
 }
