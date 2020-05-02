@@ -732,6 +732,7 @@ void main() {
 		assert(testUnicodeDocument.positionToBytes(Position(uint.max, uint.max)) == maxBytes);
 	}
 
+	version (none)
 	@("character transform benchmarks")
 	unittest
 	{
