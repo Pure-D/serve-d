@@ -16,6 +16,9 @@ import workspaced.coms;
 
 import workspaced.com.dscanner;
 
+import dscanner.analysis.local_imports : LocalImportCheck;
+static immutable LocalImportCheckKEY = "dscanner.suspicious.local_imports";
+
 static immutable string DScannerDiagnosticSource = "DScanner";
 
 enum DiagnosticSlot = 0;
@@ -97,6 +100,10 @@ bool adjustRangeForType(ref Diagnostic d, Document document, DScannerIssue issue
 	case null:
 		// syntax errors
 		return adjustRangeForSyntaxError(d, document, issue);
+	case LocalImportCheckKEY:
+		if (adjustRangeForLocalImportsError(d, document, issue))
+			return true;
+		goto default;
 	default:
 		d.range = document.wordRangeAt(p);
 		return true;
@@ -221,6 +228,30 @@ private bool adjustRangeForSyntaxError(ref Diagnostic d, Document document, DSca
 	return true;
 }
 
+// adjusts error location of
+// import |std.stdio;
+// to
+// ~import std.stdio;~
+private bool adjustRangeForLocalImportsError(ref Diagnostic d,
+	Document document, DScannerIssue issue)
+{
+	const bytes = document.positionToBytes(d.range.start);
+	scope const text = document.rawText;
+
+	const start = text[0 .. bytes].lastIndexOf("import");
+	if (start == -1)
+		return false;
+	const end = text[bytes .. $].indexOf(";");
+	if (end == -1)
+		return false;
+
+	const startPos = document.movePositionBytes(d.range.start, bytes, start);
+	const endPos = document.movePositionBytes(d.range.start, bytes, bytes + end + 1);
+
+	d.range = TextRange(startPos, endPos);
+	return true;
+}
+
 void adjustSeverityForType(ref Diagnostic d, Document, DScannerIssue issue)
 {
 	if (issue.key == "dscanner.suspicious.unused_parameter"
@@ -282,6 +313,16 @@ version (unittest)
 				=> a.value.range.contains(location));
 		}
 
+		Diagnostic[] diagnosticsAt(Position location, string key)
+		{
+			return diagnostics
+				.filter!(a
+					=> a.range.contains(location)
+					&& a.code.get.type == JSONType.string
+					&& a.code.get.str == key)
+				.array;
+		}
+
 		Diagnostic[] syntaxErrorsAt(Position location)
 		{
 			return diagnosticsAt(location).filter!(a => !issues[a.index].key.length)
@@ -299,6 +340,7 @@ version (unittest)
 				Diagnostic d;
 				d.adjustRangeForType(document, issue);
 				d.adjustSeverityForType(document, issue);
+				d.code = JSONValue(issue.key).opt;
 				d.message = issue.description;
 				diagnostics ~= d;
 			}
@@ -353,4 +395,24 @@ void main()
 	shouldEqual(test.syntaxErrorsAt(Position(3, 10)).length, 1);
 	shouldEqual(test.syntaxErrorsAt(Position(3, 10))[0].message, "Expected `;` instead of `{`");
 	shouldEqual(test.syntaxErrorsAt(Position(3, 10))[0].range, TextRange(3, 10, 3, 15));
+}
+
+unittest
+{
+	DiagnosticTester test = new DiagnosticTester("test-suspicious-local-imports");
+
+	Document document = Document.nullDocument(q{
+void main()
+{
+	import   imports.stdio;
+
+	writeln("hello");
+}
+});
+
+	test.build(document);
+	shouldEqual(test.diagnosticsAt(Position(0, 0), LocalImportCheckKEY).length, 0);
+	auto diag = test.diagnosticsAt(Position(3, 11), LocalImportCheckKEY);
+	shouldEqual(diag.length, 1);
+	shouldEqual(diag[0].range, TextRange(3, 1, 3, 24));
 }
