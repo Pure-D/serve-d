@@ -784,7 +784,6 @@ void prepareDCD(WorkspaceD.Instance instance, string workspaceUri)
 	}
 
 	Exception err;
-	string startupError;
 	trace("Starting dcd");
 	if (!backend.attach(instance, "dcd", err))
 	{
