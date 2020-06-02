@@ -239,6 +239,9 @@ DubDependency[] listDependencies(string packageName)
 {
 	auto instance = activeInstance;
 	DubDependency[] ret;
+	if (!instance.has!DubComponent)
+		return ret;
+
 	auto allDeps = instance.get!DubComponent.dependencies;
 	if (!packageName.length)
 	{
