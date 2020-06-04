@@ -918,10 +918,9 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 					.filter!"!a.isNull && a.value.value.length"
 					.uniq
 					.array;
-				bool isMarkdown = docs.any!(a => a.kind == MarkupKind.markdown);
 				if (docs.length)
-					ret.documentation = MarkupContent(isMarkdown ? MarkupKind.markdown
-						: MarkupKind.plaintext, docs.map!"a.value.value".join("\n\n"));
+					ret.documentation = MarkupContent(MarkupKind.markdown,
+						docs.map!"a.value.value".join("\n\n"));
 				if (details.length)
 					ret.detail = details.map!"a.value".join("\n");
 				return ret;
@@ -936,10 +935,9 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 					.filter!"!a.isNull && a.value.value.length"
 					.uniq
 					.array;
-				bool isMarkdown = docs.any!(a => a.kind == MarkupKind.markdown);
 				if (docs.length)
-					ret.documentation = MarkupContent(isMarkdown ? MarkupKind.markdown
-						: MarkupKind.plaintext, docs.map!"a.value.value".join("\n\n"));
+					ret.documentation = MarkupContent(MarkupKind.markdown,
+						docs.map!"a.value.value".join("\n\n"));
 				return ret;
 			})
 			.array;
