@@ -14,7 +14,7 @@ import workspaced.coms;
 
 import std.algorithm : among, any, canFind, chunkBy, endsWith, filter, map, min,
 	reverse, sort, startsWith, uniq;
-import std.array : appender, array;
+import std.array : appender, array, replace;
 import std.conv : text, to;
 import std.experimental.logger;
 import std.json : JSONType, JSONValue;
@@ -478,9 +478,7 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 			info("DCD Completing Diet for ", code, " at ", offset);
 			auto dcd = instance.get!DCDComponent.listCompletion(code, cast(int) offset).getYield;
 			if (dcd.type == DCDCompletions.Type.identifiers)
-			{
-				ret = dcd.identifiers.convertDCDIdentifiers(d.argumentSnippets, d.completeNoDupes);
-			}
+				ret = dcd.identifiers.convertDCDIdentifiers(d, instance);
 		}
 	}
 	else
@@ -550,14 +548,9 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 	if (completeDCD && result != DCDCompletions.init)
 	{
 		if (result.type == DCDCompletions.Type.identifiers)
-		{
-			auto d = config.d;
-			completion ~= convertDCDIdentifiers(result.identifiers, d.argumentSnippets, d.completeNoDupes);
-		}
+			completion ~= convertDCDIdentifiers(result.identifiers, config.d, instance);
 		else if (result.type != DCDCompletions.Type.calltips)
-		{
 			trace("Unexpected result from DCD: ", result);
-		}
 	}
 	return CompletionList(false, completion);
 }
@@ -851,8 +844,13 @@ unittest
 	assert(!isInComment("int x;\n// line comment\n", 23, backend));
 }
 
-auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, bool completeNoDupes)
+auto convertDCDIdentifiers(DCDIdentifier[] identifiers, const ref UserConfiguration.D config,
+	WorkspaceD.Instance instance)
 {
+	const argumentSnippets = config.argumentSnippets;
+	const completeNoDupes = config.completeNoDupes;
+	const blockFormatDetails = config.blockFormatDetails;
+
 	CompletionItem[] completion;
 	foreach (identifier; identifiers)
 	{
@@ -863,7 +861,16 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 			item.documentation = MarkupContent(identifier.documentation.ddocToMarked);
 		if (identifier.definition.length)
 		{
-			item.detail = identifier.definition;
+			if (blockFormatDetails && instance.has!DCDExtComponent)
+			{
+				item.detail = instance.get!DCDExtComponent
+					.formatDefinitionBlock(identifier.definition);
+			}
+			else
+			{
+				item.detail = identifier.definition;
+			}
+
 			if (!completeNoDupes)
 				item.sortText = identifier.definition;
 			// TODO: only add arguments when this is a function call, eg not on template arguments
@@ -922,7 +929,7 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 					ret.documentation = MarkupContent(MarkupKind.markdown,
 						docs.map!"a.value.value".join("\n\n"));
 				if (details.length)
-					ret.detail = details.map!"a.value".join("\n");
+					ret.detail = details.map!"a.value".join(blockFormatDetails ? "\n\n" : "\n");
 				return ret;
 			})
 			.array;

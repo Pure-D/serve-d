@@ -101,6 +101,7 @@ struct Configuration
 		string lintOnFileOpen = "project";
 		bool dietContextCompletion = false;
 		bool generateModuleNames = true;
+		bool blockFormatDetails = true;
 	}
 
 	struct DFmt
