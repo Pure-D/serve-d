@@ -501,6 +501,14 @@ uint[2] wordInLine(const(char)[] line, uint character)
 				break;
 		}
 	}
+
+	if (start > line.length)
+		start = cast(uint)line.length;
+	if (end > line.length)
+		end = cast(uint)line.length;
+	if (end < start)
+		end = start;
+
 	return [start, end];
 }
 
