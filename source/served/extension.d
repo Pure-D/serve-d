@@ -29,6 +29,36 @@ import io = std.stdio;
 import workspaced.api;
 import workspaced.coms;
 
+// list of all commands for auto dispatch
+public import served.commands.calltips;
+public import served.commands.code_actions;
+public import served.commands.code_lens;
+public import served.commands.complete;
+public import served.commands.dcd_update;
+public import served.commands.definition;
+public import served.commands.dub;
+public import served.commands.file_search;
+public import served.commands.format;
+public import served.commands.symbol_search;
+public import served.workers.rename_listener;
+
+//dfmt off
+alias members = AliasSeq!(
+	__traits(derivedMembers, served.extension),
+	__traits(derivedMembers, served.commands.calltips),
+	__traits(derivedMembers, served.commands.code_actions),
+	__traits(derivedMembers, served.commands.code_lens),
+	__traits(derivedMembers, served.commands.complete),
+	__traits(derivedMembers, served.commands.dcd_update),
+	__traits(derivedMembers, served.commands.definition),
+	__traits(derivedMembers, served.commands.dub),
+	__traits(derivedMembers, served.commands.file_search),
+	__traits(derivedMembers, served.commands.format),
+	__traits(derivedMembers, served.commands.symbol_search),
+	__traits(derivedMembers, served.workers.rename_listener),
+);
+//dfmt on
+
 version (ARM)
 {
 	version = DCDFromSource;
@@ -875,35 +905,6 @@ JSONValue shutdown()
 	}, 1.seconds);
 	return JSONValue(null);
 }
-
-public import served.commands.calltips;
-public import served.commands.code_actions;
-public import served.commands.code_lens;
-public import served.commands.complete;
-public import served.commands.dcd_update;
-public import served.commands.definition;
-public import served.commands.dub;
-public import served.commands.format;
-public import served.commands.symbol_search;
-public import served.commands.file_search;
-public import served.workers.rename_listener;
-
-//dfmt off
-alias members = AliasSeq!(
-	__traits(derivedMembers, served.extension),
-	__traits(derivedMembers, served.commands.calltips),
-	__traits(derivedMembers, served.commands.code_actions),
-	__traits(derivedMembers, served.commands.code_lens),
-	__traits(derivedMembers, served.commands.complete),
-	__traits(derivedMembers, served.commands.dcd_update),
-	__traits(derivedMembers, served.commands.definition),
-	__traits(derivedMembers, served.commands.dub),
-	__traits(derivedMembers, served.commands.format),
-	__traits(derivedMembers, served.commands.symbol_search),
-	__traits(derivedMembers, served.commands.file_search),
-	__traits(derivedMembers, served.workers.rename_listener),
-);
-//dfmt on
 
 // === Protocol Notifications starting here ===
 
