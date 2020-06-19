@@ -147,91 +147,91 @@ bool updateImports(UpdateImportsParams params)
 @protocolNotification("textDocument/didSave")
 void onDidSaveDubRecipe(DidSaveTextDocumentParams params)
 {
+	auto fileName = params.textDocument.uri.uriToFile.baseName;
+	if (!fileName.among!("dub.json", "dub.sdl"))
+		return;
+
 	auto workspaceUri = workspace(params.textDocument.uri).folder.uri;
 	auto workspaceRoot = workspaceUri.uriToFile;
-	auto fileName = params.textDocument.uri.uriToFile.baseName;
 
-	if (fileName == "dub.json" || fileName == "dub.sdl")
+	info("Updating dependencies");
+	reportProgress(ProgressType.importUpgrades, 0, 10, workspaceUri);
+	if (!backend.has!DubComponent(workspaceRoot))
 	{
-		info("Updating dependencies");
-		reportProgress(ProgressType.importUpgrades, 0, 10, workspaceUri);
-		if (!backend.has!DubComponent(workspaceRoot))
+		Exception err;
+		const success = backend.attach(backend.getInstance(workspaceRoot), "dub", err);
+		if (!success)
 		{
-			Exception err;
-			const success = backend.attach(backend.getInstance(workspaceRoot), "dub", err);
-			if (!success)
+			rpc.window.showMessage(MessageType.error, translate!"d.ext.dubUpgradeFail");
+			error(err);
+			reportProgress(ProgressType.importUpgrades, 10, 10, workspaceUri);
+			return;
+		}
+	}
+	else
+	{
+		if (backend.get!DubComponent(workspaceRoot).isRunning)
+		{
+			string syntaxCheck = backend.get!DubComponent(workspaceRoot)
+				.validateRecipeSyntaxOnFileSystem();
+
+			if (syntaxCheck.length)
 			{
-				rpc.window.showMessage(MessageType.error, translate!"d.ext.dubUpgradeFail");
-				error(err);
+				rpc.window.showMessage(MessageType.error,
+						translate!"d.ext.dubInvalidRecipeSyntax"(syntaxCheck));
+				error(syntaxCheck);
 				reportProgress(ProgressType.importUpgrades, 10, 10, workspaceUri);
 				return;
 			}
+
+			rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
+					.upgrade(), MessageType.warning, translate!"d.ext.dubUpgradeFail");
 		}
 		else
 		{
-			if (backend.get!DubComponent(workspaceRoot).isRunning)
+			rpc.window.showMessage(MessageType.error, translate!"d.ext.dubUpgradeFail");
+			reportProgress(ProgressType.importUpgrades, 10, 10, workspaceUri);
+			return;
+		}
+	}
+	reportProgress(ProgressType.importUpgrades, 6, 10, workspaceUri);
+
+	setTimeout({
+		const successfulUpdate = rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
+			.updateImportPaths(true), MessageType.warning, translate!"d.ext.dubImportFail");
+		if (successfulUpdate)
+		{
+			rpc.window.runOrMessage(updateImports(UpdateImportsParams(false)),
+				MessageType.warning, translate!"d.ext.dubImportFail");
+		}
+		else
+		{
+			try
 			{
-				string syntaxCheck = backend.get!DubComponent(workspaceRoot)
-					.validateRecipeSyntaxOnFileSystem();
-
-				if (syntaxCheck.length)
-				{
-					rpc.window.showMessage(MessageType.error,
-							translate!"d.ext.dubInvalidRecipeSyntax"(syntaxCheck));
-					error(syntaxCheck);
-					reportProgress(ProgressType.importUpgrades, 10, 10, workspaceUri);
-					return;
-				}
-
-				rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
-						.upgrade(), MessageType.warning, translate!"d.ext.dubUpgradeFail");
+				updateImports(UpdateImportsParams(false));
 			}
-			else
+			catch (Exception e)
 			{
-				rpc.window.showMessage(MessageType.error, translate!"d.ext.dubUpgradeFail");
-				reportProgress(ProgressType.importUpgrades, 10, 10, workspaceUri);
-				return;
+				errorf("Failed updating imports: %s", e);
 			}
 		}
-		reportProgress(ProgressType.importUpgrades, 6, 10, workspaceUri);
+		reportProgress(ProgressType.importUpgrades, 10, 10, workspaceUri);
+	}, 200.msecs);
 
-		setTimeout({
-			const successfulUpdate = rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
-				.updateImportPaths(true), MessageType.warning, translate!"d.ext.dubImportFail");
-			if (successfulUpdate)
+	setTimeout({
+		if (!backend.get!DubComponent(workspaceRoot).isRunning)
+		{
+			Exception err;
+			if (backend.attach(backend.getInstance(workspaceRoot), "dub", err))
 			{
-				rpc.window.runOrMessage(updateImports(UpdateImportsParams(false)),
-					MessageType.warning, translate!"d.ext.dubImportFail");
+				rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
+					.updateImportPaths(true), MessageType.warning,
+					translate!"d.ext.dubRecipeMaybeBroken");
+				error(err);
 			}
-			else
-			{
-				try
-				{
-					updateImports(UpdateImportsParams(false));
-				}
-				catch (Exception e)
-				{
-					errorf("Failed updating imports: %s", e);
-				}
-			}
-			reportProgress(ProgressType.importUpgrades, 10, 10, workspaceUri);
-		}, 200.msecs);
-
-		setTimeout({
-			if (!backend.get!DubComponent(workspaceRoot).isRunning)
-			{
-				Exception err;
-				if (backend.attach(backend.getInstance(workspaceRoot), "dub", err))
-				{
-					rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
-						.updateImportPaths(true), MessageType.warning,
-						translate!"d.ext.dubRecipeMaybeBroken");
-					error(err);
-				}
-			}
-		}, 500.msecs);
-		rpc.notifyMethod("coded/updateDubTree");
-	}
+		}
+	}, 500.msecs);
+	rpc.notifyMethod("coded/updateDubTree");
 }
 
 @protocolMethod("served/listDependencies")
