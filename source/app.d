@@ -1,3 +1,23 @@
+/**
+ * Entry-point to serve-d
+ *
+ * Replaces std.stdio stdout with stderr so writeln calls don't accidentally
+ * write to the RPC output.
+ *
+ * Handles all command line arguments, possibly modifying global state variables
+ * when enabling serve-d specific protocol extensions are requested.
+ *
+ * Handles all the request/notification dispatch, calls (de)serialization of
+ * given JSON parameters and return values and responds back to the RPC.
+ *
+ * Performs periodic GC cleanup and invokes the fiber scheduler, pushing
+ * incoming RPC requests as tasks to the fiber scheduler.
+ */
+module app;
+
+// dumps a performance/GC trace log to served_trace.log
+//debug = PerfTraceLog;
+
 import core.thread;
 import core.sync.mutex;
 
@@ -19,6 +39,7 @@ import served.lsp.filereader;
 import served.lsp.jsonrpc;
 import served.types;
 import served.utils.fibermanager;
+import served.utils.trace;
 import served.utils.translate;
 
 import painlessjson;
@@ -45,6 +66,8 @@ alias Identity(I...) = I;
 
 ResponseMessage processRequest(RequestMessage msg)
 {
+	debug(PerfTraceLog) mixin(traceStatistics(__FUNCTION__));
+
 	ResponseMessage res;
 	res.id = msg.id;
 	if (msg.method == "initialize" && !initialized)
@@ -73,6 +96,8 @@ ResponseMessage processRequest(RequestMessage msg)
 					enum method = getUDAs!(symbol, protocolMethod)[0];
 					if (msg.method == method.method)
 					{
+						debug(PerfTraceLog) mixin(traceStatistics(method.method ~ ":" ~ name));
+
 						alias params = Parameters!symbol;
 						try
 						{
@@ -148,6 +173,8 @@ void processRequestObservers(T)(RequestMessage msg, T result)
 
 void processNotify(RequestMessage msg)
 {
+	debug(PerfTraceLog) mixin(traceStatistics(__FUNCTION__));
+
 	// even though the spec says the process should not stop before exit, vscode-languageserver doesn't call exit after shutdown so we just shutdown on the next request.
 	// this also makes sure we don't operate on invalid states and segfault.
 	if (msg.method == "exit" || served.extension.shutdownRequested)
@@ -177,6 +204,8 @@ void processNotify(RequestMessage msg)
 					enum method = getUDAs!(symbol, protocolNotification)[0];
 					if (msg.method == method.method)
 					{
+						debug(PerfTraceLog) mixin(traceStatistics(method.method ~ ":" ~ name));
+
 						alias params = Parameters!symbol;
 						try
 						{
@@ -340,9 +369,34 @@ int main(string[] args)
 	rpc.call();
 	trace("RPC started");
 
-	int gcCollects;
+	int gcCollects, totalGcCollects;
 	StopWatch gcInterval;
 	gcInterval.start();
+
+	scope (exit)
+	{
+		debug(PerfTraceLog)
+		{
+			import core.memory : GC;
+			import std.stdio : File;
+
+			auto traceLog = File("served_trace.log", "w");
+
+			auto totalAllocated = GC.stats().allocatedInCurrentThread;
+			auto profileStats = GC.profileStats();
+
+			traceLog.writeln("manually collected GC ", totalGcCollects, " times");
+			traceLog.writeln("total ", profileStats.numCollections, " collections");
+			traceLog.writeln("total collection time: ", profileStats.totalCollectionTime);
+			traceLog.writeln("total pause time: ", profileStats.totalPauseTime);
+			traceLog.writeln("max collection time: ", profileStats.maxCollectionTime);
+			traceLog.writeln("max pause time: ", profileStats.maxPauseTime);
+			traceLog.writeln("total allocated in main thread: ", totalAllocated);
+			traceLog.writeln();
+
+			dumpTraceInfos(traceLog);
+		}
+	}
 
 	fibers ~= rpc;
 
@@ -378,6 +432,7 @@ int main(string[] args)
 			GC.collect();
 
 			gcCollects++;
+			totalGcCollects++;
 			if (gcCollects > 5)
 			{
 				GC.minimize();
