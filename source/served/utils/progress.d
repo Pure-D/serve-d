@@ -40,13 +40,6 @@ enum ProgressType
 	@withProgress importUpgrades,
 }
 
-__gshared MonoTime startupTime;
-
-shared static this()
-{
-	startupTime = MonoTime.currTime();
-}
-
 void reportProgress(Args...)(bool condition, ProgressType type, size_t step, size_t max, Args args)
 {
 	if (condition)

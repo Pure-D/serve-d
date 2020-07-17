@@ -62,8 +62,6 @@ shared static this()
 
 bool initialized = false;
 
-alias Identity(I...) = I;
-
 ResponseMessage processRequest(RequestMessage msg)
 {
 	debug(PerfTraceLog) mixin(traceStatistics(__FUNCTION__));
@@ -84,30 +82,12 @@ ResponseMessage processRequest(RequestMessage msg)
 		res.error = ResponseError(ErrorCode.serverNotInitialized);
 		return res;
 	}
-	foreach (name; served.extension.members)
-	{
-		static if (__traits(compiles, __traits(getMember, served.extension, name)))
-		{
-			alias symbol = Identity!(__traits(getMember, served.extension, name));
-			static if (symbol.length == 1 && hasUDA!(symbol, protocolMethod))
-			{
-				static if (isSomeFunction!symbol && __traits(getProtection, symbol[0]) == "public")
-				{
-					enum method = getUDAs!(symbol, protocolMethod)[0];
-					if (msg.method == method.method)
-					{
-						debug(PerfTraceLog) mixin(traceStatistics(method.method ~ ":" ~ name));
 
-						alias params = Parameters!symbol;
+	bool found = emitProtocol!(protocolMethod, (name, callSymbol, uda) {
 						try
 						{
 							trace("Calling " ~ name);
-							static if (params.length == 0)
-								auto requestResult = symbol[0]();
-							else static if (params.length == 1)
-								auto requestResult = symbol[0](fromJSON!(Parameters!symbol[0])(msg.params));
-							else
-								static assert(0, "Can't have more than one argument");
+			auto requestResult = callSymbol();
 
 							static if (is(typeof(requestResult) : JSONValue))
 								res.result = requestResult;
@@ -115,61 +95,35 @@ ResponseMessage processRequest(RequestMessage msg)
 								res.result = toJSON(requestResult);
 
 							processRequestObservers(msg, requestResult);
-							return res;
 						}
 						catch (MethodException e)
 						{
 							res.error = e.error;
-							return res;
 						}
-					}
-				}
-			}
-		}
-	}
+	}, true)(msg.method, msg.params);
 
+	if (!found)
+	{
 	io.stderr.writeln(msg);
 	res.error = ResponseError(ErrorCode.methodNotFound);
+	}
+
 	return res;
 }
 
 void processRequestObservers(T)(RequestMessage msg, T result)
 {
-	foreach (name; served.extension.members)
-	{
-		static if (__traits(compiles, __traits(getMember, served.extension, name)))
-		{
-			alias symbol = Identity!(__traits(getMember, served.extension, name));
-			static if (symbol.length == 1 && hasUDA!(symbol, postProtocolMethod))
-			{
-				static if (isSomeFunction!symbol && __traits(getProtection, symbol[0]) == "public")
-				{
-					enum method = getUDAs!(symbol, protocolMethod)[0];
-					if (msg.method == method.method)
-					{
-						alias params = Parameters!symbol;
+	emitProtocol!(postProtocolMethod, (name, callSymbol, uda) {
 						try
 						{
-							trace("Calling post " ~ name);
-							static if (params.length == 0)
-								symbol[0]();
-							else static if (params.length == 1)
-								symbol[0](fromJSON!(Parameters!symbol[0])(msg.params));
-							else static if (params.length == 2)
-								symbol[0](fromJSON!(Parameters!symbol[0])(msg.params), result);
-							else
-								static assert(0, "Can't have more than one argument");
+			callSymbol();
 						}
 						catch (MethodException e)
 						{
 							error("Error in post-protocolMethod: ", e);
 						}
+	}, false)(msg.method, msg.params, result);
 					}
-				}
-			}
-		}
-	}
-}
 
 void processNotify(RequestMessage msg)
 {
@@ -192,39 +146,17 @@ void processNotify(RequestMessage msg)
 	if (msg.method == "workspace/didChangeConfiguration")
 		served.extension.processConfigChange(msg.params["settings"].parseConfiguration);
 	documents.process(msg);
-	foreach (name; served.extension.members)
-	{
-		static if (__traits(compiles, __traits(getMember, served.extension, name)))
-		{
-			alias symbol = Identity!(__traits(getMember, served.extension, name));
-			static if (symbol.length == 1 && hasUDA!(symbol, protocolNotification))
-			{
-				static if (isSomeFunction!symbol && __traits(getProtection, symbol[0]) == "public")
-				{
-					enum method = getUDAs!(symbol, protocolNotification)[0];
-					if (msg.method == method.method)
-					{
-						debug(PerfTraceLog) mixin(traceStatistics(method.method ~ ":" ~ name));
 
-						alias params = Parameters!symbol;
+	emitProtocol!(protocolNotification, (name, callSymbol, uda) {
 						try
 						{
-							static if (params.length == 0)
-								symbol[0]();
-							else static if (params.length == 1)
-								symbol[0](fromJSON!(Parameters!symbol[0])(msg.params));
-							else
-								static assert(0, "Can't have more than one argument");
+			callSymbol();
 						}
 						catch (MethodException e)
 						{
 							error("Failed notify: ", e);
 						}
-					}
-				}
-			}
-		}
-	}
+	}, false)(msg.method, msg.params);
 }
 
 void printVersion(io.File output = io.stdout)
@@ -249,28 +181,6 @@ void printVersion(io.File output = io.stdout)
 			Compiler.version_major.to!string, ".", Compiler.version_minor.to!string,
 			" on ", OS.os.to!string, " ", OS.endian.to!string);
 	output.writefln(BundledDependencies);
-}
-
-private string[] findDuplicates(string[] fields)
-{
-	string[] dups;
-	foreach (i, field; fields)
-	{
-		if (field == "object" || field == "served" || field == "std" || field == "io"
-				|| field == "workspaced" || field == "fs")
-			continue;
-
-		if (fields[0 .. i].canFind(field) || fields[i + 1 .. $].canFind(field))
-			dups ~= field;
-	}
-	return dups;
-}
-
-enum duplicates = findDuplicates([served.extension.members]);
-static if (duplicates.length > 0)
-{
-	pragma(msg, "duplicates: ", duplicates);
-	static assert(false, "Found duplicate method handlers of same name");
 }
 
 __gshared FiberManager fibers;

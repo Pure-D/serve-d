@@ -3,6 +3,9 @@ module served.types;
 public import served.lsp.protocol;
 public import served.lsp.protoext;
 public import served.lsp.textdocumentmanager;
+public import served.utils.events;
+
+import core.time : MonoTime;
 
 import std.algorithm;
 import std.array;
@@ -25,22 +28,9 @@ import workspaced.api;
 
 import served.lsp.jsonrpc;
 
-struct protocolMethod
-{
-	string method;
-}
-
-struct postProtocolMethod
-{
-	string method;
-}
-
-struct protocolNotification
-{
-	string method;
-}
-
 enum IncludedFeatures = ["d", "workspaces"];
+
+__gshared MonoTime startupTime;
 
 TextDocumentManager documents;
 
