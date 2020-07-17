@@ -69,7 +69,7 @@ static if (duplicates.length > 0)
 ///     overloads may consume anywhere between 0 to Args.length of these
 ///     arguments.
 /// Returns: `true` if any method has been called, `false` otherwise.
-bool emitProtocol(UDA, alias callback, bool returnFirst, Args...)(string method,
+bool emitProtocol(alias UDA, alias callback, bool returnFirst, Args...)(string method,
 		JSONValue params, Args availableExtraArgs)
 {
 	return iterateExtensionMethodsByUDA!(UDA, (name, symbol, uda) {
@@ -129,7 +129,7 @@ bool emitProtocol(UDA, alias callback, bool returnFirst, Args...)(string method,
 /// Returns: `true` if any callback returned `true`, `false` otherwise or if
 ///     none were called. If `returnFirst` is set this function returns after
 ///     the first successfull callback call.
-bool iterateExtensionMethodsByUDA(UDA, alias callback, bool returnFirst)()
+bool iterateExtensionMethodsByUDA(alias UDA, alias callback, bool returnFirst)()
 {
 	bool found = false;
 	foreach (name; served.extension.members)
