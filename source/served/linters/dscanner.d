@@ -16,11 +16,21 @@ import workspaced.coms;
 
 import workspaced.com.dscanner;
 
+import dscanner.analysis.config : StaticAnalysisConfig, Check;
+
 import dscanner.analysis.local_imports : LocalImportCheck;
+
 static immutable LocalImportCheckKEY = "dscanner.suspicious.local_imports";
 
 static immutable string DScannerDiagnosticSource = "DScanner";
 static immutable string SyntaxHintDiagnosticSource = "serve-d";
+
+//dfmt off
+static immutable StaticAnalysisConfig servedDefaultDscannerConfig = {
+	could_be_immutable_check: Check.disabled,
+	undocumented_declaration_check: Check.disabled
+};
+//dfmt on
 
 enum DiagnosticSlot = 0;
 
@@ -39,7 +49,7 @@ void lint(Document document)
 
 	auto ini = getDscannerIniForDocument(document.uri, instance);
 	auto issues = instance.get!DscannerComponent.lint(document.uri.uriToFile,
-			ini, document.rawText).getYield;
+			ini, document.rawText, false, servedDefaultDscannerConfig).getYield;
 	Diagnostic[] result;
 
 	foreach (issue; issues)
@@ -339,7 +349,8 @@ version (unittest)
 
 		DScannerIssue[] lint(scope const(char)[] code)
 		{
-			return dscanner.lint("", dscannerIni, code).getBlocking();
+			return dscanner.lint("", dscannerIni, code, false,
+				servedDefaultDscannerConfig).getBlocking();
 		}
 
 		auto diagnosticsAt(Position location)
