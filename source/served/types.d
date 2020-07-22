@@ -466,7 +466,7 @@ size_t workspaceIndex(string uri)
 	return best;
 }
 
-ref Workspace handleThings(ref Workspace workspace, string uri, bool userExecuted,
+ref Workspace handleThings(return ref Workspace workspace, string uri, bool userExecuted,
 		string file = __FILE__, size_t line = __LINE__)
 {
 	if (userExecuted)

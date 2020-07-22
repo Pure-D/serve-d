@@ -53,7 +53,7 @@ struct RecentFiles
 	FileOpenInfo[8] infos;
 
 	/// Returns a reference to some initialized FileOpenInfo with this uri
-	ref FileOpenInfo get(DocumentUri uri)
+	ref FileOpenInfo get(DocumentUri uri) return
 	{
 		auto now = Clock.currTime;
 
