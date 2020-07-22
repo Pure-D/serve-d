@@ -258,6 +258,12 @@ int main(string[] args)
 			doCompleteSnippets = true;
 			trace("Context snippets handled by serve-d");
 			break;
+		case "test-runner":
+			import served.commands.test_provider : doTrackTests;
+
+			doTrackTests = true;
+			trace("Discoverying & emitting unittests for language client");
+			break;
 		default:
 			warningf("Unknown --provide flag '%s' provided. Maybe serve-d is outdated?", provide);
 			break;

@@ -250,3 +250,35 @@ struct DScannerIniFeature
 	/// disabled | enabled | skip-unittest
 	string enabled;
 }
+
+struct UnittestProject
+{
+	/// Workspace uri which may or may not map to an actual workspace folder
+	/// but rather to some folder inside one.
+	DocumentUri workspaceUri;
+
+	/// Package name if available
+	string name;
+
+	/// List of modules, sorted by moduleName
+	UnittestModule[] modules;
+}
+
+struct UnittestModule
+{
+	string moduleName;
+	DocumentUri uri;
+	UnittestInfo[] tests;
+}
+
+struct UnittestInfo
+{
+	string id, name;
+	string containerName;
+	TextRange range;
+}
+
+struct RescanTestsParams
+{
+	string folderPrefix = null;
+}
