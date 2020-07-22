@@ -7,7 +7,7 @@
 		"workspace-d": "3.6.0-pre.6",
 		"eventsystem": "~>1.2.0",
 		"painlessjson": "1.4.0",
-		"libddoc": "0.7.2",
+		"libddoc": "0.7.3",
 		"rm-rf": "~>0.1.0",
 		"diet-complete": "~>0.0.3",
 		"emsi_containers": "0.8.0-alpha.19",
