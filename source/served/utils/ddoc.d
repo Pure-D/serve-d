@@ -254,6 +254,9 @@ MarkedString[] markdownToMarked(string md)
 			ret[$ - 1].value ~= line;
 	}
 
+	if (ret.length >= 2 && !ret[$ - 1].value.strip.length)
+		ret = ret[0 .. $ - 1];
+
 	return ret;
 }
 
