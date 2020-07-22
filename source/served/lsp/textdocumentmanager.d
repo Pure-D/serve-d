@@ -366,6 +366,41 @@ struct TextDocumentManager
 		return documentStore[idx];
 	}
 
+	/// Tries to load a given URI manually without having it received via LSP
+	/// methods. Note that a LSP close method will unload this early.
+	/// Returns: the created document
+	/// Throws: FileException in case the file doesn't exist or other file
+	///         system errors. In this case no new document should have been
+	///         inserted yet.
+	ref Document loadFromFilesystem(string uri)
+	{
+		import served.types : uriToFile;
+		import fs = std.file;
+
+		string path = uriToFile(uri);
+		auto content = fs.readText(path);
+
+		auto index = documentStore.length++;
+		documentStore[index].uri = uri;
+		documentStore[index].version_ = -1;
+		documentStore[index].setContent(content);
+		return documentStore[index];
+	}
+
+	/// Unloads the given URI so it's no longer accessible. Note that this
+	/// should only be done for documents loaded manually and never for LSP
+	/// documents as it will break all features in that file until reopened.
+	bool unloadDocument(string uri)
+	{
+		auto idx = documentStore.countUntil!(a => a.uri == uri);
+		if (idx == -1)
+			return false;
+
+		documentStore[idx] = documentStore[$ - 1];
+		documentStore.length--;
+		return true;
+	}
+
 	static TextDocumentSyncKind syncKind()
 	{
 		return TextDocumentSyncKind.incremental;
@@ -382,17 +417,10 @@ struct TextDocumentManager
 		else if (msg.method == "textDocument/didClose")
 		{
 			auto targetUri = msg.params["textDocument"]["uri"].str;
-			auto idx = documentStore.countUntil!(a => a.uri == targetUri);
-			if (idx >= 0)
-			{
-				documentStore[idx] = documentStore[$ - 1];
-				documentStore.length--;
-			}
-			else
+			if (!unloadDocument(targetUri))
 			{
 				warning("Received didClose notification for URI not in system: ", targetUri);
-				warning(
-						"This can be a potential memory leak if it was previously opened under a different name.");
+				warning("This can be a potential memory leak if it was previously opened under a different name.");
 			}
 			return true;
 		}
