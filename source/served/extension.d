@@ -1053,6 +1053,12 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 
 shared static this()
 {
+	import core.time : MonoTime;
+	startupTime = MonoTime.currTime();
+}
+
+shared static this()
+{
 	backend = new WorkspaceD();
 
 	backend.onBroadcast = (&handleBroadcast).toDelegate;
