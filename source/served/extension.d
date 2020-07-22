@@ -526,7 +526,7 @@ void doGlobalStartup()
 		if (!backend.has!DCDComponent || backend.get!DCDComponent.isOutdated)
 		{
 			auto installed = backend.has!DCDComponent
-				? backend.get!DCDComponent.clientInstalledVersion : "none";
+				? backend.get!DCDComponent.serverInstalledVersion : "none";
 
 			string outdatedMessage = translate!"d.served.outdatedDCD"(
 					DCDComponent.latestKnownVersion.to!(string[]).join("."), installed);
