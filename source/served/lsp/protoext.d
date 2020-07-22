@@ -136,6 +136,46 @@ struct Task
 	string[] problemMatchers;
 }
 
+struct DocumentSymbolParamsEx
+{
+	// LSP field
+	TextDocumentIdentifier textDocument;
+	bool verbose;
+
+	this(DocumentSymbolParams params)
+	{
+		textDocument = params.textDocument;
+	}
+
+	this(TextDocumentIdentifier textDocument, bool verbose)
+	{
+		this.textDocument = textDocument;
+		this.verbose = verbose;
+	}
+}
+
+/// special serve-d internal symbol kinds
+enum SymbolKindEx
+{
+	none = 0,
+	/// set for unittests
+	test,
+	/// `debug = X` specification
+	debugSpec,
+	/// `version = X` specification
+	versionSpec,
+	/// `static this()`
+	staticCtor,
+	/// `shared static this()`
+	sharedStaticCtor,
+	/// `static ~this()`
+	staticDtor,
+	/// `shared static ~this()`
+	sharedStaticDtor,
+	/// `this(this)` in structs & classes
+	postblit
+}
+
 struct SymbolInformationEx
 {
 	string name;
@@ -145,6 +185,8 @@ struct SymbolInformationEx
 	@SerializedName("deprecated") bool deprecated_;
 	TextRange range;
 	TextRange selectionRange;
+	SymbolKindEx extendedType;
+	string detail;
 
 	SymbolInformation downcast()
 	{

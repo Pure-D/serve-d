@@ -27,7 +27,7 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 			if (!file.isFile || file.extension != ".d")
 				continue;
 			auto defs = provideDocumentSymbolsOld(
-					DocumentSymbolParams(TextDocumentIdentifier(file.uriFromFile)));
+					DocumentSymbolParamsEx(TextDocumentIdentifier(file.uriFromFile), false));
 			foreach (def; defs)
 				if (def.name.toLower.startsWith(params.query.toLower))
 					infos ~= def.downcast;
@@ -65,22 +65,29 @@ JSONValue provideDocumentSymbols(DocumentSymbolParams params)
 	if (capabilities.textDocument.documentSymbol.hierarchicalDocumentSymbolSupport)
 		return provideDocumentSymbolsHierarchical(params).toJSON;
 	else
-		return provideDocumentSymbolsOld(params).map!"a.downcast".array.toJSON;
+		return provideDocumentSymbolsOld(DocumentSymbolParamsEx(params)).map!"a.downcast".array.toJSON;
 }
 
-PerDocumentCache!(SymbolInformationEx[]) documentSymbolsCacheOld;
-SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParams params)
+private struct OldSymbolsCache
+{
+	SymbolInformationEx[] symbols;
+	SymbolInformationEx[] symbolsVerbose;
+}
+
+PerDocumentCache!OldSymbolsCache documentSymbolsCacheOld;
+SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParamsEx params)
 {
 	if (!backend.hasBest!DscannerComponent(params.textDocument.uri.uriToFile))
 		return null;
 
 	auto cached = documentSymbolsCacheOld.cached(documents, params.textDocument.uri);
-	if (cached.length)
-		return cached;
+	if (cached.symbolsVerbose.length)
+		return params.verbose ? cached.symbolsVerbose : cached.symbols;
 	auto document = documents.tryGet(params.textDocument.uri);
 	auto result = backend.best!DscannerComponent(params.textDocument.uri.uriToFile)
-		.listDefinitions(uriToFile(params.textDocument.uri), document.rawText).getYield;
+		.listDefinitions(uriToFile(params.textDocument.uri), document.rawText, true).getYield;
 	auto ret = appender!(SymbolInformationEx[]);
+	auto retVerbose = appender!(SymbolInformationEx[]);
 
 	size_t cacheByte = size_t.max;
 	Position cachePosition;
@@ -97,7 +104,8 @@ SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParams params)
 		cachePosition = endPosition;
 
 		info.location.range = TextRange(startPosition, endPosition);
-		info.kind = convertFromDscannerType(def.type);
+		info.kind = convertFromDscannerType(def.type, def.name);
+		info.extendedType = convertExtendedFromDscannerType(def.type);
 		if (def.type == "f" && def.name == "this")
 			info.kind = SymbolKind.constructor;
 		string* ptr;
@@ -107,10 +115,16 @@ SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParams params)
 			info.containerName = *ptr;
 		if ("deprecation" in attribs)
 			info.deprecated_ = true;
-		ret.put(info);
+		if (auto name = "name" in attribs)
+			info.detail = *name;
+
+		if (!def.isVerboseType)
+			ret.put(info);
+		retVerbose.put(info);
 	}
-	documentSymbolsCacheOld.store(document, ret.data);
-	return ret.data;
+	documentSymbolsCacheOld.store(document, OldSymbolsCache(ret.data, retVerbose.data));
+
+	return params.verbose ? retVerbose.data : ret.data;
 }
 
 PerDocumentCache!(DocumentSymbol[]) documentSymbolsCacheHierarchical;
@@ -120,7 +134,7 @@ DocumentSymbol[] provideDocumentSymbolsHierarchical(DocumentSymbolParams params)
 	if (cached.length)
 		return cached;
 	DocumentSymbol[] all;
-	auto symbols = provideDocumentSymbolsOld(params);
+	auto symbols = provideDocumentSymbolsOld(DocumentSymbolParamsEx(params));
 	foreach (symbol; symbols)
 	{
 		DocumentSymbol sym;

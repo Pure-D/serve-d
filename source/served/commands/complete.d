@@ -148,34 +148,73 @@ SymbolKind convertFromDCDSearchType(string type)
 	}
 }
 
-SymbolKind convertFromDscannerType(string type)
+SymbolKind convertFromDscannerType(string type, string name = null)
 {
 	if (type.length != 1)
 		return cast(SymbolKind) 0;
 	switch (type[0])
 	{
-	case 'g':
-		return SymbolKind.enum_;
-	case 'e':
-		return SymbolKind.field;
-	case 'v':
-		return SymbolKind.variable;
-	case 'i':
-		return SymbolKind.interface_;
 	case 'c':
 		return SymbolKind.class_;
 	case 's':
-		return SymbolKind.class_;
-	case 'f':
-		return SymbolKind.function_;
-	case 'u':
-		return SymbolKind.class_;
+		return SymbolKind.struct_;
+	case 'i':
+		return SymbolKind.interface_;
 	case 'T':
 		return SymbolKind.property;
+	case 'f':
+	case 'U':
+	case 'Q':
+	case 'W':
+	case 'P':
+		if (name == "this")
+			return SymbolKind.constructor;
+		else
+			return SymbolKind.function_;
+	case 'C':
+	case 'S':
+		return SymbolKind.constructor;
+	case 'g':
+		return SymbolKind.enum_;
+	case 'u':
+		return SymbolKind.struct_;
+	case 'D':
+	case 'V':
+	case 'e':
+		return SymbolKind.constant;
+	case 'v':
+		return SymbolKind.variable;
 	case 'a':
 		return SymbolKind.field;
 	default:
 		return cast(SymbolKind) 0;
+	}
+}
+
+SymbolKindEx convertExtendedFromDscannerType(string type)
+{
+	if (type.length != 1)
+		return cast(SymbolKindEx) 0;
+	switch (type[0])
+	{
+	case 'U':
+		return SymbolKindEx.test;
+	case 'D':
+		return SymbolKindEx.debugSpec;
+	case 'V':
+		return SymbolKindEx.versionSpec;
+	case 'C':
+		return SymbolKindEx.staticCtor;
+	case 'S':
+		return SymbolKindEx.sharedStaticCtor;
+	case 'Q':
+		return SymbolKindEx.staticDtor;
+	case 'W':
+		return SymbolKindEx.sharedStaticDtor;
+	case 'P':
+		return SymbolKindEx.postblit;
+	default:
+		return cast(SymbolKindEx) 0;
 	}
 }
 
