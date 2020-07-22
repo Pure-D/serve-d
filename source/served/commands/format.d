@@ -65,8 +65,12 @@ string[] generateDfmtArgs(const ref UserConfiguration config, EolType overrideEo
 			"--split_operator_at_line_end", config.dfmt.splitOperatorAtLineEnd.to!string,
 			"--tab_width", options.tabSize.to!string,
 			"--selective_import_space", config.dfmt.selectiveImportSpace.to!string,
+			"--space_before_function_parameters", config.dfmt.spaceBeforeFunctionParameters.to!string,
 			"--compact_labeled_statements", config.dfmt.compactLabeledStatements.to!string,
-			"--template_constraint_style", config.dfmt.templateConstraintStyle
+			"--template_constraint_style", config.dfmt.templateConstraintStyle,
+			"--single_template_constraint_indent", config.dfmt.singleTemplateConstraintIndent.to!string,
+			"--space_before_aa_colon", config.dfmt.spaceBeforeAAColon.to!string,
+			"--keep_line_breaks", config.dfmt.keepLineBreaks.to!string,
 		];
 		//dfmt on
 	}

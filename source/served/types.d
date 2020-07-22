@@ -103,6 +103,10 @@ struct Configuration
 		bool selectiveImportSpace = true;
 		bool compactLabeledStatements = true;
 		string templateConstraintStyle = "conditional_newline_indent";
+		bool spaceBeforeFunctionParameters = false;
+		bool singleTemplateConstraintIndent = false;
+		bool spaceBeforeAAColon = false;
+		bool keepLineBreaks = true;
 	}
 
 	struct DScanner
