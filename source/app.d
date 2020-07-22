@@ -84,28 +84,28 @@ ResponseMessage processRequest(RequestMessage msg)
 	}
 
 	bool found = emitProtocol!(protocolMethod, (name, callSymbol, uda) {
-						try
-						{
-							trace("Calling " ~ name);
+		try
+		{
+			trace("Calling " ~ name);
 			auto requestResult = callSymbol();
 
-							static if (is(typeof(requestResult) : JSONValue))
-								res.result = requestResult;
-							else
-								res.result = toJSON(requestResult);
+			static if (is(typeof(requestResult) : JSONValue))
+				res.result = requestResult;
+			else
+				res.result = toJSON(requestResult);
 
-							processRequestObservers(msg, requestResult);
-						}
-						catch (MethodException e)
-						{
-							res.error = e.error;
-						}
+			processRequestObservers(msg, requestResult);
+		}
+		catch (MethodException e)
+		{
+			res.error = e.error;
+		}
 	}, true)(msg.method, msg.params);
 
 	if (!found)
 	{
-	io.stderr.writeln(msg);
-	res.error = ResponseError(ErrorCode.methodNotFound);
+		io.stderr.writeln(msg);
+		res.error = ResponseError(ErrorCode.methodNotFound);
 	}
 
 	return res;
@@ -114,16 +114,16 @@ ResponseMessage processRequest(RequestMessage msg)
 void processRequestObservers(T)(RequestMessage msg, T result)
 {
 	emitProtocol!(postProtocolMethod, (name, callSymbol, uda) {
-						try
-						{
+		try
+		{
 			callSymbol();
-						}
-						catch (MethodException e)
-						{
-							error("Error in post-protocolMethod: ", e);
-						}
+		}
+		catch (MethodException e)
+		{
+			error("Error in post-protocolMethod: ", e);
+		}
 	}, false)(msg.method, msg.params, result);
-					}
+}
 
 void processNotify(RequestMessage msg)
 {
@@ -148,14 +148,14 @@ void processNotify(RequestMessage msg)
 	documents.process(msg);
 
 	emitProtocol!(protocolNotification, (name, callSymbol, uda) {
-						try
-						{
+		try
+		{
 			callSymbol();
-						}
-						catch (MethodException e)
-						{
-							error("Failed notify: ", e);
-						}
+		}
+		catch (MethodException e)
+		{
+			error("Failed notify: ", e);
+		}
 	}, false)(msg.method, msg.params);
 }
 
