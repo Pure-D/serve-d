@@ -122,6 +122,9 @@ bool emitProtocol(alias UDA, alias callback, bool returnFirst, Args...)(string m
 ///     telling if the uda values were a match or not. The Delegate is most
 ///     often a function pointer to the given symbol and may differ between all
 ///     calls.
+///
+///     If the UDA is a symbol and not a type (such as some enum manifest
+///     constant), then the UDA argument has no meaning and should not be used.
 ///  returnFirst = if `true`, once callback returns `true` immediately return
 ///     `true` for the whole function, otherwise `false`. If this is set to
 ///     `false` then callback will be run on all symbols and this function
@@ -143,7 +146,10 @@ bool iterateExtensionMethodsByUDA(alias UDA, alias callback, bool returnFirst)()
 				alias symbol = symbols[0];
 				static if (isSomeFunction!(symbol) && __traits(getProtection, symbol) == "public")
 				{
-					enum uda = getUDAs!(symbol, UDA)[0];
+					static if (__traits(compiles, { enum uda = getUDAs!(symbol, UDA)[0]; }))
+						enum uda = getUDAs!(symbol, UDA)[0];
+					else
+						enum uda = null;
 
 					static if (returnFirst)
 					{
