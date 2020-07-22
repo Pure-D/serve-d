@@ -4,7 +4,7 @@
 	"license": "MIT",
 	"targetType": "executable",
 	"dependencies": {
-		"workspace-d": "3.6.0-pre.6",
+		"workspace-d": "3.6.0-pre.7",
 		"eventsystem": "~>1.2.0",
 		"painlessjson": "1.4.0",
 		"libddoc": "0.7.3",
