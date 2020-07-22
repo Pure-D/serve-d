@@ -553,6 +553,8 @@ void doGlobalStartup()
 				}, 4);
 			}
 		}
+
+		cast(void)emitExtensionEvent!onRegisteredComponents;
 	}
 	catch (Exception e)
 	{
@@ -688,6 +690,8 @@ void doStartup(string workspaceUri)
 
 		roots ~= Root(root, workspaceUri, instance);
 
+		emitExtensionEvent!onAddingProject(instance, workspaceRoot, workspaceUri);
+
 		bool disableDub = proj.config.d.neverUseDub || !root.useDub;
 		bool loadedDub;
 		Exception err;
@@ -751,6 +755,8 @@ void doStartup(string workspaceUri)
 
 		trace("Loaded Components for ", instance.cwd, ": ",
 				instance.instanceComponents.map!"a.info.name");
+
+		emitExtensionEvent!onAddedProject(instance, workspaceRoot, workspaceUri);
 
 		rootTimer.stop();
 		info("Root ", root, " initialized in ", rootTimer.peek);

@@ -2,6 +2,8 @@ module served.utils.events;
 
 static import served.extension;
 
+import core.lifetime : forward;
+
 import std.algorithm;
 import std.json;
 import std.meta;
@@ -23,6 +25,21 @@ struct protocolNotification
 {
 	string method;
 }
+
+/// Event called when all components have been registered but no workspaces have
+/// been setup yet.
+/// Signature: `()`
+enum onRegisteredComponents;
+
+/// Event called when a new workspaced instance is created. Called before dub or
+/// fsworkspace is loaded.
+/// Signature: `(WorkspaceD.Instance, string dir, string uri)`
+enum onAddingProject;
+
+/// Event called when a new project root is finished setting up. Called when all
+/// components are loaded. DCD is loaded but not yet started at this point.
+/// Signature: `(WorkspaceD.Instance, string dir, string rootFolderUri)`
+enum onAddedProject;
 
 // duplicate method name check to avoid name clashes and unreadable error messages
 private string[] findDuplicates(string[] fields)
@@ -107,6 +124,14 @@ bool emitProtocol(alias UDA, alias callback, bool returnFirst, Args...)(string m
 		else
 			return false;
 	}, returnFirst);
+}
+
+bool emitExtensionEvent(alias UDA, Args...)(Args args)
+{
+	return iterateExtensionMethodsByUDA!(UDA, (name, symbol, uda) {
+		symbol(forward!args);
+		return true;
+	}, false);
 }
 
 /// Iterates through all public methods in `served.extension` annotated with the
