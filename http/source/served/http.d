@@ -15,8 +15,6 @@ import std.stdio;
 import std.string;
 import std.traits;
 
-import requests;
-
 version (Windows) pragma(lib, "wininet");
 
 struct InteractiveDownload
@@ -86,6 +84,9 @@ void downloadFileManual(string url, string title, string into, void delegate(str
 	}
 	else
 	{
+		// only import in this scope
+		import requests;
+
 		auto req = Request();
 		req.useStreaming = true;
 
