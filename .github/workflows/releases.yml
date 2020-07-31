@@ -20,12 +20,7 @@ jobs:
             compiler: ldc-latest
 
       - name: dub upgrade
-        run: .\ci\upgrade.bat
-        if: matrix.os == 'windows-latest'
-
-      - name: dub upgrade
-        run: ./ci/upgrade.sh
-        if: matrix.os != 'windows-latest'
+        uses: WebFreak001/dub-upgrade@v0.1.0
 
       - name: Run tests
         run: dub test
@@ -86,3 +81,8 @@ jobs:
           file: ./serve-d.zip
           mime: application/zip
           name: serve-d_${TAG}-${OS}.zip
+
+      - name: cache dependency binaries
+        uses: WebFreak001/dub-upgrade@v0.1.0
+        with:
+          store: true
