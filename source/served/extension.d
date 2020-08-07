@@ -189,8 +189,7 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 				if (!backend.has!DCDComponent(workspaceFs))
 				{
 					auto instance = backend.getInstance(workspaceFs);
-					prepareDCD(instance, workspaceUri);
-					startDCDServer(instance, workspaceUri);
+					lazyStartDCDServer(instance, workspaceUri);
 				}
 			}
 			else if (backend.has!DCDComponent(workspaceFs))
@@ -507,11 +506,11 @@ void doGlobalStartup()
 		trace("Registering fsworkspace");
 		backend.register!FSWorkspaceComponent(false);
 		trace("Registering dcd");
-		backend.register!DCDComponent(false);
+		backend.register!DCDComponent;
 		trace("Registering dcdext");
-		backend.register!DCDExtComponent(false);
+		backend.register!DCDExtComponent;
 		trace("Registering dmd");
-		backend.register!DMDComponent(false);
+		backend.register!DMDComponent;
 		trace("Starting dscanner");
 		backend.register!DscannerComponent;
 		trace("Starting dfmt");
@@ -703,7 +702,7 @@ void doStartup(string workspaceUri)
 
 			try
 			{
-				if (backend.attach(instance, "dub", err))
+				if (backend.attachEager(instance, "dub", err))
 				{
 					scope (failure)
 						instance.detach!DubComponent;
@@ -736,7 +735,7 @@ void doStartup(string workspaceUri)
 
 				instance.config.set("fsworkspace", "additionalPaths",
 						getPossibleSourceRoots(workspaceRoot));
-				if (!backend.attach(instance, "fsworkspace", err))
+				if (!backend.attachEager(instance, "fsworkspace", err))
 					throw new Exception("Attach returned failure: " ~ err.msg);
 			}
 			catch (Exception e)
@@ -749,11 +748,6 @@ void doStartup(string workspaceUri)
 			gotOneDub = true;
 
 		trace("Started files provider for root ", root);
-
-		trace("Attaching dmd");
-		if (!backend.attach(instance, "dmd", err))
-			error("Failed to attach DMD component to ", workspaceUri, "\n", err.msg);
-		prepareDCD(instance, workspaceUri);
 
 		trace("Loaded Components for ", instance.cwd, ": ",
 				instance.instanceComponents.map!"a.info.name");
@@ -773,7 +767,7 @@ void doStartup(string workspaceUri)
 		reportProgress(ProgressType.completionStartup, i, roots.data.length,
 				root.instance.cwd.uriFromFile);
 
-		startDCDServer(root.instance, root.uri);
+		lazyStartDCDServer(root.instance, root.uri);
 	}
 	dcdTimer.stop();
 	trace("Started all completion servers in ", dcdTimer.peek);
@@ -800,61 +794,35 @@ void handleBroadcast(WorkspaceD workspaced, WorkspaceD.Instance instance, JSONVa
 	{
 		if (data["component"].str == "dcd")
 			spawnFiber(() {
-				prepareDCD(instance, instance.cwd.uriFromFile);
 				startDCDServer(instance, instance.cwd.uriFromFile);
 			});
 	}
 }
 
-void prepareDCD(WorkspaceD.Instance instance, string workspaceUri)
+bool wantsDCDServer(string workspaceUri)
 {
-	if (shutdownRequested)
-		return;
+	if (shutdownRequested || dcdUpdating)
+		return false;
 	Workspace* proj = &workspace(workspaceUri, false);
 	if (proj is &fallbackWorkspace)
 	{
-		error("Trying to start DCD on unknown workspace ", workspaceUri, "?");
-		return;
+		error("Trying to access DCD on unknown workspace ", workspaceUri, "?");
+		return false;
 	}
 	if (!proj.config.d.enableAutoComplete)
 	{
-		return;
+		return false;
 	}
 
-	Exception err;
-	trace("Starting dcd");
-	if (!backend.attach(instance, "dcd", err))
-	{
-		error("Failed to attach DCD component to ", instance.cwd, ": ", err.msg);
-		if (dcdUpdating)
-			return;
-		else
-			instance.config.set("dcd", "errorlog", instance.config.get("dcd",
-					"errorlog", "") ~ "\n" ~ err.msg);
-	}
-	trace("Starting dcdext");
-	if (!backend.attach(instance, "dcdext", err))
-	{
-		error("Failed to attach DCDExt component to ", instance.cwd, ": ", err.msg);
-		instance.config.set("dcd", "errorlog", instance.config.get("dcd",
-				"errorlog", "") ~ "\n" ~ err.msg);
-	}
+	return true;
 }
 
 void startDCDServer(WorkspaceD.Instance instance, string workspaceUri)
 {
-	if (shutdownRequested || dcdUpdating)
+	if (!wantsDCDServer(workspaceUri))
 		return;
 	Workspace* proj = &workspace(workspaceUri, false);
-	if (proj is &fallbackWorkspace)
-	{
-		error("Trying to start DCD on unknown workspace ", workspaceUri, "?");
-		return;
-	}
-	if (!proj.config.d.enableAutoComplete)
-	{
-		return;
-	}
+	assert(proj, "project unloaded while starting DCD?!");
 
 	trace("Running DCD setup");
 	try
@@ -879,6 +847,32 @@ void startDCDServer(WorkspaceD.Instance instance, string workspaceUri)
 		return;
 	}
 	info("Imports for ", instance.cwd, ": ", instance.importPaths);
+}
+
+void lazyStartDCDServer(WorkspaceD.Instance instance, string workspaceUri)
+{
+	auto lazyInstance = cast(LazyWorkspaceD.LazyInstance)instance;
+	if (lazyInstance)
+	{
+		lazyInstance.onLazyLoad("dcd", delegate() nothrow {
+			try
+			{
+				startDCDServer(instance, workspaceUri);
+			}
+			catch (Exception e)
+			{
+				try
+				{
+					error("Failed loading DCD on demand: ", e);
+				}
+				catch (Exception)
+				{
+				}
+			}
+		});
+	}
+	else
+		startDCDServer(instance, workspaceUri);
 }
 
 string determineOutputFolder()
@@ -1067,12 +1061,21 @@ shared static this()
 
 shared static this()
 {
-	backend = new WorkspaceD();
+	backend = new LazyWorkspaceD();
 
 	backend.onBroadcast = (&handleBroadcast).toDelegate;
 	backend.onBindFail = (WorkspaceD.Instance instance, ComponentFactory factory, Exception err) {
 		if (!instance && err.msg.canFind("requires to be instanced"))
 			return;
+
+		if (factory.info.name == "dcd")
+		{
+			error("Failed to attach DCD component to ", instance.cwd, ": ", err.msg);
+			if (!dcdUpdating)
+				instance.config.set("dcd", "errorlog", instance.config.get("dcd",
+						"errorlog", "") ~ "\n" ~ err.msg);
+			return;
+		}
 
 		tracef("bind fail:\n\tinstance %s\n\tfactory %s\n\tstacktrace:\n%s\n------",
 				instance, factory.info.name, err);

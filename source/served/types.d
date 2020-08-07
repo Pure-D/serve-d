@@ -4,6 +4,7 @@ public import served.lsp.protocol;
 public import served.lsp.protoext;
 public import served.lsp.textdocumentmanager;
 public import served.utils.events;
+public import served.backend.lazy_workspaced : LazyWorkspaceD;
 
 import core.time : MonoTime;
 
@@ -690,7 +691,7 @@ int toInt(JSONValue value)
 		return cast(int) value.integer;
 }
 
-__gshared WorkspaceD backend;
+__gshared LazyWorkspaceD backend;
 
 /// Quick function to check if a package.json can not not be a dub package file.
 /// Returns: false if fields are used which aren't usually used in dub but in nodejs.

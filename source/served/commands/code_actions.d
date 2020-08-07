@@ -47,6 +47,11 @@ CodeAction[] provideCodeActions(CodeActionParams params)
 	auto instance = activeInstance = backend.getBestInstance(document.uri.uriToFile);
 	if (document.languageId != "d" || !instance)
 		return [];
+
+	// eagerly load DCD in opened files which request code actions
+	if (instance.has!DCDComponent)
+		instance.get!DCDComponent();
+
 	CodeAction[] ret;
 	if (instance.has!DCDExtComponent) // check if extends
 	{

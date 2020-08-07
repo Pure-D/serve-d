@@ -230,8 +230,7 @@ void updateDCD()
 				instance.config.set("dcd", "clientPath", finalDestinationClient);
 				instance.config.set("dcd", "serverPath", finalDestinationServer);
 
-				prepareDCD(instance, workspace.folder.uri);
-				startDCDServer(instance, workspace.folder.uri);
+				lazyStartDCDServer(instance, workspace.folder.uri);
 			}
 		}
 	}

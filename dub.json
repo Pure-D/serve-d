@@ -4,7 +4,7 @@
 	"license": "MIT",
 	"targetType": "executable",
 	"dependencies": {
-		"workspace-d": "3.6.0-pre.7",
+		"workspace-d": "3.6.0-pre.8",
 		"eventsystem": "~>1.2.0",
 		"painlessjson": "1.4.0",
 		"libddoc": "0.7.3",
@@ -26,6 +26,7 @@
 		{
 			"name": "unittest",
 			"targetType": "executable",
+			"targetName": "serve-d-test",
 			"preBuildCommands-windows": [
 				"$DUB run --compiler=%DC% unit-threaded -c gen_ut_main -- -f bin\\ut.d"
 			],
@@ -45,6 +46,7 @@
 			"name": "unittest-optimized",
 			"buildOptions": ["optimize", "debugInfo", "unittests"],
 			"targetType": "executable",
+			"targetName": "serve-d-test",
 			"mainSourceFile": "bin/ut.d",
 			"excludedSourceFiles": [
 				"source/app.d",
