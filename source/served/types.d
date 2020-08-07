@@ -88,7 +88,7 @@ struct Configuration
 		string[] disabledRootGlobs;
 		string[] extraRoots;
 		string manyProjectsAction = ManyProjectsAction.ask;
-		int manyProjectsThreshold = 4;
+		int manyProjectsThreshold = 6;
 		string lintOnFileOpen = "project";
 		bool dietContextCompletion = false;
 		bool generateModuleNames = true;
