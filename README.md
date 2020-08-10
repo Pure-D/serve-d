@@ -15,6 +15,14 @@ The purpose of this project is to give every editor the same capabilities and ed
 
 This is pretty much another abstraction layer on top of workspace-d to simplify and speed up extension development as most of the editor extension can now be written in D.
 
+## Special Thanks
+
+**Thanks to the following big GitHub sponsors** financially supporting the code-d/serve-d tools:
+
+* Jaen (@jaens)
+
+_[become a sponsor](https://github.com/sponsors/WebFreak001)_
+
 ## Features
 
 See [code-d wiki](https://github.com/Pure-D/code-d/wiki)
