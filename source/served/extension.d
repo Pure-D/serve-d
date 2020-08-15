@@ -316,7 +316,8 @@ bool syncConfiguration(string workspaceUri, size_t index = 0, size_t numConfigs 
 			return false;
 
 		string[] changed = proj.config.replaceAllSections(settings);
-		changedConfig(proj.folder.uri, changed, proj.config,
+		string uri = workspaceUri.length ? proj.folder.uri : null;
+		changedConfig(uri, changed, proj.config,
 				workspaceUri.length == 0, index, numConfigs);
 		return true;
 	}
