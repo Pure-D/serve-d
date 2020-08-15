@@ -86,8 +86,6 @@ __gshared bool shutdownRequested;
 void changedConfig(string workspaceUri, string[] paths, served.types.Configuration config,
 		bool allowFallback = false, size_t index = 0, size_t numConfigs = 0)
 {
-	ensureStartedUp();
-
 	StopWatch sw;
 	sw.start();
 
@@ -104,6 +102,7 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 	if (!syncedConfiguration && !allowFallback)
 	{
 		syncedConfiguration = true;
+		ensureStartedUp();
 	}
 
 	Workspace* proj = &workspace(workspaceUri);
