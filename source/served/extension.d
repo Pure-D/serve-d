@@ -86,6 +86,8 @@ __gshared bool shutdownRequested;
 void changedConfig(string workspaceUri, string[] paths, served.types.Configuration config,
 		bool allowFallback = false, size_t index = 0, size_t numConfigs = 0)
 {
+	ensureStartedUp();
+
 	StopWatch sw;
 	sw.start();
 
@@ -102,7 +104,6 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 	if (!syncedConfiguration && !allowFallback)
 	{
 		syncedConfiguration = true;
-		doGlobalStartup();
 	}
 
 	Workspace* proj = &workspace(workspaceUri);
@@ -394,6 +395,7 @@ string[] getPossibleSourceRoots(string workspaceFolder)
 
 __gshared bool syncedConfiguration = false;
 __gshared bool syncingConfiguration = false;
+__gshared bool startedUp = false;
 InitializeResult initialize(InitializeParams params)
 {
 	import std.file : chdir;
@@ -479,6 +481,14 @@ InitializeResult initialize(InitializeParams params)
 	}, 1000);
 
 	return result;
+}
+
+void ensureStartedUp()
+{
+	if (startedUp)
+		return;
+	startedUp = true;
+	doGlobalStartup();
 }
 
 void doGlobalStartup()
@@ -645,6 +655,8 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 
 void doStartup(string workspaceUri)
 {
+	ensureStartedUp();
+
 	Workspace* proj = &workspace(workspaceUri);
 	if (proj is &fallbackWorkspace)
 	{
@@ -1070,8 +1082,8 @@ shared static this()
 
 		if (factory.info.name == "dcd")
 		{
-			error("Failed to attach DCD component to ", instance.cwd, ": ", err.msg);
-			if (!dcdUpdating)
+			error("Failed to attach DCD component to ", instance ? instance.cwd : null, ": ", err.msg);
+			if (instance && !dcdUpdating)
 				instance.config.set("dcd", "errorlog", instance.config.get("dcd",
 						"errorlog", "") ~ "\n" ~ err.msg);
 			return;
