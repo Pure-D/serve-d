@@ -59,7 +59,7 @@ void updateDCD()
 
 	bool success;
 
-	enum bundledDCDVersion = "v0.13.0";
+	enum bundledDCDVersion = "v0.13.1";
 
 	bool compileFromSource = false;
 	version (DCDFromSource)
