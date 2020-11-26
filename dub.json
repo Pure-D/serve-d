@@ -22,6 +22,7 @@
 		"lsp",
 		"serverbase"
 	],
+	"versions-windows": ["RequestsSkipSSL"],
 	"configurations": [
 		{
 			"name": "executable"
