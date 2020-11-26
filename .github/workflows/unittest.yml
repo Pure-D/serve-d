@@ -25,13 +25,13 @@ jobs:
         uses: WebFreak001/dub-upgrade@v0.1.0
 
       - name: LSP tests
-        run: dub test --root=lsp
+        run: dub test :lsp
         env:
           # shouldn't break other OSes
           MACOSX_DEPLOYMENT_TARGET: '10.12'
 
       - name: serverbase tests
-        run: dub test --root=serverbase
+        run: dub test :serverbase
         env:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
 
