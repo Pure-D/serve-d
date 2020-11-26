@@ -1,0 +1,3 @@
+name "null_server"
+
+dependency "serve-d:serverbase" path=".."

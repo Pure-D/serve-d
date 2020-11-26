@@ -1,0 +1,4 @@
+name "lsp"
+
+dependency "eventsystem" version="~>1.2.0"
+dependency "painlessjson" version="1.4.0"

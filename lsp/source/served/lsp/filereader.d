@@ -6,6 +6,9 @@ import core.sync.mutex;
 import std.algorithm;
 import std.stdio;
 
+/// A simple file reader continuously reading into a 1 byte buffer and appending
+/// it to the data. Ensures data is never buffered on any platform at the cost
+/// of being a lot more CPU intensive.
 class StdFileReader : FileReader
 {
 	this(File file)
@@ -33,6 +36,10 @@ class StdFileReader : FileReader
 	File file;
 }
 
+/// A file reader implementation using the Win32 API using events. Reads as much
+/// content as possible when new data is available at once, making the file
+/// reading operation much more efficient when large chunks of data are being
+/// transmitted.
 version (Windows) class WindowsStdinReader : FileReader
 {
 	import core.sys.windows.windows;
@@ -92,6 +99,10 @@ version (Windows) class WindowsStdinReader : FileReader
 	}
 }
 
+/// A file reader implementation using the POSIX select API using events. Reads
+/// as much content as possible when new data is available at once, making the
+/// file reading operation much more efficient when large chunks of data are
+/// being transmitted.
 version (Posix) class PosixStdinReader : FileReader
 {
 	import core.stdc.errno;
@@ -141,6 +152,8 @@ version (Posix) class PosixStdinReader : FileReader
 	}
 }
 
+/// Base class for file readers which can read a file or standard handle line
+/// by line in a Fiber context, yielding until a line is available.
 abstract class FileReader : Thread
 {
 	this()
@@ -197,6 +210,38 @@ protected:
 	bool running;
 }
 
+/// Creates a new FileReader using the GC reading from stdin using a platform
+/// optimized implementation or StdFileReader if none is available.
+///
+/// The created instance can then be started using the `start` method and
+/// stopped at exit using the `stop` method.
+///
+/// Examples:
+/// ---
+/// auto input = newStdinReader();
+/// input.start();
+/// scope (exit)
+///     input.stop();
+/// ---
+FileReader newStdinReader()
+{
+	version (Windows)
+		return new WindowsStdinReader();
+	else version (Posix)
+		return new PosixStdinReader();
+	else
+		return new StdFileReader(stdin);
+}
+
+/// Reads a file into a given buffer with a specified maximum length. If the
+/// file is bigger than the buffer, the buffer will be resized using the GC and
+/// updated through the ref argument.
+/// Params:
+///   file = The filename of the file to read.
+///   buffer = A GC allocated buffer that may be enlarged if it is too small.
+///   maxLen = The maxmimum amount of bytes to read from the file.
+/// Returns: The contents of the file up to maxLen or EOF. The data is a slice
+/// of the buffer argument case to a `char[]`.
 char[] readCodeWithBuffer(string file, ref ubyte[] buffer, size_t maxLen = 1024 * 50)
 {
 	auto f = File(file, "rb");

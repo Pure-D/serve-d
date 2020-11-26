@@ -11,13 +11,19 @@ import served.lsp.protocol;
 
 import painlessjson;
 
+/// in-memory representation of a file at any given URI. Not thread-safe.
 struct Document
 {
+	/// The URI of this document. Should not be changed.
 	DocumentUri uri;
+	/// The language ID as reported by the client. Should not be changed.
 	string languageId;
+	/// The document version as reported by the client. Should not be changed.
 	long version_;
 	private char[] text;
 
+	/// Creates a new D document at the given document URI, with version 0 and
+	/// no text.
 	this(DocumentUri uri)
 	{
 		this.uri = uri;
@@ -26,6 +32,8 @@ struct Document
 		text = null;
 	}
 
+	/// Creates a new document at the given document URI, with the given version
+	/// and language and creates a copy of the text to use.
 	this(TextDocumentItem doc)
 	{
 		uri = doc.uri;
@@ -34,6 +42,8 @@ struct Document
 		text = doc.text.dup;
 	}
 
+	/// Creates a document with no URI and no language ID and copies the content
+	/// into the text buffer using $(LREF setContent).
 	static Document nullDocument(scope const(char)[] content)
 	{
 		Document ret;
@@ -48,16 +58,25 @@ struct Document
 		return ret;
 	}
 
+	/// Returns a read-only view of the text. The text may however be changed
+	/// by other operations, so this slice should be used directly and not after
+	/// any context yield or API call potentially modifying the data.
 	const(char)[] rawText()
 	{
 		return cast(const(char)[]) text;
 	}
 
+	///
 	size_t length() const @property
 	{
 		return text.length;
 	}
 
+	/// Sets the content of this document to the given content. Copies the data
+	/// from newContent into this text buffer.
+	///
+	/// Should not be called as an API unless managing some kind of virtual
+	/// document manually.
 	void setContent(scope const(char)[] newContent)
 	{
 		if (newContent.length <= text.length)
@@ -74,6 +93,7 @@ struct Document
 		}
 	}
 
+	///
 	void applyChange(TextRange range, scope const(char)[] newContent)
 	{
 		auto start = positionToBytes(range[0]);
@@ -112,16 +132,20 @@ struct Document
 			text[start + i] = cast(char) c;
 	}
 
+	/// Converts an LSP offset to a byte offset for using for example in array
+	/// slicing.
 	size_t offsetToBytes(size_t offset)
 	{
 		return .countBytesUntilUTF16Index(text, offset);
 	}
 
+	/// Converts a byte offset to an LSP offset.
 	size_t bytesToOffset(size_t bytes)
 	{
 		return .countUTF16Length(text[0 .. min($, bytes)]);
 	}
 
+	/// Converts a line/column position to an LSP offset.
 	size_t positionToOffset(Position position)
 	{
 		size_t offset = 0;
@@ -150,6 +174,7 @@ struct Document
 		return offset;
 	}
 
+	/// Converts a line/column position to a byte offset.
 	size_t positionToBytes(Position position)
 	{
 		size_t index = 0;
@@ -172,6 +197,7 @@ struct Document
 		return index;
 	}
 
+	/// Converts an LSP offset to a line/column position.
 	Position offsetToPosition(size_t offset)
 	{
 		size_t bytes;
@@ -194,6 +220,7 @@ struct Document
 		return ret;
 	}
 
+	/// Converts a byte offset to a line/column position.
 	Position bytesToPosition(size_t bytes)
 	{
 		if (bytes > text.length)
@@ -240,12 +267,15 @@ struct Document
 		return src;
 	}
 
+	/// Returns the word range at a given line/column position.
 	TextRange wordRangeAt(Position position)
 	{
 		auto chars = wordInLine(lineAtScope(position), position.character);
 		return TextRange(Position(position.line, chars[0]), Position(position.line, chars[1]));
 	}
 
+	/// Returns a byte offset range as `[start, end]` of the given 0-based line
+	/// number.
 	size_t[2] lineByteRangeAt(uint line)
 	{
 		size_t start = 0;
@@ -322,6 +352,7 @@ you?`);
 		assertEqual(doc.lineAt(Position(4, 0)), "");
 	}
 
+	/// Returns how a line is terminated at the given 0-based line number.
 	EolType eolAt(int line)
 	{
 		size_t index = 0;
@@ -346,10 +377,16 @@ you?`);
 	}
 }
 
+/// Helper struct which should have one unique instance in the application which
+/// processes document events sent by a LSP client to an LSP server and creates
+/// an in-memory representation of all the files managed by the client.
 struct TextDocumentManager
 {
+	/// Internal document storage. Only iterate over this using `foreach`, other
+	/// operations are not considered officially supported.
 	Document[] documentStore;
 
+	/// Same as $(LREF tryGet) but throws an exception if the URI doesn't exist.
 	ref Document opIndex(string uri)
 	{
 		auto idx = documentStore.countUntil!(a => a.uri == uri);
@@ -358,6 +395,8 @@ struct TextDocumentManager
 		return documentStore[idx];
 	}
 
+	/// Tries to get a document from a URI, returns Document.init if it is not
+	/// in the in-memory cache / not sent by the client.
 	Document tryGet(string uri)
 	{
 		auto idx = documentStore.countUntil!(a => a.uri == uri);
@@ -374,7 +413,7 @@ struct TextDocumentManager
 	///         inserted yet.
 	ref Document loadFromFilesystem(string uri)
 	{
-		import served.types : uriToFile;
+		import served.lsp.uri : uriToFile;
 		import fs = std.file;
 
 		string path = uriToFile(uri);
@@ -401,11 +440,19 @@ struct TextDocumentManager
 		return true;
 	}
 
+	/// Returns the currently preferred syncKind to use with the client.
+	/// Additionally always supports the `full` sync kind.
 	static TextDocumentSyncKind syncKind()
 	{
 		return TextDocumentSyncKind.incremental;
 	}
 
+	/// Processes an LSP packet and performs the document update in-memory that
+	/// is requested.
+	/// Params:
+	///   msg = The request sent by a client. This method only processes
+	///     `textDocument/` messages which are relevant to file modification.
+	/// Returns: `true` if the given method was handled, `false` otherwise.
 	bool process(RequestMessage msg)
 	{
 		if (msg.method == "textDocument/didOpen")
@@ -451,6 +498,7 @@ struct TextDocumentManager
 	}
 }
 
+/// Helper structure for storing any data of type T on a per-file basis.
 struct PerDocumentCache(T)
 {
 	struct Entry
@@ -540,6 +588,7 @@ uint[2] wordInLine(const(char)[] line, uint character)
 	return [start, end];
 }
 
+///
 bool isIdentifierSeparatingChar(dchar c)
 {
 	return c < 48 || (c > 57 && c < 65) || c == '[' || c == '\\' || c == ']'

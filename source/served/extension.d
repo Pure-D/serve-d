@@ -232,6 +232,12 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 			" changes in ", sw.peek, ".");
 }
 
+@protocolNotification("workspace/didChangeWorkspaceFolders")
+void didChangeConfiguration(DidChangeConfigurationParams params)
+{
+	processConfigChange(params.settings.parseConfiguration);
+}
+
 void processConfigChange(served.types.Configuration configuration)
 {
 	import painlessjson : fromJSON;
@@ -911,7 +917,6 @@ string determineOutputFolder()
 @protocolMethod("shutdown")
 JSONValue shutdown()
 {
-	shutdownRequested = true;
 	backend.shutdown();
 	backend.destroy();
 	served.extension.setTimeout({

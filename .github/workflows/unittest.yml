@@ -24,10 +24,25 @@ jobs:
       - name: dub upgrade
         uses: WebFreak001/dub-upgrade@v0.1.0
 
+      - name: LSP tests
+        run: dub test --root=lsp
+        env:
+          # shouldn't break other OSes
+          MACOSX_DEPLOYMENT_TARGET: '10.12'
+
+      - name: serverbase tests
+        run: dub test --root=serverbase
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '10.12'
+
+      - name: build dummy server
+        run: dub build --root=null_server
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '10.12'
+
       - name: Run tests
         run: dub test
         env:
-          # shouldn't break other OSes
           MACOSX_DEPLOYMENT_TARGET: '10.12'
 
       - name: cache dependency binaries

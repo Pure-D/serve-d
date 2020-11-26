@@ -8,9 +8,15 @@ import std.algorithm;
 import std.experimental.logger;
 import std.range;
 
-import served.io.memory;
+import served.utils.memory;
 
-import workspaced.api : Future;
+version (Have_workspace_d)
+{
+	import workspaced.api : Future;
+	enum hasFuture = true;
+}
+else
+	enum hasFuture = false;
 
 public import core.thread : Fiber, Thread;
 
@@ -72,7 +78,7 @@ void joinAll(size_t fiberSize = 4096 * 48, Fibers...)(Fibers fibers)
 			{
 				static if (is(typeof(fib) : Fiber))
 					converted[i++] = fib;
-				else static if (is(typeof(fib) : Future!T, T))
+				else static if (hasFuture && is(typeof(fib) : Future!T, T))
 					converted[i++] = new Fiber(&fib.getYield, fiberSize);
 				else
 					converted[i++] = new Fiber(fib, fiberSize);
@@ -82,7 +88,7 @@ void joinAll(size_t fiberSize = 4096 * 48, Fibers...)(Fibers fibers)
 		{
 			static if (is(typeof(fiber) : Fiber))
 				converted[i++] = fiber;
-			else static if (is(typeof(fiber) : Future!T, T))
+			else static if (hasFuture && is(typeof(fiber) : Future!T, T))
 				converted[i++] = new Fiber(&fiber.getYield, fiberSize);
 			else
 				converted[i++] = new Fiber(fiber, fiberSize);
