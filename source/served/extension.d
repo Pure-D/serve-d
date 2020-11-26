@@ -232,7 +232,7 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 			" changes in ", sw.peek, ".");
 }
 
-@protocolNotification("workspace/didChangeWorkspaceFolders")
+@protocolNotification("workspace/didChangeConfiguration")
 void didChangeConfiguration(DidChangeConfigurationParams params)
 {
 	processConfigChange(params.settings.parseConfiguration);
