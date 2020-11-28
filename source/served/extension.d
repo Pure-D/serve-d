@@ -595,6 +595,13 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 		string[] extra, ManyProjectsAction manyAction, int manyThreshold)
 {
 	RootSuggestion[] ret;
+	void addSuggestion(string dir, bool useDub)
+	{
+		dir = buildNormalizedPath(dir);
+		if (!ret.canFind!(a => a.dir == dir))
+			ret ~= RootSuggestion(dir, useDub);
+	}
+
 	bool rootDub = fs.exists(chainPath(root, "dub.json")) || fs.exists(chainPath(root, "dub.sdl"));
 	if (!rootDub && fs.exists(chainPath(root, "package.json")))
 	{
@@ -622,7 +629,7 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 			if (blocked.any!(a => globMatch(dir.relativePath(root), a)
 					|| globMatch(pkg.relativePath(root), a) || globMatch((dir ~ "/").relativePath, a)))
 				continue;
-			ret ~= RootSuggestion(dir, true);
+			addSuggestion(dir, true);
 		}
 	}
 	if (manyThreshold > 0 && ret.length >= manyThreshold)
@@ -651,9 +658,7 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 	foreach (dir; extra)
 	{
 		string p = buildNormalizedPath(root, dir);
-		if (!ret.canFind!(a => a.dir == p))
-			ret ~= RootSuggestion(p, fs.exists(chainPath(p, "dub.json"))
-					|| fs.exists(chainPath(p, "dub.sdl")));
+		addSuggestion(p, fs.exists(chainPath(p, "dub.json")) || fs.exists(chainPath(p, "dub.sdl")));
 	}
 	info("Root Suggestions: ", ret);
 	return ret;
