@@ -7,17 +7,26 @@ Join the chat:
 
 [![Join on Discord](https://discordapp.com/api/guilds/242094594181955585/widget.png?style=shield)](https://discord.gg/Bstj9bx)
 
-[Microsoft language server protocol](https://github.com/Microsoft/language-server-protocol) implementation for [D](https://dlang.org) using [workspace-d](https://github.com/Pure-D/workspace-d).
+[Microsoft language server protocol](https://github.com/Microsoft/language-server-protocol)
+implementation for [D](https://dlang.org) using
+[workspace-d](https://github.com/Pure-D/workspace-d).
 
-This program is basically a combination of workspace-d and most of [code-d](https://github.com/Pure-D/code-d).
+This program is basically a combination of workspace-d and most of
+[code-d](https://github.com/Pure-D/code-d).
 
-The purpose of this project is to give every editor the same capabilities and editing features as code-d with even less code required on the editor side than with workspace-d due to a more widely available protocol.
+The purpose of this project is to give every editor the same
+capabilities and editing features as code-d with even less code required
+on the editor side than with workspace-d due to a more widely available
+protocol.
 
-This is pretty much another abstraction layer on top of workspace-d to simplify and speed up extension development as most of the editor extension can now be written in D.
+This is pretty much another abstraction layer on top of workspace-d
+to simplify and speed up extension development as most of the editor
+extension can now be written in D.
 
 ## Special Thanks
 
-**Thanks to the following big GitHub sponsors** financially supporting the code-d/serve-d tools:
+**Thanks to the following big GitHub sponsors** financially supporting
+the code-d/serve-d tools:
 
 * Jaen ([@jaens](https://github.com/jaens))
 
@@ -27,11 +36,17 @@ _[become a sponsor](https://github.com/sponsors/WebFreak001)_
 
 See [code-d wiki](https://github.com/Pure-D/code-d/wiki)
 
-This implements most language features of the language server protocol for D and also a lot of support for other D related files such as vibe.d diet files and DlangUI DML files.
+This implements most language features of the language server protocol
+for D and also a lot of support for other D related files such as vibe.d
+diet files and DlangUI DML files.
 
 ## Usage
 
-To use serve-d you will need an [Editor](https://microsoft.github.io/language-server-protocol/implementors/tools/) (client) with support for the Language Server Protocol. Depending on the editor the initialization code might look different and will need to be adapted for each editor. This is realtively small though and can be done easily for all editors.
+To use serve-d you will need an [Editor](https://microsoft.github.io/language-server-protocol/implementors/tools/)
+(client) with support for the Language Server Protocol. Depending on the
+editor the initialization code might look different and will need to be
+adapted for each editor. This is realtively small though and can be done
+easily for all editors.
 
 **Officially Supported Editors**
 
@@ -53,27 +68,38 @@ serve-d offers the following command line options to allow the LSP client to con
 
 #### `--provide` values
 
-The following provide values are supported by serve-d and will improve interop with the editor:
+The following provide values are supported by serve-d and will improve
+interop with the editor:
 
 **`--provide http`**
 
-When this provide flag is set, serve-d will send a request to the client when it wants to download a file (commonly DCD server files) using the `coded/interactiveDownload` request.
+When this provide flag is set, serve-d will send a request to the client
+when it wants to download a file (commonly DCD server files) using the
+`coded/interactiveDownload` request.
 
-If this is not set, an internal download function is used which calls `coded/logInstall` on the client on every progress event.
+If this is not set, an internal download function is used which calls
+`coded/logInstall` on the client on every progress event.
 
 **`--provide implement-snippets`**
 
-If this is set, the `served/implementMethods` request will return TextEdits with snippet strings inside of them as defined by vscode.
+If this is set, the `served/implementMethods` request will return
+TextEdits with snippet strings inside of them as defined by vscode.
 
 **`--provide context-snippets`**
 
-If this is set, auto completion requests will also return built-in and custom defined snippets.
+If this is set, auto completion requests will also return built-in and
+custom defined snippets.
 
 ### Custom requests/notifications
 
-serve-d defines a variety of custom requests and notifications for better editor integration. All requests starting with `coded/` are sent from serve-d to the client and all requests starting with `served/` are sent from client to serve-d at any time.
+serve-d defines a variety of custom requests and notifications for
+better editor integration. All requests starting with `coded/` are sent
+from serve-d to the client and all requests starting with `served/` are
+sent from client to serve-d at any time.
 
-serve-d internally handles an active instance which is the instance where last a relevant command has been run. (such as auto complete) It will be used for some commands.
+serve-d internally handles an active instance which is the instance
+where last a relevant command has been run. (such as auto complete) It
+will be used for some commands.
 
 #### Request `served/sortImports`
 
@@ -81,7 +107,9 @@ serve-d internally handles an active instance which is the instance where last a
 
 **Returns**: `TextEdit[]`
 
-Command to sort all user imports in a block at a given position in given code. Returns a list of changes to apply. (Replaces the whole block currently if anything changed, otherwise empty)
+Command to sort all user imports in a block at a given position in given
+code. Returns a list of changes to apply. (Replaces the whole block
+currently if anything changed, otherwise empty)
 
 ```ts
 interface SortImportsParams
@@ -100,7 +128,9 @@ interface SortImportsParams
 
 **Returns**: `TextEdit[]`
 
-Implements the interfaces or abstract classes of a specified class/interface. The given position must be on/inside the identifier of any subclass after the colon (`:`) in a class definition.
+Implements the interfaces or abstract classes of a specified
+class/interface. The given position must be on/inside the identifier of
+any subclass after the colon (`:`) in a class definition.
 
 ```ts
 interface ImplementMethodsParams
@@ -119,7 +149,8 @@ interface ImplementMethodsParams
 
 **Returns**: `true`
 
-Restarts all DCD servers started by this serve-d instance. Returns `true` once done.
+Restarts all DCD servers started by this serve-d instance. Returns
+`true` once done.
 
 #### Notification `served/killServer`
 
@@ -133,7 +164,8 @@ Kills all DCD servers started by this serve-d instance.
 
 **Returns**: `boolean`
 
-Registers a snippet across the whole serve-d application which may be limited to given grammatical scopes.
+Registers a snippet across the whole serve-d application which may be
+limited to given grammatical scopes.
 
 Requires `--provide context-snippets`
 
@@ -143,7 +175,9 @@ Returns false if SnippetsComponent hasn't been loaded yet, otherwise true.
 
 **Parameter**: none
 
-Manually triggers a DCD update either by compiling from source or downloading prebuilt binaries depending on the host system and serve-d. Excessively calls the `coded/logInstall` notification.
+Manually triggers a DCD update either by compiling from source or
+downloading prebuilt binaries depending on the host system and
+serve-d. Excessively calls the `coded/logInstall` notification.
 
 #### Request `served/listConfigurations`
 
@@ -151,9 +185,12 @@ Manually triggers a DCD update either by compiling from source or downloading pr
 
 **Returns**: `string[]`
 
-Returns an empty array if there is no active instance or if it doesn't have dub.
+Returns an empty array if there is no active instance or if it doesn't
+have dub.
 
-Otherwise returns the names of available [configurations](https://dub.pm/package-format-json.html#configurations) in dub.
+Otherwise returns the names of available
+[configurations](https://dub.pm/package-format-json.html#configurations)
+in dub.
 
 #### Request `served/switchConfig`
 
@@ -161,7 +198,8 @@ Otherwise returns the names of available [configurations](https://dub.pm/package
 
 **Returns**: `bool`
 
-Sets the current dub configuration for building and other tools. Returns true on success.
+Sets the current dub configuration for building and other tools. Returns
+true on success.
 
 #### Request `served/getConfig`
 
@@ -169,7 +207,8 @@ Sets the current dub configuration for building and other tools. Returns true on
 
 **Returns**: `string`
 
-Returns the current dub configuration or null if there is no dub in the active instance.
+Returns the current dub configuration or null if there is no dub in the
+active instance.
 
 #### Request `served/listArchTypes`
 
@@ -177,9 +216,11 @@ Returns the current dub configuration or null if there is no dub in the active i
 
 **Returns**: `string[]`
 
-Returns an empty array if there is no active instance or if it doesn't have dub.
+Returns an empty array if there is no active instance or if it doesn't
+have dub.
 
-Otherwise returns the names of available architectures in dub. (e.g. x86 or x86_64)
+Otherwise returns the names of available architectures in dub. (e.g. x86
+or x86_64)
 
 #### Request `served/switchArchType`
 
@@ -187,7 +228,8 @@ Otherwise returns the names of available architectures in dub. (e.g. x86 or x86_
 
 **Returns**: `bool`
 
-Sets the current architecture for building and other tools. Returns true on success.
+Sets the current architecture for building and other tools. Returns true
+on success.
 
 #### Request `served/getArchType`
 
@@ -195,7 +237,8 @@ Sets the current architecture for building and other tools. Returns true on succ
 
 **Returns**: `string`
 
-Returns the current dub architecture or null if there is no dub in the active instance.
+Returns the current dub architecture or null if there is no dub in the
+active instance.
 
 #### Request `served/listBuildTypes`
 
@@ -203,9 +246,11 @@ Returns the current dub architecture or null if there is no dub in the active in
 
 **Returns**: `string[]`
 
-Returns an empty array if there is no active instance or if it doesn't have dub.
+Returns an empty array if there is no active instance or if it doesn't
+have dub.
 
-Otherwise returns the names of available [build types](https://dub.pm/package-format-json.html#build-types) in dub.
+Otherwise returns the names of available [build
+types](https://dub.pm/package-format-json.html#build-types) in dub.
 
 #### Request `served/switchBuildType`
 
@@ -213,7 +258,8 @@ Otherwise returns the names of available [build types](https://dub.pm/package-fo
 
 **Returns**: `bool`
 
-Sets the current dub build type for building and other tools. Returns true on success.
+Sets the current dub build type for building and other tools. Returns
+true on success.
 
 #### Request `served/getBuildType`
 
@@ -221,7 +267,8 @@ Sets the current dub build type for building and other tools. Returns true on su
 
 **Returns**: `string`
 
-Returns the current dub build type or null if there is no dub in the active instance.
+Returns the current dub build type or null if there is no dub in the
+active instance.
 
 #### Request `served/getCompiler`
 
@@ -237,7 +284,8 @@ Returns the name of the current compiler.
 
 **Returns**: `bool`
 
-Sets the current compiler to use in dub for building and other tools. Returns true on success.
+Sets the current compiler to use in dub for building and other
+tools. Returns true on success.
 
 #### Request `served/addImport`
 
@@ -245,7 +293,8 @@ Sets the current compiler to use in dub for building and other tools. Returns tr
 
 **Returns**: `ImportModification`
 
-Parses the source code and returns code edits how to insert a given import into the code.
+Parses the source code and returns code edits how to insert a given
+import into the code.
 
 ```ts
 interface AddImportParams
@@ -289,7 +338,9 @@ interface CodeReplacement
 
 **Returns**: `boolean`
 
-Refreshes the dub dependencies from the local filesystem. Triggers a `coded/updateDubTree` notification on success and updates imports in DCD.
+Refreshes the dub dependencies from the local filesystem. Triggers a
+`coded/updateDubTree` notification on success and updates imports in
+DCD.
 
 Returns true on success.
 
@@ -307,7 +358,9 @@ interface UpdateImportsParams
 
 **Returns**: `DubDependency[]`
 
-Lists the dependencies of a given dub package name. If no package name is given (empty string) then all dependencies of the current instance will be listed.
+Lists the dependencies of a given dub package name. If no package name
+is given (empty string) then all dependencies of the current instance
+will be listed.
 
 ```ts
 interface DubDependency
@@ -343,7 +396,8 @@ interface DubDependency
 
 **Returns**: `Task[]`
 
-Returns a list of build tasks for all dub instances in the project. Currently each with Build, Run, Rebuild and Test commands.
+Returns a list of build tasks for all dub instances in the
+project. Currently each with Build, Run, Rebuild and Test commands.
 
 ```ts
 enum TaskGroup
@@ -379,7 +433,9 @@ interface Task
 
 **Params**: `DubConvertRequest`
 
-Starts a conversion of a dub.json/dub.sdl file to a given other format. Shows an error message in the UI if unsuccessful and triggers a `workspace/applyEdit` command when successful with the new content.
+Starts a conversion of a dub.json/dub.sdl file to a given other
+format. Shows an error message in the UI if unsuccessful and triggers a
+`workspace/applyEdit` command when successful with the new content.
 
 ```ts
 interface DubConvertRequest
@@ -395,7 +451,9 @@ interface DubConvertRequest
 
 **Params**: `InstallRequest`
 
-Adds a dependency to the dub recipe file of the currently active instance (respecting indentation) and calls dub upgrade and updates imports afterwards.
+Adds a dependency to the dub recipe file of the currently active
+instance (respecting indentation) and calls dub upgrade and updates
+imports afterwards.
 
 Writes changes to the file system.
 
@@ -413,7 +471,9 @@ interface InstallRequest
 
 **Params**: `UpdateRequest`
 
-Changes a dependency in the dub recipe file of the currently active instance (respecting indentation) to the given version and calls dub upgrade and updates imports afterwards.
+Changes a dependency in the dub recipe file of the currently active
+instance (respecting indentation) to the given version and calls dub
+upgrade and updates imports afterwards.
 
 Does nothing if the dependency wasn't found in the dub recipe.
 
@@ -433,7 +493,8 @@ interface UpdateRequest
 
 **Params**: `UninstallRequest`
 
-Removes a dependency from the dub recipe file of the currently active instance and calls dub upgrade and updates imports afterwards.
+Removes a dependency from the dub recipe file of the currently active
+instance and calls dub upgrade and updates imports afterwards.
 
 Writes changes to the file system.
 
@@ -449,7 +510,8 @@ interface UninstallRequest
 
 **Params**: `DocumentLinkParams`
 
-Manually triggers DScanner linting on the given file. (respecting user configuration)
+Manually triggers DScanner linting on the given file. (respecting user
+configuration)
 
 #### Request `served/searchFile`
 
@@ -457,7 +519,9 @@ Manually triggers DScanner linting on the given file. (respecting user configura
 
 **Returns**: `string[]`
 
-Searches for a given filename (optionally also with subfolders) and returns all locations in the project and all dependencies including standard library where this file exists.
+Searches for a given filename (optionally also with subfolders) and
+returns all locations in the project and all dependencies including
+standard library where this file exists.
 
 #### Request `served/findFilesByModule`
 
@@ -465,7 +529,8 @@ Searches for a given filename (optionally also with subfolders) and returns all 
 
 **Returns**: `string[]`
 
-Lists all files with a given module name in the project and all dependencies and standard library.
+Lists all files with a given module name in the project and all
+dependencies and standard library.
 
 #### Request `served/doDscanner`
 
@@ -505,7 +570,8 @@ interface DScannerIniFeature
 
 **Params**: `UpdateSettingParams`
 
-Tells the client to update a user or workspace setting. This is done for updating the dcdClientPath and dcdServerPath on installation.
+Tells the client to update a user or workspace setting. This is done for
+updating the dcdClientPath and dcdServerPath on installation.
 
 ```ts
 interface UpdateSettingParams
@@ -523,19 +589,22 @@ interface UpdateSettingParams
 
 **Params**: `string` message
 
-Instructs the client to log a message that has something to do with the installation routine of serve-d or dependencies.
+Instructs the client to log a message that has something to do with the
+installation routine of serve-d or dependencies.
 
 #### Client notification `coded/initDubTree`
 
 **Params**: none
 
-Tells the client that dub has been loaded and the dependency tree can now be fetched.
+Tells the client that dub has been loaded and the dependency tree can
+now be fetched.
 
 #### Client notification `coded/updateDubTree`
 
 **Params**: none
 
-Tells the client that dub dependencies have been reloaded and should be redisplayed.
+Tells the client that dub dependencies have been reloaded and should be
+redisplayed.
 
 #### Client notification `coded/changedSelectedWorkspace`
 
@@ -563,9 +632,11 @@ interface WorkspaceState
 
 **Returns**: `boolean`
 
-Instructs the client to download a file into a given output path using download UI.
+Instructs the client to download a file into a given output path using
+download UI.
 
-This must be implemented if `--provide http` is given in the command line, otherwise this is not called.
+This must be implemented if `--provide http` is given in the command
+line, otherwise this is not called.
 
 ```ts
 interface InteractiveDownload
@@ -587,15 +658,21 @@ The server has support for configuration for [these items](https://github.com/Pu
 
 ## Installation
 
-**If you use an existing extension (code-d) you will not need to do these steps**
+**If you use an existing extension (code-d) you will not need to do
+these steps**
 
-If you want to manually get the serve-d binaries or if you want to add installation support for your editor, check out the sections below. The extension code-d already does this automatically and there is no need to do it there.
+If you want to manually get the serve-d binaries or if you want to add
+installation support for your editor, check out the sections below. The
+extension code-d already does this automatically and there is no need to
+do it there.
 
 Installing a pre-built binary:
 
-[Grab latest stable ore pre-release with binaries from GitHub releases](https://github.com/Pure-D/serve-d/releases)
+[Grab latest stable ore pre-release with binaries from GitHub
+releases](https://github.com/Pure-D/serve-d/releases)
 
-[Grab latest nightly binaries from GitHub releases](https://github.com/Pure-D/serve-d/releases/tag/nightly)
+[Grab latest nightly binaries from GitHub
+releases](https://github.com/Pure-D/serve-d/releases/tag/nightly)
 
 Manually building from source:
 ```
@@ -604,4 +681,5 @@ dub build
 
 ## Issues
 
-If you have issues with any editors using serve-d, please [report an issue](https://github.com/Pure-D/serve-d/issues/new)
+If you have issues with any editors using serve-d, please [report an
+issue](https://github.com/Pure-D/serve-d/issues/new)
