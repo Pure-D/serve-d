@@ -661,7 +661,7 @@ The server has support for configuration for [these items](https://github.com/Pu
 **If you use an existing extension (code-d) you will not need to do
 these steps**
 
-# ycmd for Vim et al.
+### ycmd for Vim et al.
 
 Download or build serve-d and edit your `.vimrc`.
 
@@ -703,7 +703,7 @@ Put this in a file called `.ycm_extra_conf.py` and save it in your
 project root or move it further up the folder hierarchy, if you know
 what you are doing.
 
-# Binaries
+### Binaries
 
 If you want to manually get the serve-d binaries or if you want to add
 support for your editor, check out the sections below. The extension
