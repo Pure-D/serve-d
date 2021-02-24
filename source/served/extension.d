@@ -620,7 +620,8 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 		{
 		}
 	}
-	ret ~= RootSuggestion(root, rootDub);
+	addSuggestion(root, rootDub);
+
 	if (recursive)
 	{
 		PackageDescriptorLoop: foreach (pkg; tryDirEntries(root, "dub.{json,sdl}", fs.SpanMode.breadth))
