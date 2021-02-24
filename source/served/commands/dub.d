@@ -115,6 +115,69 @@ bool switchCompiler(string value)
 	return activeInstance.get!DubComponent.setCompiler(value);
 }
 
+/// Returns: at least
+/// ```
+/// {
+///     "packagePath": string,
+///     "packageName": string,
+///     "targetPath": string,
+///     "targetName": string,
+///     "workingDirectory": string,
+///     "mainSourceFile": string,
+///
+///     "dflags": string[],
+///     "lflags": string[],
+///     "libs": string[],
+///     "linkerFiles": string[],
+///     "sourceFiles": string[],
+///     "copyFiles": string[],
+///     "versions": string[],
+///     "debugVersions": string[],
+///     "importPaths": string[],
+///     "stringImportPaths": string[],
+///     "importFiles": string[],
+///     "stringImportFiles": string[],
+///     "preGenerateCommands": string[],
+///     "postGenerateCommands": string[],
+///     "preBuildCommands": string[],
+///     "postBuildCommands": string[],
+///     "preRunCommands": string[],
+///     "postRunCommands": string[],
+/// }
+/// ```
+@protocolMethod("served/getActiveDubConfig")
+JSONValue getActiveDubConfig()
+{
+	if (!activeInstance || !activeInstance.has!DubComponent)
+		return JSONValue.init;
+	auto ret = activeInstance.get!DubComponent.rootPackageBuildSettings();
+	static assert(is(typeof(ret.packagePath) : string), "API guarantee broken");
+	static assert(is(typeof(ret.packageName) : string), "API guarantee broken");
+	static assert(is(typeof(ret.targetPath) : string), "API guarantee broken");
+	static assert(is(typeof(ret.targetName) : string), "API guarantee broken");
+	static assert(is(typeof(ret.workingDirectory) : string), "API guarantee broken");
+	static assert(is(typeof(ret.mainSourceFile) : string), "API guarantee broken");
+	static assert(is(typeof(ret.dflags) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.lflags) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.libs) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.linkerFiles) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.sourceFiles) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.copyFiles) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.versions) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.debugVersions) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.importPaths) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.stringImportPaths) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.importFiles) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.stringImportFiles) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.preGenerateCommands) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.postGenerateCommands) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.preBuildCommands) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.postBuildCommands) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.preRunCommands) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.postRunCommands) : string[]), "API guarantee broken");
+	return ret.toJSON;
+}
+
 @protocolMethod("served/addImport")
 auto addImport(AddImportParams params)
 {

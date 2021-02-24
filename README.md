@@ -499,6 +499,45 @@ interface DScannerIniFeature
 }
 ```
 
+#### Request `served/getActiveDubConfig`
+
+**Params**: none
+
+Returns dub information for the currently active project (dub project where last
+file was edited / opened / etc)
+
+**Returns**: at least
+
+```js
+{
+    "packagePath": string,
+    "packageName": string,
+    "targetPath": string,
+    "targetName": string,
+    "workingDirectory": string,
+    "mainSourceFile": string,
+
+    "dflags": string[],
+    "lflags": string[],
+    "libs": string[],
+    "linkerFiles": string[],
+    "sourceFiles": string[],
+    "copyFiles": string[],
+    "versions": string[],
+    "debugVersions": string[],
+    "importPaths": string[],
+    "stringImportPaths": string[],
+    "importFiles": string[],
+    "stringImportFiles": string[],
+    "preGenerateCommands": string[],
+    "postGenerateCommands": string[],
+    "preBuildCommands": string[],
+    "postBuildCommands": string[],
+    "preRunCommands": string[],
+    "postRunCommands": string[]
+}
+```
+
 ------
 
 #### Client notification `coded/updateSetting`
