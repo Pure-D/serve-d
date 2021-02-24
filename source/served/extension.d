@@ -599,7 +599,7 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 	{
 		dir = buildNormalizedPath(dir);
 
-		if (dir.endsWith('/'))
+		if (dir.endsWith('/', '\\'))
 			dir = dir[0 .. $ - 1];
 
 		if (!ret.canFind!(a => a.dir == dir))
