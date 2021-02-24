@@ -240,7 +240,7 @@ void addSyntaxDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 			foreach (i, dchar c; text[4 .. $])
 			{
 				offset = 4 + i;
-				if (!isIdentifierSeparatingChar(c))
+				if (!isDIdentifierSeparatingChar(c))
 					break;
 			}
 			range.end = range.start;

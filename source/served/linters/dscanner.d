@@ -161,7 +161,7 @@ private bool adjustRangeForSyntaxError(ref Diagnostic d, Document document, DSca
 					// for example in `foo.foreach(a;b)`
 					return false;
 				}
-				if (!isIdentifierSeparatingChar(c))
+				if (!isDIdentifierSeparatingChar(c))
 					break;
 				issueStart = i;
 			}
@@ -179,12 +179,12 @@ private bool adjustRangeForSyntaxError(ref Diagnostic d, Document document, DSca
 					if (c.among!('\r', '\n'))
 						break;
 
-					if (!isIdentifierSeparatingChar(c))
+					if (!isDIdentifierSeparatingChar(c))
 						first = false;
 				}
 				else
 				{
-					if (isIdentifierSeparatingChar(c))
+					if (isDIdentifierSeparatingChar(c))
 						break;
 				}
 			}
@@ -205,12 +205,12 @@ private bool adjustRangeForSyntaxError(ref Diagnostic d, Document document, DSca
 			{
 				if (first)
 				{
-					if (!isIdentifierSeparatingChar(c))
+					if (!isDIdentifierSeparatingChar(c))
 						first = false;
 				}
 				else
 				{
-					if (isIdentifierSeparatingChar(c))
+					if (isDIdentifierSeparatingChar(c))
 						break;
 				}
 				issueStart = i;
@@ -223,12 +223,12 @@ private bool adjustRangeForSyntaxError(ref Diagnostic d, Document document, DSca
 				issueEnd = bytes + i;
 				if (first)
 				{
-					if (!isIdentifierSeparatingChar(c))
+					if (!isDIdentifierSeparatingChar(c))
 						first = false;
 				}
 				else
 				{
-					if (isIdentifierSeparatingChar(c))
+					if (isDIdentifierSeparatingChar(c))
 						break;
 				}
 			}

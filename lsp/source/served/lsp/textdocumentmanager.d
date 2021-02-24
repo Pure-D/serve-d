@@ -558,7 +558,7 @@ uint[2] wordInLine(const(char)[] line, uint character)
 
 		if (searchStart)
 		{
-			if (isIdentifierSeparatingChar(c))
+			if (isDIdentifierSeparatingChar(c))
 				lastStart = offs + l;
 
 			if (offs + l >= character)
@@ -573,7 +573,7 @@ uint[2] wordInLine(const(char)[] line, uint character)
 		{
 			end = offs;
 			offs += l;
-			if (isIdentifierSeparatingChar(c))
+			if (isDIdentifierSeparatingChar(c))
 				break;
 		}
 	}
@@ -588,11 +588,33 @@ uint[2] wordInLine(const(char)[] line, uint character)
 	return [start, end];
 }
 
+deprecated("use isDIdentifierSeparatingChar instead")
+alias isIdentifierSeparatingChar = isDIdentifierSeparatingChar;
+
 ///
-bool isIdentifierSeparatingChar(dchar c)
+bool isDIdentifierSeparatingChar(dchar c)
 {
 	return c < 48 || (c > 57 && c < 65) || c == '[' || c == '\\' || c == ']'
 		|| c == '`' || (c > 122 && c < 128) || c == '\u2028' || c == '\u2029'; // line separators
+}
+
+///
+bool isValidDIdentifier(const(char)[] s)
+{
+	import std.ascii : isDigit;
+
+	return s.length && !s[0].isDigit && !s.any!isDIdentifierSeparatingChar;
+}
+
+unittest
+{
+	assert(!isValidDIdentifier(""));
+	assert(!isValidDIdentifier("0"));
+	assert(!isValidDIdentifier("10"));
+	assert(!isValidDIdentifier("1a"));
+	assert(isValidDIdentifier("_"));
+	assert(isValidDIdentifier("a"));
+	assert(isValidDIdentifier("__helloWorld123"));
 }
 
 unittest
