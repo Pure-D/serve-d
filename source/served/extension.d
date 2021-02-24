@@ -598,6 +598,10 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 	void addSuggestion(string dir, bool useDub)
 	{
 		dir = buildNormalizedPath(dir);
+
+		if (dir.endsWith('/'))
+			dir = dir[0 .. $ - 1];
+
 		if (!ret.canFind!(a => a.dir == dir))
 			ret ~= RootSuggestion(dir, useDub);
 	}
