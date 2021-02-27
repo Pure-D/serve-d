@@ -10,6 +10,11 @@ jobs:
             fail-fast: false
             matrix:
                 os: [ubuntu-latest, windows-latest, macOS-latest]
+                arch: [x86_64]
+                include:
+                  # use for 32 bit build
+                  - os: windows-latest
+                    arch: x86
         runs-on: ${{ matrix.os }}
         steps:
             - uses: actions/checkout@v2
@@ -30,7 +35,7 @@ jobs:
               run: ./ci/build.sh
               if: matrix.os == 'ubuntu-latest'
               env:
-                ARCH: x86_64
+                ARCH: ${{ matrix.arch }}
                 BUILD: release-debug
 
             - name: Deploy Linux release
@@ -42,7 +47,7 @@ jobs:
                 upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
                 release_id: 20717582
                 asset_path: ./serve-d.tar.xz
-                asset_name: serve-d_linux-nightly-x86_64-$$.tar.xz
+                asset_name: serve-d_linux-nightly-${{ matrix.arch }}-$$.tar.xz
                 asset_content_type: application/x-gtar
 
             # OSX release
@@ -51,7 +56,7 @@ jobs:
               if: matrix.os == 'macOS-latest'
               env:
                 MACOSX_DEPLOYMENT_TARGET: '10.12'
-                ARCH: x86_64
+                ARCH: ${{ matrix.arch }}
                 BUILD: release-debug
 
             - name: Deploy OSX release
@@ -63,7 +68,7 @@ jobs:
                 upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
                 release_id: 20717582
                 asset_path: ./serve-d.tar.xz
-                asset_name: serve-d_osx-nightly-x86_64-$$.tar.xz
+                asset_name: serve-d_osx-nightly-${{ matrix.arch }}-$$.tar.xz
                 asset_content_type: application/x-gtar
 
             # Windows release
@@ -72,6 +77,7 @@ jobs:
               if: matrix.os == 'windows-latest'
               env:
                 BUILD: release-debug
+                ARCH: ${{ matrix.arch }}
 
             - name: Deploy Windows release
               if: matrix.os == 'windows-latest'
@@ -82,7 +88,7 @@ jobs:
                 upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
                 release_id: 20717582
                 asset_path: ./serve-d.zip
-                asset_name: serve-d_windows-nightly-$$.zip
+                asset_name: serve-d_windows-nightly-${{ matix.arch }}-$$.zip
                 asset_content_type: application/zip
 
             - name: cache dependency binaries

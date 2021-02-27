@@ -8,6 +8,7 @@ __dummy.html
 dub.selections.json
 /serve-d
 *.dll
+*.lib
 *.exe
 *.tar.xz
 *.zip
