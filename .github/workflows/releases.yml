@@ -10,6 +10,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macOS-latest]
+        arch: [x86_64]
+        include:
+          # use for 32 bit build
+          - os: windows-latest
+            arch: x86
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
@@ -30,7 +35,7 @@ jobs:
         run: ./ci/build.sh && rdmd ci/validate_version.d
         if: matrix.os == 'ubuntu-latest'
         env:
-          ARCH: x86_64
+          ARCH: ${{ matrix.arch }}
           BUILD: release
 
       - name: Deploy Linux release
@@ -38,7 +43,7 @@ jobs:
         uses: WebFreak001/upload-asset@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OS: linux-x86_64
+          OS: linux-${{ matrix.arch }}
         with:
           file: ./serve-d.tar.xz
           mime: application/x-gtar
@@ -50,7 +55,7 @@ jobs:
         if: matrix.os == 'macOS-latest'
         env:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
-          ARCH: x86_64
+          ARCH: ${{ matrix.arch }}
           BUILD: release
 
       - name: Deploy OSX release
@@ -58,7 +63,7 @@ jobs:
         uses: WebFreak001/upload-asset@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OS: osx-x86_64
+          OS: osx-${{ matrix.arch }}
         with:
           file: ./serve-d.tar.xz
           mime: application/x-gtar
@@ -70,13 +75,14 @@ jobs:
         if: matrix.os == 'windows-latest'
         env:
           BUILD: release
+          ARCH: ${{ matrix.arch }}
 
       - name: Deploy Windows release
         if: matrix.os == 'windows-latest'
         uses: WebFreak001/upload-asset@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OS: windows
+          OS: windows-${{ matrix.arch }}
         with:
           file: ./serve-d.zip
           mime: application/zip

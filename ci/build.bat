@@ -1,6 +1,6 @@
 @echo on
 
-dub build --compiler=ldc2 --build=%BUILD% --arch=x86
+dub build --compiler=ldc2 --build=%BUILD% --arch=%ARCH%
 
 serve-d.exe --version
 
