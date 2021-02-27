@@ -77,11 +77,38 @@ int main(string[] args)
 	string[] provides;
 	string lang = "en";
 	bool wait;
+
+	void setLogLevel(string level)
+	{
+	LevelSwitch:
+		switch (level)
+		{
+			static foreach (levelName; __traits(allMembers, LogLevel))
+			{
+		case levelName:
+				globalLogLevel = __traits(getMember, LogLevel, levelName);
+				break LevelSwitch;
+			}
+		default:
+			throw new GetOptException(
+					"Unknown value for log level, supported values: "
+					~ [__traits(
+							allMembers, LogLevel)].join(", "));
+		}
+	}
+
+	void setLogFile(string file)
+	{
+		sharedLog = new FileLogger(file, LogLevel.all, CreateFolder.no);
+	}
+
 	//dfmt off
 	auto argInfo = args.getopt(
 		"r|require", "Adds a feature set that is required. Unknown feature sets will intentionally crash on startup", &features,
 		"p|provide", "Features to let the editor handle for better integration", &provides,
 		"v|version", "Print version of program", &printVer,
+		"logfile", "Output all log into the given file instead of stderr", &setLogFile,
+		"loglevel", "Change the log level for output logging (" ~ [__traits(allMembers, LogLevel)].join("|") ~ ")", &setLogLevel,
 		"lang", "Change the language of GUI messages", &lang,
 		"wait", "Wait for a second before starting (for debugging)", &wait);
 	//dfmt on

@@ -53,6 +53,8 @@ serve-d offers the following command line options to allow the LSP client to con
 | `-r` / `--require` | [] | (allows multiple, optional) List of options which this serve-d version needs to implement. serve-d will intentionally crash on startup if one of the given options is not supported by this version. Specifying or not specifying them will not change anything on runtime. Implemented features: `d` (PoC / unneeded), `workspaces` (multi-workspace support) |
 | `-p` / `--provide` | [] | (allows multiple, optional) List of options to affect behavior of serve-d. Use this to indicate support for special editor features/extensions not covered by the LSP spec. Supported values: (see provides list below) |
 | `-v` / `--version` | n/a | Prints the version to stdout and exists |
+| `--logfile` | n/a | Overrides the logging output to log to a file instead of stderr for debug logs |
+| `--loglevel` | `verbose` for debug/nightly builds, otherwise `info` | Changes the minimum log level when messages are logged. See `serve-d --help` for possible values |
 | `--lang` | `en` | Changes the language of GUI messages to a supported translation |
 | `--wait` | `false` | Waits for one second before starting (useful to be able to attach when debugging) |
 
@@ -73,6 +75,8 @@ If this is set, the `served/implementMethods` request will return TextEdits with
 **`--provide context-snippets`**
 
 If this is set, auto completion requests will also return built-in and custom defined snippets.
+
+<!-- TODO: --provide test-runner + commands to implement -->
 
 ### Custom requests/notifications
 
