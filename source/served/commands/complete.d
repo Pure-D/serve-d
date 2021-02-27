@@ -421,15 +421,15 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 			return CompletionList.init;
 		}
 
-		if (document.languageId == "d")
+		if (document.getLanguageId == "d")
 			return provideDSourceComplete(params, instance, document);
-		else if (document.languageId == "diet")
+		else if (document.getLanguageId == "diet")
 			return provideDietSourceComplete(params, instance, document);
-		else if (document.languageId == "dml")
+		else if (document.getLanguageId == "dml")
 			return provideDMLSourceComplete(params, instance, document);
 		else
 		{
-			tracef("Providing no completion for unknown language ID %s.", document.languageId);
+			tracef("Providing no completion for unknown language ID %s.", document.getLanguageId);
 			return CompletionList.init;
 		}
 	}

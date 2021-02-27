@@ -994,7 +994,7 @@ void onDidChangeDocument(DocumentLinkParams params)
 void doDscanner(DocumentLinkParams params)
 {
 	auto document = documents[params.textDocument.uri];
-	if (document.languageId != "d")
+	if (document.getLanguageId != "d")
 		return;
 	auto d = config(params.textDocument.uri).d;
 	if (!d.enableStaticLinting || !d.enableLinting)
@@ -1055,14 +1055,14 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 	auto document = documents[params.textDocument.uri];
 	auto fileName = params.textDocument.uri.uriToFile.baseName;
 
-	if (document.languageId == "d" || document.languageId == "diet")
+	if (document.getLanguageId == "d" || document.getLanguageId == "diet")
 	{
 		if (!config.d.enableLinting)
 			return;
 		joinAll({
 			if (config.d.enableStaticLinting)
 			{
-				if (document.languageId == "diet")
+				if (document.getLanguageId == "diet")
 					return;
 				import served.linters.dscanner;
 

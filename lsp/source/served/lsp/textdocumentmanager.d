@@ -22,6 +22,33 @@ struct Document
 	long version_;
 	private char[] text;
 
+	string getLanguageId() const @property @trusted @nogc nothrow
+	{
+		if (!languageId.length)
+		{
+			import std.path : extension;
+			import std.uni : sicmp;
+
+			const ext = uri.extension;
+			if (ext.sicmp(".d") == 0)
+				return "d";
+			else if (ext.sicmp(".dpp") == 0)
+				return "dpp";
+			else if (ext.sicmp(".ds") == 0 || ext.sicmp(".dscript") == 0)
+				return "dscript";
+			else if (ext.sicmp(".dml") == 0)
+				return "dml";
+			else if (ext.sicmp(".sdl") == 0)
+				return "sdl";
+			else if (ext.sicmp(".dt") == 0)
+				return "diet";
+			else
+				return null;
+		}
+
+		return languageId;
+	}
+
 	/// Creates a new D document at the given document URI, with version 0 and
 	/// no text.
 	this(DocumentUri uri)
