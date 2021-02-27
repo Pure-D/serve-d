@@ -36,8 +36,13 @@ To use serve-d you will need an [Editor](https://microsoft.github.io/language-se
 **Officially Supported Editors**
 
 * Visual Studio Code: using [code-d](https://marketplace.visualstudio.com/items?itemName=webfreak.code-d)
+* Atom: using [ide-d](https://atom.io/packages/ide-d)
 
 _add LSP configurations using serve-d for other editors and PR them here!_
+
+**Other Editor Guides**
+
+* [vim](editor-vim.md)
 
 ### Command Line options
 
