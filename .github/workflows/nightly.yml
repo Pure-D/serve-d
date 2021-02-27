@@ -88,7 +88,7 @@ jobs:
                 upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
                 release_id: 20717582
                 asset_path: ./serve-d.zip
-                asset_name: serve-d_windows-${{ matix.arch }}-nightly-$$.zip
+                asset_name: serve-d_windows-nightly-${{ matix.arch }}-$$.zip
                 asset_content_type: application/zip
 
             - name: cache dependency binaries
