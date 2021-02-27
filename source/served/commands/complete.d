@@ -18,10 +18,11 @@ import std.array : appender, array;
 import std.conv : text, to;
 import std.experimental.logger;
 import std.json : JSONType, JSONValue;
-import std.regex : ctRegex, matchFirst;
 import std.string : indexOf, join, lastIndexOf, lineSplitter, strip,
 	stripLeft, stripRight, toLower;
 import std.utf : decodeFront;
+
+import dparse.lexer : Token;
 
 import painlessjson : fromJSON, toJSON;
 
@@ -548,8 +549,9 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 	string line = document.rawText[lineRange[0] .. lineRange[1]].idup;
 	string prefix = line[0 .. min($, params.position.character)].strip;
 	CompletionItem[] completion;
-	if (document.rawText.isInComment(byteOff, backend))
-		if (prefix.startsWith("///", "*", "+"))
+	Token commentToken;
+	if (document.rawText.isInComment(byteOff, backend, &commentToken))
+		if (commentToken.text.startsWith("///", "/**", "/++"))
 		{
 			trace("Providing comment completion");
 			int prefixLen = prefix[0] == '/' ? 3 : 1;
@@ -564,6 +566,12 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 					completion ~= item;
 				}
 			}
+
+			// make the comment one "line" so provide doc complete shows complete
+			// after a /** */ comment block if you are on the first line.
+			lineRange[1] = commentToken.index + commentToken.text.length;
+			provideDocComplete(params, instance, document, completion, line, lineRange);
+
 			return CompletionList(false, completion);
 		}
 
@@ -642,23 +650,15 @@ private void provideDocComplete(TextDocumentPositionParams params, WorkspaceD.In
 			return;
 		}
 		auto funcArgs = extractFunctionParameters(*sig);
-		string[] docs;
-		if (def.name.matchFirst(ctRegex!`^[Gg]et([^a-z]|$)`))
-			docs ~= "Gets $0";
-		else if (def.name.matchFirst(ctRegex!`^[Ss]et([^a-z]|$)`))
-			docs ~= "Sets $0";
-		else if (def.name.matchFirst(ctRegex!`^[Ii]s([^a-z]|$)`))
-			docs ~= "Checks if $0";
-		else
-			docs ~= "$0";
+		string[] docs = ["$0"];
 		int argNo = 1;
 		foreach (arg; funcArgs)
 		{
-			auto space = arg.lastIndexOf(' ');
+			auto space = arg.stripRight.lastIndexOf(' ');
 			if (space == -1)
 				continue;
 			auto identifier = arg[space + 1 .. $];
-			if (!identifier.matchFirst(ctRegex!`[a-zA-Z_][a-zA-Z0-9_]*`))
+			if (!identifier.isValidDIdentifier)
 				continue;
 			if (argNo == 1)
 				docs ~= "Params:";
@@ -731,7 +731,7 @@ private void addDocComplete(ref CompletionItem[] completion, CompletionItem doc,
 	completion ~= doc;
 }
 
-private bool isInComment(scope const(char)[] code, size_t at, WorkspaceD backend)
+private bool isInComment(scope const(char)[] code, size_t at, WorkspaceD backend, Token* outToken = null)
 {
 	if (!backend)
 		return false;
@@ -750,15 +750,11 @@ private bool isInComment(scope const(char)[] code, size_t at, WorkspaceD backend
 	case tok!"comment":
 		auto t = lexer.front;
 
-		if (lexer.front.text.startsWith("//"))
+		if (t.index <= at && t.index + t.text.length >= at)
 		{
-			if (t.index <= at && t.index + t.text.length >= at)
-				return true;
-		}
-		else
-		{
-			if (t.index <= at && t.index + t.text.length > at)
-				return true;
+			if (outToken !is null)
+				*outToken = t;
+			return true;
 		}
 
 		lexer.popFront();
