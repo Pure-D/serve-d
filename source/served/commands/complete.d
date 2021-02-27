@@ -750,7 +750,11 @@ private bool isInComment(scope const(char)[] code, size_t at, WorkspaceD backend
 	case tok!"comment":
 		auto t = lexer.front;
 
-		if (t.index <= at && t.index + t.text.length >= at)
+		auto commentEnd = t.index + t.text.length;
+		if (t.text.startsWith("//"))
+			commentEnd++;
+
+		if (t.index <= at && at < commentEnd)
 		{
 			if (outToken !is null)
 				*outToken = t;
