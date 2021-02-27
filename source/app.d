@@ -70,6 +70,7 @@ void printVersion(io.File output = io.stdout)
 int main(string[] args)
 {
 	debug globalLogLevel = LogLevel.trace;
+	else globalLogLevel = LogLevel.info;
 
 	bool printVer;
 	string[] features;
