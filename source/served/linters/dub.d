@@ -83,6 +83,13 @@ DiagnosticSeverity mapDubLintType(ErrorType type)
 	}
 }
 
+void applyDubLintType(ref Diagnostic error, ErrorType type)
+{
+	error.severity = mapDubLintType(type);
+	if (type == ErrorType.Deprecation)
+		error.tags = opt([DiagnosticTag.deprecated_]);
+}
+
 bool dubLintRunning, retryDubAtEnd;
 Duration lastDubDuration;
 int currentBuildToken;
@@ -163,9 +170,7 @@ void lint(Document document)
 
 			Diagnostic error;
 			error.range = TextRange(issue.line - 1, issue.column - 1, issue.line - 1, issue.column);
-			error.severity = mapDubLintType(issue.type);
-			if (issue.type == ErrorType.Deprecation)
-				error.tags = opt([DiagnosticTag.deprecated_]);
+			applyDubLintType(error, issue.type);
 			error.source = DubDiagnosticSource;
 			error.message = issue.text;
 			if (supplemental.length)
@@ -197,7 +202,7 @@ void lint(Document document)
 
 					Diagnostic supplError;
 					supplError.range = TextRange(Position(suppl.line - 1, suppl.column - 1));
-					supplError.severity = DiagnosticSeverity.error;
+					applyDubLintType(supplError, issue.type);
 					supplError.source = DubDiagnosticSource;
 					supplError.message = issue.text ~ "\n" ~ suppl.text;
 					if (i + 1 < supplemental.length)
