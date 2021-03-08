@@ -117,9 +117,7 @@ TextEdit[] provideFormatting(DocumentFormattingParams params)
 	gFormattingOptions = params.options;
 	auto result = backend.get!DfmtComponent.format(document.rawText,
 			generateDfmtArgs(config, document.eolAt(0))).getYield;
-	return [
-		TextEdit(TextRange(Position(0, 0), document.offsetToPosition(document.length)), result)
-	];
+	return diff(document, result);
 }
 
 string formatCode(string code, string[] dfmtArgs)
@@ -133,25 +131,12 @@ string formatSnippet(string code, string[] dfmtArgs, SnippetLevel level = Snippe
 }
 
 @protocolMethod("textDocument/rangeFormatting")
-TextEdit[] prepareRangeFormatting(DocumentRangeFormattingParams params)
+TextEdit[] provideRangeFormatting(DocumentRangeFormattingParams params)
 {
 	import std.algorithm : filter;
 	import std.array : array;
 
-	auto config = workspace(params.textDocument.uri).config;
-	if (!config.d.enableFormatting)
-		return [];
-	auto document = documents[params.textDocument.uri];
-	if (document.languageId != "d")
-		return [];
-	gFormattingOptionsApplyOn = params.textDocument.uri;
-	gFormattingOptions = params.options;
-
-	auto result = backend.get!DfmtComponent.format(document.rawText, generateDfmtArgs(config, document.eolAt(
-			0))).getYield;
-
-	auto a = diff(document, result);
-	return a.filter!(
+	return provideFormatting(DocumentFormattingParams(params.textDocument, params.options)).filter!(
 			(edit) => edit.range.isValidEditFor(params.range)
 	).array;
 }
