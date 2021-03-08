@@ -131,3 +131,120 @@ string formatSnippet(string code, string[] dfmtArgs, SnippetLevel level = Snippe
 {
 	return backend.get!SnippetsComponent.format(code, dfmtArgs, level).getYield;
 }
+
+@protocolMethod("textDocument/rangeFormatting")
+TextEdit[] provideRangeFormatting(DocumentRangeFormattingParams params)
+{
+	import std.algorithm : filter;
+	import std.array : array;
+
+	auto config = workspace(params.textDocument.uri).config;
+	if (!config.d.enableFormatting)
+		return [];
+	auto document = documents[params.textDocument.uri];
+	if (document.languageId != "d")
+		return [];
+	gFormattingOptionsApplyOn = params.textDocument.uri;
+	gFormattingOptions = params.options;
+	auto result = backend.get!DfmtComponent.format(document.rawText,
+			generateDfmtArgs(config, document.eolAt(0))).getYield;
+
+	return diff(result).filter!(
+			(edit) => edit.range.isValidEditFor(params.range)
+	).array;
+}
+
+package bool isValidEditFor(const TextRange editRange, const TextRange formatRange)
+{
+	//dfmt off
+	return (editRange.start.line < formatRange.end.line
+	|| (editRange.start.line == formatRange.end.line && editRange.start.character <= formatRange.end.character))
+	&& (editRange.end.line > formatRange.start.line
+	|| (editRange.end.line == formatRange.start.line && editRange.end.character >= formatRange.start.character));
+	//dfmt on
+}
+
+private TextEdit[] diff(Document document, const string after)
+{
+	import std.ascii : isWhite;
+	import std.utf : decode;
+
+	auto before = document.rawText();
+	size_t i;
+	size_t j;
+	TextEdit[] result;
+
+	size_t startIndex;
+	size_t stopIndex;
+	string text;
+
+	bool pushTextEdit()
+	{
+		if (startIndex != stopIndex || text.length > 0)
+		{
+			result ~= TextEdit(TextRange(document.offsetToPosition(startIndex), document.offsetToPosition(
+					stopIndex)), text);
+			return true;
+		}
+
+		return false;
+	}
+
+	while (i < before.length || j < after.length)
+	{
+		auto newI = i;
+		auto newJ = j;
+		dchar beforeChar;
+		dchar afterChar;
+
+		if (newI < before.length)
+		{
+			beforeChar = decode(before, newI);
+		}
+
+		if (newJ < after.length)
+		{
+			afterChar = decode(after, newJ);
+		}
+
+		if (i < before.length && j < after.length && beforeChar == afterChar)
+		{
+			i = newI;
+			j = newJ;
+
+			if (pushTextEdit())
+			{
+				startIndex = stopIndex;
+				text = "";
+			}
+		}
+
+		if (startIndex == stopIndex)
+		{
+			startIndex = i;
+			stopIndex = i;
+		}
+
+		auto addition = !isWhite(beforeChar) && isWhite(afterChar);
+		immutable deletion = isWhite(beforeChar) && !isWhite(afterChar);
+
+		if (!addition && !deletion)
+		{
+			addition = before.length - i < after.length - j;
+		}
+
+		if (addition && j < after.length)
+		{
+			text ~= after[j .. newJ];
+			j = newJ;
+		}
+		else if (i < before.length)
+		{
+			stopIndex = newI;
+			i = newI;
+		}
+	}
+
+	pushTextEdit();
+	return result;
+}
