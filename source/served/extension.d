@@ -456,6 +456,7 @@ InitializeResult initialize(InitializeParams params)
 	result.capabilities.codeLensProvider = CodeLensOptions(true);
 	result.capabilities.documentSymbolProvider = true;
 	result.capabilities.documentFormattingProvider = true;
+	result.capabilities.documentRangeFormattingProvider = true;
 	result.capabilities.workspace = opt(ServerWorkspaceCapabilities(
 			opt(ServerWorkspaceCapabilities.WorkspaceFolders(opt(true), opt(true)))));
 
