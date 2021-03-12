@@ -39,7 +39,10 @@ struct EventProcessorConfig
 /// `members` field defining all potential methods.
 mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config = EventProcessorConfig.init)
 {
-	import core.lifetime : forward;
+	static if (__traits(compiles, { import core.lifetime : forward; }))
+		import core.lifetime : forward;
+	else
+		import std.functional : forward;
 
 	import std.algorithm;
 	import std.json;
