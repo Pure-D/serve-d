@@ -4,7 +4,7 @@ import std.algorithm : countUntil, splitter, startsWith;
 import std.array : appender, replace;
 import std.ascii : isWhite;
 import std.conv : to;
-import std.path : buildPath, chainPath, dirName;
+import std.path : buildNormalizedPath, buildPath, chainPath, dirName;
 import std.process : environment;
 import std.string : indexOf, startsWith, strip, stripLeft;
 import std.uni : sicmp;
@@ -76,6 +76,7 @@ bool detectDMDStdlibPaths(string cwd, out string[] ret)
 	{
 		if (dmdPath.length)
 		{
+			auto dmdDir = dirName(dmdPath);
 			bool haveDRuntime = fs.exists(chainPath(dmdDir, "..", "..", "src",
 					"druntime", "import"));
 			bool havePhobos = fs.exists(chainPath(dmdDir, "..", "..", "src", "phobos"));
@@ -91,9 +92,13 @@ bool detectDMDStdlibPaths(string cwd, out string[] ret)
 				];
 			else if (havePhobos)
 				ret = [buildNormalizedPath(dmdDir, "..", "..", "src", "phobos")];
-		}
 
-		return ret.length > 0;
+			return ret.length > 0;
+		}
+		else
+		{
+			return false;
+		}
 	}
 	else version (Posix)
 	{
@@ -161,7 +166,7 @@ bool detectLDCStdlibPaths(string cwd, out string[] ret)
 
 	if (ldcPath.length)
 	{
-		if (tryPath(chainPath(ldcPath, "..", "etc", confName), ldcDir, ret))
+		if (tryPath(chainPath(ldcDir.dirName, "etc", confName), ldcDir, ret))
 			return true;
 	}
 
@@ -184,25 +189,19 @@ bool detectLDCStdlibPaths(string cwd, out string[] ret)
 
 version (Windows) private string readLdcPathFromRegistry()
 {
-	import core.sys.windows.windows;
+	import std.windows.registry;
 
 	// https://github.com/ldc-developers/ldc/blob/829dc71114eaf7c769208f03eb9a614dafd789c3/driver/configfile.cpp#L65
-	HKEY hkey;
-	if (RegOpenKeyExW(HKEY_LOCAL_MACHINE, `SOFTWARE\ldc-developers\LDC\0.11.0`, 0, KEY_QUERY_VALUE, &hkey)
-			== ERROR_SUCCESS)
+	try
 	{
-		DWORD length;
-		if (RegGetValueW(hkey, null, "Path", RRF_RT_REG_SZ, null, null, &length) == ERROR_SUCCESS)
-		{
-			wchar[] buffer = new wchar[length];
-			if (RegGetValueW(hkey, null, "Path", RRF_RT_REG_SZ, null, buffer.ptr, &length))
-			{
-				return buffer[0 .. length].to!string;
-			}
-		}
+		scope Key hklm = Registry.localMachine;
+		scope Key val = hklm.getKey(`SOFTWARE\ldc-developers\LDC\0.11.0`, REGSAM.KEY_QUERY_VALUE);
+		return val.getValue("Path").value_SZ();
 	}
-
-	return null;
+	catch (RegistryException)
+	{
+		return null;
+	}
 }
 
 private string getUserHomeDirectoryLDC()
