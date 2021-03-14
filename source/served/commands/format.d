@@ -117,7 +117,9 @@ TextEdit[] provideFormatting(DocumentFormattingParams params)
 	gFormattingOptions = params.options;
 	auto result = backend.get!DfmtComponent.format(document.rawText,
 			generateDfmtArgs(config, document.eolAt(0))).getYield;
-	return diff(document, result);
+	return [
+		TextEdit(TextRange(Position(0, 0), document.offsetToPosition(document.length)), result)
+	];
 }
 
 string formatCode(string code, string[] dfmtArgs)
@@ -136,7 +138,18 @@ TextEdit[] provideRangeFormatting(DocumentRangeFormattingParams params)
 	import std.algorithm : filter;
 	import std.array : array;
 
-	return provideFormatting(DocumentFormattingParams(params.textDocument, params.options)).filter!(
+	auto config = workspace(params.textDocument.uri).config;
+	if (!config.d.enableFormatting)
+		return [];
+	auto document = documents[params.textDocument.uri];
+	if (document.languageId != "d")
+		return [];
+	gFormattingOptionsApplyOn = params.textDocument.uri;
+	gFormattingOptions = params.options;
+	auto result = backend.get!DfmtComponent.format(document.rawText,
+			generateDfmtArgs(config, document.eolAt(0))).getYield;
+
+	return diff(result).filter!(
 			(edit) => edit.range.isValidEditFor(params.range)
 	).array;
 }
