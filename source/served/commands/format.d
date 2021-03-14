@@ -144,11 +144,11 @@ TextEdit[] provideRangeFormatting(DocumentRangeFormattingParams params)
 package bool isValidEditFor(const TextRange editRange, const TextRange formatRange)
 {
 	//dfmt off
-    return (editRange.start.line < formatRange.end.line
-        || (editRange.start.line == formatRange.end.line && editRange.start.character <= formatRange.end.character))
-        && (editRange.end.line > formatRange.start.line
-        || (editRange.end.line == formatRange.start.line && editRange.end.character >= formatRange.start.character));
-    //dfmt on
+	return (editRange.start.line < formatRange.end.line
+	|| (editRange.start.line == formatRange.end.line && editRange.start.character <= formatRange.end.character))
+	&& (editRange.end.line > formatRange.start.line
+	|| (editRange.end.line == formatRange.start.line && editRange.end.character >= formatRange.start.character));
+	//dfmt on
 }
 
 private TextEdit[] diff(Document document, const string after)
