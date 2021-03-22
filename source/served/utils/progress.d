@@ -25,9 +25,13 @@ enum ProgressType
 	configFinish,
 	/// sent for each root of a workspace on startup. Sent for every configLoad for all roots.
 	/// sent with root.uri argument
+	///
+	/// With current lazy implementation this is instantly done
 	@withProgress workspaceStartup,
 	/// sent for every auto completion server starting up. Sent after all workspaceStartups for a workspace.
 	/// sent with root.uri argument
+	///
+	/// With current lazy implementation this is instantly done
 	@withProgress completionStartup,
 	/// sent when dub is being reloaded
 	/// sent with instance.uri argument

@@ -20,6 +20,13 @@ struct protocolNotification
 /// Signature: `()`
 enum onRegisteredComponents;
 
+/// Event called when a project is available but not intended to be loaded yet.
+/// Should not access any components, otherwise it will force a load, but only
+/// show hints in the UI. When it's accessed and actually being loaded the
+/// events `onAddingProject` and `onAddedProject` will be emitted.
+/// Signature: `(WorkspaceD.Instance, string dir, string uri)`
+enum onProjectAvailable;
+
 /// Event called when a new workspaced instance is created. Called before dub or
 /// fsworkspace is loaded.
 /// Signature: `(WorkspaceD.Instance, string dir, string uri)`

@@ -19,6 +19,18 @@ __gshared bool doTrackTests = false;
 
 UnittestProject[DocumentUri] projectTests;
 
+@onProjectAvailable
+void onPreviewProjectForUnittest(WorkspaceD.Instance instance, string dir, string rootFolderUri)
+{
+	if (!doTrackTests)
+		return;
+
+	string rootUri = instance.cwd.uriFromFile;
+	auto project = &projectTests.require(rootUri, UnittestProject(rootUri, null, null, true));
+
+	rpc.notifyMethod("coded/pushProjectTests", *project);
+}
+
 @onAddedProject
 void onDidAddProjectForUnittest(WorkspaceD.Instance instance, string dir, string rootFolderUri)
 {
@@ -59,6 +71,24 @@ void onDidSaveCheckForUnittest(DidSaveTextDocumentParams params)
 @protocolNotification("served/rescanTests")
 void rescanTests(RescanTestsParams params)
 {
+	string cwd = params.uri.length ? uriToFile(params.uri) : null;
+	foreach (instance; backend.instances)
+	{
+		if (!cwd.length || instance.cwd == cwd)
+		{
+			if (auto lazyInstance = cast(LazyWorkspaceD.LazyInstance)instance)
+			{
+				if (cwd.length || lazyInstance.didCallAccess)
+				{
+					rescanProject(instance);
+				}
+			}
+			else
+			{
+				rescanProject(instance);
+			}
+		}
+	}
 }
 
 private void rescanFile(ref UnittestProject project, TextDocumentIdentifier documentIdentifier)
@@ -121,6 +151,7 @@ private void rescanProject(WorkspaceD.Instance instance)
 	sw.start();
 
 	project.name = settings.packageName;
+	project.needsLoad = false;
 	project.modules = null;
 	foreach (path; settings.sourceFiles)
 	{
