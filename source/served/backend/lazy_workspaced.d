@@ -55,7 +55,6 @@ class LazyWorkspaceD : WorkspaceD
 
 		override bool checkHasComponent(ComponentInfo info) const nothrow
 		{
-			debug try { trace(__FUNCTION__, ": ", info, " of ", lazyComponents.map!"a.info"); } catch (Exception) {}
 			foreach (com; lazyComponents)
 				if (com.info.name == info.name)
 					return true;
