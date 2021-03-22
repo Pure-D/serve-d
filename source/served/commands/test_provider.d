@@ -2,6 +2,7 @@ module served.commands.test_provider;
 
 import served.types;
 import served.commands.symbol_search;
+import served.utils.async : spawnFiber;
 
 import workspaced.api;
 import workspaced.coms;
@@ -24,10 +25,12 @@ void onDidAddProjectForUnittest(WorkspaceD.Instance instance, string dir, string
 	if (!doTrackTests)
 		return;
 
-	if (!instance.has!DubComponent)
-		return;
+	spawnFiber({
+		if (!instance.has!DubComponent)
+			return;
 
-	rescanProject(instance);
+		rescanProject(instance);
+	}, 80);
 }
 
 @protocolNotification("textDocument/didSave")
@@ -43,12 +46,14 @@ void onDidSaveCheckForUnittest(DidSaveTextDocumentParams params)
 	if (!instance)
 		return;
 
-	auto projectUri = workspace(params.textDocument.uri).folder.uri;
+	spawnFiber({
+		auto projectUri = workspace(params.textDocument.uri).folder.uri;
 
-	auto project = &projectTests.require(projectUri, UnittestProject(projectUri));
-	rescanFile(*project, params.textDocument);
+		auto project = &projectTests.require(projectUri, UnittestProject(projectUri));
+		rescanFile(*project, params.textDocument);
 
-	rpc.notifyMethod("coded/pushProjectTests", *project);
+		rpc.notifyMethod("coded/pushProjectTests", *project);
+	}, 80);
 }
 
 @protocolNotification("served/rescanTests")
