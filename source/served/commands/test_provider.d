@@ -139,7 +139,6 @@ private void rescanProject(WorkspaceD.Instance instance)
 {
 	import std.datetime.stopwatch : StopWatch;
 	import std.path : buildNormalizedPath;
-	import std.algorithm.searching : endsWith;
 
 	DubComponent dub = instance.get!DubComponent;
 	auto settings = dub.rootPackageBuildSettings();
@@ -157,9 +156,10 @@ private void rescanProject(WorkspaceD.Instance instance)
 	foreach (path; settings.sourceFiles)
 	{
 		auto fullPath = buildNormalizedPath(settings.packagePath, path);
-		auto uri = fullPath.uriFromFile;
+		if (!fullPath.endsWith(".d", ".dpp", ".di"))
+			continue;
 
-		if (!uri.endsWith(".d") && !uri.endsWith(".dpp") && !uri.endsWith(".di")) continue;
+		auto uri = fullPath.uriFromFile;
 
 		bool tempLoad = documents.tryGet(uri) == Document.init;
 		if (tempLoad)
