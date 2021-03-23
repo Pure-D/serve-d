@@ -23,6 +23,9 @@
 		"serverbase"
 	],
 	"versions-windows": ["RequestsSkipSSL"],
+	"dflags-ldc": [
+		"-linkonce-templates"
+	],
 	"configurations": [
 		{
 			"name": "executable"
