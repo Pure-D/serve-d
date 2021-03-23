@@ -156,6 +156,9 @@ private void rescanProject(WorkspaceD.Instance instance)
 	foreach (path; settings.sourceFiles)
 	{
 		auto fullPath = buildNormalizedPath(settings.packagePath, path);
+		if (!fullPath.endsWith(".d", ".dpp", ".di"))
+			continue;
+
 		auto uri = fullPath.uriFromFile;
 
 		bool tempLoad = documents.tryGet(uri) == Document.init;
