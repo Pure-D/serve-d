@@ -1,4 +1,4 @@
 name "serverbase"
 
-dependency "serve-d:lsp" path="../lsp"
+dependency "serve-d:lsp" path=".."
 dependency "workspace-d" version=">=3.0.0" optional=true default=false
