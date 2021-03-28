@@ -4,7 +4,7 @@
 	"license": "MIT",
 	"targetType": "executable",
 	"dependencies": {
-		"workspace-d": {"path": "../workspace-d-v3"},
+		"workspace-d": "3.6.0-pre.8",
 		"eventsystem": "~>1.2.0",
 		"libddoc": "0.7.3",
 		"rm-rf": "~>0.1.0",
