@@ -30,7 +30,7 @@ import fs = std.file;
 import io = std.stdio;
 
 static immutable sortPrefixDoc = "0_";
-static immutable sortPrefixSnippets = "2_3_";
+static immutable sortPrefixSnippets = "2_5_";
 // dcd additionally sorts inside with sortFromDCDType return value (appends to this)
 static immutable sortPrefixDCD = "2_";
 
