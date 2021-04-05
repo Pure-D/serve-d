@@ -85,13 +85,15 @@ string sortFromDCDType(string type)
 
 	switch (type[0])
 	{
-	case 'm': // member variable
-	case 'e': // enum member
-		return "2_";
-	case 'k': // keyword
 	case 'v': // variable name
-	case 'f': // function
+		return "2_";
+	case 'm': // member variable
 		return "3_";
+	case 'f': // function
+		return "4_";
+	case 'k': // keyword
+	case 'e': // enum member
+		return "5_";
 	case 'c': // class name
 	case 'i': // interface name
 	case 's': // struct name
@@ -106,7 +108,7 @@ string sortFromDCDType(string type)
 	case 'T': // mixin template name
 	case 'h': // template type parameter
 	case 'p': // template variadic parameter
-		return "4_";
+		return "6_";
 	default:
 		return "9_";
 	}
