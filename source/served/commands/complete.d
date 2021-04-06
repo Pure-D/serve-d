@@ -946,6 +946,7 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 		completion ~= item;
 	}
 
+	// sort only for duplicate detection (use sortText for UI sorting)
 	completion.sort!"a.label < b.label";
 	if (completeNoDupes)
 		return completion.chunkBy!((a, b) => a.label == b.label && a.kind == b.kind)
