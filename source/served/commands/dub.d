@@ -120,8 +120,10 @@ bool switchCompiler(string value)
 /// {
 ///     "packagePath": string,
 ///     "packageName": string,
+///     "recipePath": string,
 ///     "targetPath": string,
 ///     "targetName": string,
+///     "targetType": string,
 ///     "workingDirectory": string,
 ///     "mainSourceFile": string,
 ///
@@ -143,6 +145,8 @@ bool switchCompiler(string value)
 ///     "postBuildCommands": string[],
 ///     "preRunCommands": string[],
 ///     "postRunCommands": string[],
+///     "buildOptions": string[],
+///     "buildRequirements": string[],
 /// }
 /// ```
 @protocolMethod("served/getActiveDubConfig")
@@ -153,8 +157,10 @@ JSONValue getActiveDubConfig()
 	auto ret = activeInstance.get!DubComponent.rootPackageBuildSettings();
 	static assert(is(typeof(ret.packagePath) : string), "API guarantee broken");
 	static assert(is(typeof(ret.packageName) : string), "API guarantee broken");
+	static assert(is(typeof(ret.recipePath) : string), "API guarantee broken");
 	static assert(is(typeof(ret.targetPath) : string), "API guarantee broken");
 	static assert(is(typeof(ret.targetName) : string), "API guarantee broken");
+	static assert(is(typeof(ret.targetType) : string), "API guarantee broken");
 	static assert(is(typeof(ret.workingDirectory) : string), "API guarantee broken");
 	static assert(is(typeof(ret.mainSourceFile) : string), "API guarantee broken");
 	static assert(is(typeof(ret.dflags) : string[]), "API guarantee broken");
@@ -175,6 +181,8 @@ JSONValue getActiveDubConfig()
 	static assert(is(typeof(ret.postBuildCommands) : string[]), "API guarantee broken");
 	static assert(is(typeof(ret.preRunCommands) : string[]), "API guarantee broken");
 	static assert(is(typeof(ret.postRunCommands) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.buildOptions) : string[]), "API guarantee broken");
+	static assert(is(typeof(ret.buildRequirements) : string[]), "API guarantee broken");
 	return ret.toJSON;
 }
 
