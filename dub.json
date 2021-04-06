@@ -2,6 +2,7 @@
 	"name": "serve-d",
 	"description": "Microsoft Language Server Protocol implementation using workspace-d",
 	"license": "MIT",
+	"copyright": "Copyright © 2017-2021, webfreak",
 	"dependencies": {
 		"workspace-d": "3.6.0-pre.9",
 		"eventsystem": "~>1.2.0",
