@@ -24,7 +24,9 @@
 	"versions-windows": ["RequestsSkipSSL"],
 	"configurations": [
 		{
-			"name": "executable"
+			"name": "executable",
+			"mainSourceFile": "source/app.d",
+			"targetType": "executable"
 		},
 		{
 			"name": "unittest",
