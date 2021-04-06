@@ -2,7 +2,6 @@
 	"name": "serve-d",
 	"description": "Microsoft Language Server Protocol implementation using workspace-d",
 	"license": "MIT",
-	"targetType": "executable",
 	"dependencies": {
 		"workspace-d": "3.6.0-pre.8",
 		"eventsystem": "~>1.2.0",
@@ -29,35 +28,27 @@
 		},
 		{
 			"name": "unittest",
-			"targetType": "executable",
-			"targetName": "serve-d-test",
-			"preBuildCommands-windows": [
-				"$DUB run --compiler=%DC% unit-threaded -c gen_ut_main -- -f bin\\ut.d"
-			],
-			"preBuildCommands-posix": [
-				"$DUB run --compiler=$$DC unit-threaded -c gen_ut_main -- -f bin/ut.d"
-			],
-			"mainSourceFile": "bin/ut.d",
+			"mainSourceFile": "source/app.d",
+			"dflags": ["-checkaction=context"],
 			"excludedSourceFiles": [
 				"source/app.d",
 				"source/served/info.d"
 			],
 			"dependencies": {
-				"unit-threaded": "1.0.11"
+				"silly": "~>1.1.1"
 			}
 		},
 		{
 			"name": "unittest-optimized",
 			"buildOptions": ["optimize", "debugInfo", "unittests"],
-			"targetType": "executable",
-			"targetName": "serve-d-test",
-			"mainSourceFile": "bin/ut.d",
+			"mainSourceFile": "source/app.d",
+			"dflags": ["-checkaction=context"],
 			"excludedSourceFiles": [
 				"source/app.d",
 				"source/served/info.d"
 			],
 			"dependencies": {
-				"unit-threaded": "1.0.11"
+				"silly": "~>1.1.1"
 			}
 		}
 	]
