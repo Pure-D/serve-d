@@ -149,7 +149,7 @@ TextEdit[] provideRangeFormatting(DocumentRangeFormattingParams params)
 	auto result = backend.get!DfmtComponent.format(document.rawText,
 			generateDfmtArgs(config, document.eolAt(0))).getYield;
 
-	return diff(result).filter!(
+	return diff(document, result).filter!(
 			(edit) => edit.range.isValidEditFor(params.range)
 	).array;
 }
