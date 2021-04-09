@@ -417,8 +417,6 @@ $(BODY)`,
 	];
 }
 
-version (unittest) import unit_threaded.assertions;
-
 unittest
 {
 	//dfmt off
@@ -447,7 +445,7 @@ unittest
 		~ "**Returns** — nothing of consequence\n\n";
 	//dfmt on
 
-	shouldEqual(ddocToMarkdown(comment), commentMarkdown);
+	assert(ddocToMarkdown(comment) == commentMarkdown);
 }
 
 @("ddoc with inline references")
@@ -460,7 +458,7 @@ unittest
 			~ "for this [`error`](command:code-d.navigateLocal?error).\n\n\n\n";
 	//dfmt on
 
-	shouldEqual(ddocToMarkdown(comment), commentMarkdown);
+	assert(ddocToMarkdown(comment) == commentMarkdown);
 }
 
 @("messed up formatting")
@@ -483,5 +481,5 @@ There is more content.
 ` ~ "```\n\n";
 	//dfmt on
 
-	shouldEqual(ddocToMarkdown(comment), commentMarkdown);
+	assert(ddocToMarkdown(comment) == commentMarkdown);
 }

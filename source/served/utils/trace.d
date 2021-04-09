@@ -50,7 +50,10 @@ struct TraceState
 
 		TraceState ret;
 		ret.time = MonoTime.currTime;
-		ret.gc = GC.stats().allocatedInCurrentThread;
+		static if (__traits(hasMember, typeof(GC.stats()), "allocatedInCurrentThread"))
+			ret.gc = GC.stats().allocatedInCurrentThread;
+		else
+			ret.gc = GC.stats().usedSize;
 		return ret;
 	}
 }

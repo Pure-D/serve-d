@@ -320,7 +320,6 @@ version (unittest)
 	import std.file : tempDir, write;
 	import std.path : buildPath;
 	import std.range : enumerate;
-	import unit_threaded.assertions;
 
 	private class DiagnosticTester
 	{
@@ -345,6 +344,21 @@ version (unittest)
 
 			dscannerIni = buildPath(tempDir(), id ~ "-dscanner.ini");
 			writeINIFile(config, dscannerIni);
+		}
+
+		~this()
+		{
+			shutdown(true);
+		}
+
+		void shutdown(bool dtor)
+		{
+			if (dscanner)
+				dscanner.shutdown(dtor);
+			dscanner = null;
+			if (backend)
+				backend.shutdown(dtor);
+			backend = null;
 		}
 
 		DScannerIssue[] lint(scope const(char)[] code)
@@ -406,6 +420,7 @@ version (unittest)
 unittest
 {
 	DiagnosticTester test = new DiagnosticTester("test-syntax-errors");
+	scope (exit) test.shutdown(false);
 
 	Document document = Document.nullDocument(q{
 void main()
@@ -416,10 +431,10 @@ void main()
 });
 
 	test.build(document);
-	shouldEqual(test.syntaxErrorsAt(Position(0, 0)).length, 0);
-	shouldEqual(test.syntaxErrorsAt(Position(3, 4)).length, 1);
-	shouldEqual(test.syntaxErrorsAt(Position(3, 4))[0].message, "Expected `(` instead of `x`");
-	shouldEqual(test.syntaxErrorsAt(Position(3, 4))[0].range, TextRange(3, 1, 3, 5));
+	assert(test.syntaxErrorsAt(Position(0, 0)).length == 0);
+	assert(test.syntaxErrorsAt(Position(3, 4)).length == 1);
+	assert(test.syntaxErrorsAt(Position(3, 4))[0].message == "Expected `(` instead of `x`");
+	assert(test.syntaxErrorsAt(Position(3, 4))[0].range == TextRange(3, 1, 3, 5));
 
 	document = Document.nullDocument(q{
 void main()
@@ -429,11 +444,11 @@ void main()
 });
 
 	test.build(document);
-	shouldEqual(test.syntaxErrorsAt(Position(0, 0)).length, 0);
-	shouldEqual(test.syntaxErrorsAt(Position(3, 3)).length, 0);
-	shouldEqual(test.syntaxErrorsAt(Position(3, 4)).length, 1);
-	shouldEqual(test.syntaxErrorsAt(Position(3, 4))[0].message, "Expected `;` instead of `}`");
-	shouldEqual(test.syntaxErrorsAt(Position(3, 4))[0].range, TextRange(3, 4, 3, 6));
+	assert(test.syntaxErrorsAt(Position(0, 0)).length == 0);
+	assert(test.syntaxErrorsAt(Position(3, 3)).length == 0);
+	assert(test.syntaxErrorsAt(Position(3, 4)).length == 1);
+	assert(test.syntaxErrorsAt(Position(3, 4))[0].message == "Expected `;` instead of `}`");
+	assert(test.syntaxErrorsAt(Position(3, 4))[0].range == TextRange(3, 4, 3, 6));
 
 	document = Document.nullDocument(q{
 void main()
@@ -443,18 +458,19 @@ void main()
 });
 
 	test.build(document);
-	shouldEqual(test.syntaxErrorsAt(Position(3, 3)).length, 0);
-	shouldEqual(test.syntaxErrorsAt(Position(3, 3)).length, 0);
-	shouldEqual(test.syntaxErrorsAt(Position(3, 4)).length, 0);
-	shouldEqual(test.syntaxErrorsAt(Position(3, 9)).length, 0);
-	shouldEqual(test.syntaxErrorsAt(Position(3, 10)).length, 1);
-	shouldEqual(test.syntaxErrorsAt(Position(3, 10))[0].message, "Expected `;` instead of `{`");
-	shouldEqual(test.syntaxErrorsAt(Position(3, 10))[0].range, TextRange(3, 10, 3, 15));
+	assert(test.syntaxErrorsAt(Position(3, 3)).length == 0);
+	assert(test.syntaxErrorsAt(Position(3, 3)).length == 0);
+	assert(test.syntaxErrorsAt(Position(3, 4)).length == 0);
+	assert(test.syntaxErrorsAt(Position(3, 9)).length == 0);
+	assert(test.syntaxErrorsAt(Position(3, 10)).length == 1);
+	assert(test.syntaxErrorsAt(Position(3, 10))[0].message == "Expected `;` instead of `{`");
+	assert(test.syntaxErrorsAt(Position(3, 10))[0].range == TextRange(3, 10, 3, 15));
 }
 
 unittest
 {
 	DiagnosticTester test = new DiagnosticTester("test-syntax-issues");
+	scope (exit) test.shutdown(false);
 
 	Document document = Document.nullDocument(q{
 void main()
@@ -466,15 +482,16 @@ void main()
 });
 
 	test.build(document);
-	shouldEqual(test.diagnosticsAt(Position(0, 0), "served.foreach-auto").length, 0);
+	assert(test.diagnosticsAt(Position(0, 0), "served.foreach-auto").length == 0);
 	auto diag = test.diagnosticsAt(Position(3, 11), "served.foreach-auto");
-	shouldEqual(diag.length, 1);
-	shouldEqual(diag[0].range, TextRange(3, 10, 3, 14));
+	assert(diag.length == 1);
+	assert(diag[0].range == TextRange(3, 10, 3, 14));
 }
 
 unittest
 {
 	DiagnosticTester test = new DiagnosticTester("test-suspicious-local-imports");
+	scope (exit) test.shutdown(false);
 
 	Document document = Document.nullDocument(q{
 void main()
@@ -486,8 +503,8 @@ void main()
 });
 
 	test.build(document);
-	shouldEqual(test.diagnosticsAt(Position(0, 0), LocalImportCheckKEY).length, 0);
+	assert(test.diagnosticsAt(Position(0, 0), LocalImportCheckKEY).length == 0);
 	auto diag = test.diagnosticsAt(Position(3, 11), LocalImportCheckKEY);
-	shouldEqual(diag.length, 1);
-	shouldEqual(diag[0].range, TextRange(3, 1, 3, 24));
+	assert(diag.length == 1);
+	assert(diag[0].range == TextRange(3, 1, 3, 24));
 }

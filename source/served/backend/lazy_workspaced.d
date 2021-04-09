@@ -9,13 +9,22 @@ import workspaced.backend;
 alias LazyLoadHook = void delegate() nothrow;
 alias LazyLoadHooks = LazyLoadHook[];
 
+alias InstanceLoadHook = void delegate();
+
 class LazyWorkspaceD : WorkspaceD
 {
 	static class LazyInstance : WorkspaceD.Instance
 	{
 		private LazyWorkspaceD backend;
 		private LazyLoadHooks[string] lazyLoadCallbacks;
+		private InstanceLoadHook[] accessCallbacks;
+		private bool wasAccessed;
 		ComponentFactory[] lazyComponents;
+
+		bool didCallAccess() const
+		{
+			return wasAccessed;
+		}
 
 		void onLazyLoad(string component, LazyLoadHook hook)
 		{
@@ -26,9 +35,19 @@ class LazyWorkspaceD : WorkspaceD
 			lazyLoadCallbacks.require(component) ~= hook;
 		}
 
+		void onLazyLoadInstance(InstanceLoadHook hook)
+		{
+			if (wasAccessed)
+				return hook();
+			else
+				accessCallbacks ~= hook;
+		}
+
 		override void onBeforeAccessComponent(
 				ComponentInfo info) const
 		{
+			accessCheck();
+
 			// lots of const-remove-casts because lazy loading should in theory
 			// not break anything constness related
 			foreach (i, com; lazyComponents)
@@ -55,7 +74,15 @@ class LazyWorkspaceD : WorkspaceD
 
 		override bool checkHasComponent(ComponentInfo info) const nothrow
 		{
-			debug try { trace(__FUNCTION__, ": ", info, " of ", lazyComponents.map!"a.info"); } catch (Exception) {}
+			try
+			{
+				accessCheck();
+			}
+			catch (Exception)
+			{
+				return false;
+			}
+
 			foreach (com; lazyComponents)
 				if (com.info.name == info.name)
 					return true;
@@ -85,6 +112,8 @@ class LazyWorkspaceD : WorkspaceD
 		protected override void attachComponent(
 				ComponentWrapperInstance component)
 		{
+			accessCheck();
+
 			lazyComponents = lazyComponents.remove!(
 					a => a.info.name == component.info.name);
 			instanceComponents ~= component;
@@ -93,6 +122,28 @@ class LazyWorkspaceD : WorkspaceD
 			lazyLoadCallbacks.remove(component.info.name);
 			foreach (hook; hooks)
 				hook();
+		}
+
+		protected void accessCheck() const
+		{
+			if (!wasAccessed)
+			{
+				cast()wasAccessed = true;
+				try
+				{
+					trace("attaching cwd ", cwd);
+
+					foreach (hook; accessCallbacks)
+						hook();
+
+					cast()accessCallbacks = null;
+				}
+				catch (Exception e)
+				{
+					error("failed attaching project: ", e);
+					throw e;
+				}
+			}
 		}
 	}
 

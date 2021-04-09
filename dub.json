@@ -2,9 +2,9 @@
 	"name": "serve-d",
 	"description": "Microsoft Language Server Protocol implementation using workspace-d",
 	"license": "MIT",
-	"targetType": "executable",
+	"copyright": "Copyright © 2017-2021, webfreak",
 	"dependencies": {
-		"workspace-d": "3.6.0-pre.8",
+		"workspace-d": "3.6.0-pre.9",
 		"eventsystem": "~>1.2.0",
 		"libddoc": "0.7.3",
 		"rm-rf": "~>0.1.0",
@@ -25,39 +25,33 @@
 	"versions-windows": ["RequestsSkipSSL"],
 	"configurations": [
 		{
-			"name": "executable"
+			"name": "executable",
+			"mainSourceFile": "source/app.d",
+			"targetType": "executable"
 		},
 		{
 			"name": "unittest",
-			"targetType": "executable",
-			"targetName": "serve-d-test",
-			"preBuildCommands-windows": [
-				"$DUB run --compiler=%DC% unit-threaded -c gen_ut_main -- -f bin\\ut.d"
-			],
-			"preBuildCommands-posix": [
-				"$DUB run --compiler=$$DC unit-threaded -c gen_ut_main -- -f bin/ut.d"
-			],
-			"mainSourceFile": "bin/ut.d",
+			"mainSourceFile": "source/app.d",
+			"dflags": ["-checkaction=context"],
 			"excludedSourceFiles": [
 				"source/app.d",
 				"source/served/info.d"
 			],
 			"dependencies": {
-				"unit-threaded": "*"
+				"silly": "~>1.1.1"
 			}
 		},
 		{
 			"name": "unittest-optimized",
 			"buildOptions": ["optimize", "debugInfo", "unittests"],
-			"targetType": "executable",
-			"targetName": "serve-d-test",
-			"mainSourceFile": "bin/ut.d",
+			"mainSourceFile": "source/app.d",
+			"dflags": ["-checkaction=context"],
 			"excludedSourceFiles": [
 				"source/app.d",
 				"source/served/info.d"
 			],
 			"dependencies": {
-				"unit-threaded": "*"
+				"silly": "~>1.1.1"
 			}
 		}
 	]

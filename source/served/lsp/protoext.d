@@ -262,6 +262,9 @@ struct UnittestProject
 
 	/// List of modules, sorted by moduleName
 	UnittestModule[] modules;
+
+	/// `true` if the project still needs to be opened to be loaded.
+	bool needsLoad;
 }
 
 struct UnittestModule
@@ -280,5 +283,5 @@ struct UnittestInfo
 
 struct RescanTestsParams
 {
-	string folderPrefix = null;
+	string uri = null;
 }

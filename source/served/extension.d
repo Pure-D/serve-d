@@ -593,7 +593,7 @@ struct RootSuggestion
 }
 
 RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
-		string[] extra, ManyProjectsAction manyAction, int manyThreshold)
+		string[] extra)
 {
 	RootSuggestion[] ret;
 	void addSuggestion(string dir, bool useDub)
@@ -638,29 +638,6 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 			addSuggestion(dir, true);
 		}
 	}
-	if (manyThreshold > 0 && ret.length >= manyThreshold)
-	{
-		switch (manyAction)
-		{
-		case ManyProjectsAction.ask:
-			auto loadButton = translate!"d.served.tooManySubprojects.load";
-			auto skipButton = translate!"d.served.tooManySubprojects.skip";
-			auto res = rpc.window.requestMessage(MessageType.warning,
-					translate!"d.served.tooManySubprojects"(ret.length - manyThreshold + 1),
-					[loadButton, skipButton]);
-			if (res != loadButton)
-				ret = ret[0 .. manyThreshold];
-			break;
-		case ManyProjectsAction.load:
-			break;
-		default:
-			error("Ignoring invalid manyProjectsAction value ", manyAction, ", defaulting to skip");
-			goto case;
-		case ManyProjectsAction.skip:
-			ret = ret[0 .. manyThreshold];
-			break;
-		}
-	}
 	foreach (dir; extra)
 	{
 		string p = buildNormalizedPath(root, dir);
@@ -693,16 +670,12 @@ void doStartup(string workspaceUri)
 	scope roots = appender!(Root[]);
 
 	auto rootSuggestions = rootsForProject(workspaceUri.uriToFile, proj.config.d.scanAllFolders,
-			proj.config.d.disabledRootGlobs, proj.config.d.extraRoots,
-			cast(ManyProjectsAction) proj.config.d.manyProjectsAction,
-			proj.config.d.manyProjectsThreshold);
+			proj.config.d.disabledRootGlobs, proj.config.d.extraRoots);
 
 	foreach (i, root; rootSuggestions)
 	{
 		reportProgress(ProgressType.workspaceStartup, i, rootSuggestions.length, root.dir.uriFromFile);
-		info("Initializing instance for root ", root);
-		StopWatch rootTimer;
-		rootTimer.start();
+		info("registering instance for root ", root);
 
 		auto workspaceRoot = root.dir;
 		workspaced.api.Configuration config;
@@ -719,75 +692,23 @@ void doStartup(string workspaceUri)
 			activeInstance = instance;
 
 		roots ~= Root(root, workspaceUri, instance);
+		emitExtensionEvent!onProjectAvailable(instance, workspaceRoot, workspaceUri);
 
-		emitExtensionEvent!onAddingProject(instance, workspaceRoot, workspaceUri);
-
-		bool disableDub = proj.config.d.neverUseDub || !root.useDub;
-		bool loadedDub;
-		Exception err;
-		if (!disableDub)
+		if (auto lazyInstance = cast(LazyWorkspaceD.LazyInstance)instance)
 		{
-			trace("Starting dub...");
-
-			try
+			auto lazyLoadCallback(WorkspaceD.Instance instance, string workspaceRoot, string workspaceUri, RootSuggestion root)
 			{
-				if (backend.attachEager(instance, "dub", err))
-				{
-					scope (failure)
-						instance.detach!DubComponent;
-
-					instance.get!DubComponent.validateConfiguration();
-					loadedDub = true;
-				}
-			}
-			catch (Exception e)
-			{
-				err = e;
-				loadedDub = false;
+				return () => delayedProjectActivation(instance, workspaceRoot, workspaceUri, root);
 			}
 
-			if (!loadedDub)
-				error("Exception starting dub: ", err);
-			else
-				trace("Started dub with root dependencies ", instance.get!DubComponent.rootDependencies);
-		}
-		if (!loadedDub)
-		{
-			if (!disableDub)
-			{
-				error("Failed starting dub in ", root, " - falling back to fsworkspace");
-				proj.startupError(workspaceRoot, translate!"d.ext.dubFail"(instance.cwd));
-			}
-			try
-			{
-				trace("Starting fsworkspace...");
-
-				instance.config.set("fsworkspace", "additionalPaths",
-						getPossibleSourceRoots(workspaceRoot));
-				if (!backend.attachEager(instance, "fsworkspace", err))
-					throw new Exception("Attach returned failure: " ~ err.msg);
-			}
-			catch (Exception e)
-			{
-				error(e);
-				proj.startupError(workspaceRoot, translate!"d.ext.fsworkspaceFail"(instance.cwd));
-			}
+			lazyInstance.onLazyLoadInstance(lazyLoadCallback(instance, workspaceRoot, workspaceUri, root));
 		}
 		else
-			gotOneDub = true;
-
-		trace("Started files provider for root ", root);
-
-		trace("Loaded Components for ", instance.cwd, ": ",
-				instance.instanceComponents.map!"a.info.name");
-
-		emitExtensionEvent!onAddedProject(instance, workspaceRoot, workspaceUri);
-
-		rootTimer.stop();
-		info("Root ", root, " initialized in ", rootTimer.peek);
+		{
+			delayedProjectActivation(instance, workspaceRoot, workspaceUri, root);
+		}
 	}
 
-	// TODO: lazy initialize dmd?
 	trace("Starting auto completion service...");
 	StopWatch dcdTimer;
 	dcdTimer.start();
@@ -800,9 +721,130 @@ void doStartup(string workspaceUri)
 	}
 	dcdTimer.stop();
 	trace("Started all completion servers in ", dcdTimer.peek);
+}
 
-	if (gotOneDub)
+shared int totalLoadedProjects;
+void delayedProjectActivation(WorkspaceD.Instance instance, string workspaceRoot, string workspaceUri, RootSuggestion root)
+{
+	import core.atomic;
+
+	Workspace* proj = &workspace(workspaceUri);
+	if (proj is &fallbackWorkspace)
+	{
+		error("Trying to do startup on unknown workspace ", root.dir, "?");
+		throw new Exception("failed project instance startup for " ~ root.dir);
+	}
+
+	auto numLoaded = atomicOp!"+="(totalLoadedProjects, 1);
+
+	auto manyProjectsAction = cast(ManyProjectsAction) proj.config.d.manyProjectsAction;
+	auto manyThreshold = proj.config.d.manyProjectsThreshold;
+	if (manyThreshold > 0 && numLoaded > manyThreshold)
+	{
+		switch (manyProjectsAction)
+		{
+		case ManyProjectsAction.ask:
+			auto loadButton = translate!"d.served.tooManySubprojects.load";
+			auto skipButton = translate!"d.served.tooManySubprojects.skip";
+			auto res = rpc.window.requestMessage(MessageType.warning,
+					translate!"d.served.tooManySubprojects.path"(root.dir),
+					[loadButton, skipButton]);
+			if (res != loadButton)
+				goto case ManyProjectsAction.skip;
+			break;
+		case ManyProjectsAction.load:
+			break;
+		default:
+			error("Ignoring invalid manyProjectsAction value ", manyProjectsAction, ", defaulting to skip");
+			goto case;
+		case ManyProjectsAction.skip:
+			backend.removeInstance(workspaceRoot);
+			throw new Exception("skipping load of this instance");
+		}
+	}
+
+	info("Initializing instance for root ", root);
+	StopWatch rootTimer;
+	rootTimer.start();
+
+	emitExtensionEvent!onAddingProject(instance, workspaceRoot, workspaceUri);
+
+	bool disableDub = proj.config.d.neverUseDub || !root.useDub;
+	bool loadedDub;
+	Exception err;
+	if (!disableDub)
+	{
+		trace("Starting dub...");
+		reportProgress(ProgressType.dubReload, 0, 1, workspaceUri);
+		scope (exit)
+			reportProgress(ProgressType.dubReload, 1, 1, workspaceUri);
+
+		try
+		{
+			if (backend.attachEager(instance, "dub", err))
+			{
+				scope (failure)
+					instance.detach!DubComponent;
+
+				instance.get!DubComponent.validateConfiguration();
+				loadedDub = true;
+			}
+		}
+		catch (Exception e)
+		{
+			err = e;
+			loadedDub = false;
+		}
+
+		if (!loadedDub)
+			error("Exception starting dub: ", err);
+		else
+			trace("Started dub with root dependencies ", instance.get!DubComponent.rootDependencies);
+	}
+	if (!loadedDub)
+	{
+		if (!disableDub)
+		{
+			error("Failed starting dub in ", root, " - falling back to fsworkspace");
+			proj.startupError(workspaceRoot, translate!"d.ext.dubFail"(instance.cwd));
+		}
+		try
+		{
+			trace("Starting fsworkspace...");
+
+			instance.config.set("fsworkspace", "additionalPaths",
+					getPossibleSourceRoots(workspaceRoot));
+			if (!backend.attachEager(instance, "fsworkspace", err))
+				throw new Exception("Attach returned failure: " ~ err.msg);
+		}
+		catch (Exception e)
+		{
+			error(e);
+			proj.startupError(workspaceRoot, translate!"d.ext.fsworkspaceFail"(instance.cwd));
+		}
+	}
+	else
+		didLoadDubProject();
+
+	trace("Started files provider for root ", root);
+
+	trace("Loaded Components for ", instance.cwd, ": ",
+			instance.instanceComponents.map!"a.info.name");
+
+	emitExtensionEvent!onAddedProject(instance, workspaceRoot, workspaceUri);
+
+	rootTimer.stop();
+	info("Root ", root, " initialized in ", rootTimer.peek);
+}
+
+void didLoadDubProject()
+{
+	static bool loadedDub = false;
+	if (!loadedDub)
+	{
+		loadedDub = true;
 		setTimeout({ rpc.notifyMethod("coded/initDubTree"); }, 50);
+	}
 }
 
 void removeWorkspace(string workspaceUri)
@@ -886,6 +928,9 @@ void lazyStartDCDServer(WorkspaceD.Instance instance, string workspaceUri)
 		lazyInstance.onLazyLoad("dcd", delegate() nothrow {
 			try
 			{
+				reportProgress(ProgressType.importReload, 0, 1, workspaceUri);
+				scope (exit)
+					reportProgress(ProgressType.importReload, 1, 1, workspaceUri);
 				startDCDServer(instance, workspaceUri);
 			}
 			catch (Exception e)

@@ -30,7 +30,7 @@ import fs = std.file;
 import io = std.stdio;
 
 static immutable sortPrefixDoc = "0_";
-static immutable sortPrefixSnippets = "2_3_";
+static immutable sortPrefixSnippets = "2_5_";
 // dcd additionally sorts inside with sortFromDCDType return value (appends to this)
 static immutable sortPrefixDCD = "2_";
 
@@ -85,13 +85,15 @@ string sortFromDCDType(string type)
 
 	switch (type[0])
 	{
-	case 'm': // member variable
-	case 'e': // enum member
-		return "2_";
-	case 'k': // keyword
 	case 'v': // variable name
-	case 'f': // function
+		return "2_";
+	case 'm': // member variable
 		return "3_";
+	case 'f': // function
+		return "4_";
+	case 'k': // keyword
+	case 'e': // enum member
+		return "5_";
 	case 'c': // class name
 	case 'i': // interface name
 	case 's': // struct name
@@ -106,7 +108,7 @@ string sortFromDCDType(string type)
 	case 'T': // mixin template name
 	case 'h': // template type parameter
 	case 'p': // template variadic parameter
-		return "4_";
+		return "6_";
 	default:
 		return "9_";
 	}
@@ -944,6 +946,7 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 		completion ~= item;
 	}
 
+	// sort only for duplicate detection (use sortText for UI sorting)
 	completion.sort!"a.label < b.label";
 	if (completeNoDupes)
 		return completion.chunkBy!((a, b) => a.label == b.label && a.kind == b.kind)

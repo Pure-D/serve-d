@@ -2,6 +2,7 @@ module served.commands.test_provider;
 
 import served.types;
 import served.commands.symbol_search;
+import served.utils.async : spawnFiber;
 
 import workspaced.api;
 import workspaced.coms;
@@ -18,16 +19,30 @@ __gshared bool doTrackTests = false;
 
 UnittestProject[DocumentUri] projectTests;
 
+@onProjectAvailable
+void onPreviewProjectForUnittest(WorkspaceD.Instance instance, string dir, string rootFolderUri)
+{
+	if (!doTrackTests)
+		return;
+
+	string rootUri = instance.cwd.uriFromFile;
+	auto project = &projectTests.require(rootUri, UnittestProject(rootUri, null, null, true));
+
+	rpc.notifyMethod("coded/pushProjectTests", *project);
+}
+
 @onAddedProject
 void onDidAddProjectForUnittest(WorkspaceD.Instance instance, string dir, string rootFolderUri)
 {
 	if (!doTrackTests)
 		return;
 
-	if (!instance.has!DubComponent)
-		return;
+	spawnFiber({
+		if (!instance.has!DubComponent)
+			return;
 
-	rescanProject(instance);
+		rescanProject(instance);
+	}, 80);
 }
 
 @protocolNotification("textDocument/didSave")
@@ -43,17 +58,37 @@ void onDidSaveCheckForUnittest(DidSaveTextDocumentParams params)
 	if (!instance)
 		return;
 
-	auto projectUri = workspace(params.textDocument.uri).folder.uri;
+	spawnFiber({
+		auto projectUri = workspace(params.textDocument.uri).folder.uri;
 
-	auto project = &projectTests.require(projectUri, UnittestProject(projectUri));
-	rescanFile(*project, params.textDocument);
+		auto project = &projectTests.require(projectUri, UnittestProject(projectUri));
+		rescanFile(*project, params.textDocument);
 
-	rpc.notifyMethod("coded/pushProjectTests", *project);
+		rpc.notifyMethod("coded/pushProjectTests", *project);
+	}, 80);
 }
 
 @protocolNotification("served/rescanTests")
 void rescanTests(RescanTestsParams params)
 {
+	string cwd = params.uri.length ? uriToFile(params.uri) : null;
+	foreach (instance; backend.instances)
+	{
+		if (!cwd.length || instance.cwd == cwd)
+		{
+			if (auto lazyInstance = cast(LazyWorkspaceD.LazyInstance)instance)
+			{
+				if (cwd.length || lazyInstance.didCallAccess)
+				{
+					rescanProject(instance);
+				}
+			}
+			else
+			{
+				rescanProject(instance);
+			}
+		}
+	}
 }
 
 private void rescanFile(ref UnittestProject project, TextDocumentIdentifier documentIdentifier)
@@ -116,10 +151,14 @@ private void rescanProject(WorkspaceD.Instance instance)
 	sw.start();
 
 	project.name = settings.packageName;
+	project.needsLoad = false;
 	project.modules = null;
 	foreach (path; settings.sourceFiles)
 	{
 		auto fullPath = buildNormalizedPath(settings.packagePath, path);
+		if (!fullPath.endsWith(".d", ".dpp", ".di"))
+			continue;
+
 		auto uri = fullPath.uriFromFile;
 
 		bool tempLoad = documents.tryGet(uri) == Document.init;

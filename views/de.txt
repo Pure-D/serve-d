@@ -167,7 +167,7 @@ d.coverage.tooltip: Testabdeckung in dieser Datei wurde aus der zugehörigen .ls
 d.served.failDCD: Konnte DCD nicht starten. (Projekt={0}, Pfad={1}, {2})
 d.served.outdatedDCD: DCD ist veraltet. (gesucht={0}, installiert={1})
 d.served.failDscanner: Konnte DScanner nicht starten. (Projekt={0}, Pfad={1})
-d.served.tooManySubprojects: Nach Einstellung d.manyProjectsThreshold sind zu viele Projekte in dieser Projektmappe.\n\n{plural #1 {0} {Soll 1 zusätzliches Projekt} {Sollen alle {0} zusätzlichen Projekte}} geladen werden?
+d.served.tooManySubprojects.path: Nach Einstellung d.manyProjectsThreshold sind zu viele Projekte in dieser Projektmappe.\n\nSoll `{0}` geladen werden?
 d.served.tooManySubprojects.load: Alle Laden
 d.served.tooManySubprojects.skip: Überspringen
 d.served.moduleNameAutoUpdated: Der Modulname der aktuellen Datei wurde aktualisiert.
