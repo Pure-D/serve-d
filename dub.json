@@ -6,10 +6,10 @@
 	"dependencies": {
 		"workspace-d": "3.6.0-pre.11",
 		"eventsystem": "~>1.2.0",
-		"libddoc": "0.7.3",
+		"libddoc": "0.7.4",
 		"rm-rf": "~>0.1.0",
 		"diet-complete": "~>0.0.3",
-		"emsi_containers": "0.8.0-alpha.19",
+		"emsi_containers": "0.8.0",
 		"serve-d:http": "*",
 		"serve-d:lsp": "*",
 		"serve-d:serverbase": "*"
