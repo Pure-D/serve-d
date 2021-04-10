@@ -163,8 +163,8 @@ private TextEdit[] diff(Document document, const string after)
 		{
 			result ~= TextEdit(
 				TextRange(
-					document.offsetToPosition(startIndex),
-					document.offsetToPosition(stopIndex)
+					document.bytesToPosition(startIndex),
+					document.bytesToPosition(stopIndex)
 				),
 				text
 			);
@@ -255,6 +255,9 @@ unittest
 	test("build", "built");
 	test("test", "tetestst");
 	test("tetestst", "test");
+
+	// UTF-32
+	test("// \U0001FA00\nvoid main() {}", "// \U0001FA00\n\nvoid main()\n{\n}");
 
 	// otherwise dfmt only changes whitespaces
 	assert(test("import std.stdio;\n\nvoid main()\n{\n\twriteln();\n}\n",
