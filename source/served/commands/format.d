@@ -240,6 +240,10 @@ unittest
 
 	TextEdit[] test(string from, string after)
 	{
+		// fix assert equals tests on windows with token-strings comparing with regular strings
+		from = from.replace("\r\n", "\n");
+		after = after.replace("\r\n", "\n");
+
 		Document d = Document.nullDocument(from);
 		auto ret = diff(d, after);
 		foreach_reverse (patch; ret)
