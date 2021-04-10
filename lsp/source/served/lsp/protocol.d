@@ -145,7 +145,7 @@ struct ArrayOrSingle(T)
 			return value.toJSON;
 	}
 
-	static ArrayOrSingle!T fromJSON(JSONValue val)
+	static ArrayOrSingle!T _fromJSON(JSONValue val)
 	{
 		ArrayOrSingle!T ret;
 		if (val.type == JSONType.array)
@@ -156,6 +156,40 @@ struct ArrayOrSingle(T)
 	}
 
 	alias value this;
+}
+
+static assert(__traits(compiles, ArrayOrSingle!Location.init._toJSON()));
+static assert(__traits(compiles, ArrayOrSingle!Location._fromJSON(JSONValue.init)));
+
+unittest
+{
+	auto single = ArrayOrSingle!Location(Location("file:///foo.d", TextRange(4, 2, 4, 8)));
+	auto array = ArrayOrSingle!Location([Location("file:///foo.d", TextRange(4, 2, 4, 8)), Location("file:///bar.d", TextRange(14, 1, 14, 9))]);
+	assert(toJSON(single) == JSONValue([
+		"range": JSONValue([
+			"start": JSONValue(["line":JSONValue(4), "character":JSONValue(2)]),
+			"end": JSONValue(["line":JSONValue(4), "character":JSONValue(8)])
+		]),
+		"uri": JSONValue("file:///foo.d")
+	]));
+	assert(toJSON(array) == JSONValue([
+		JSONValue([
+			"range": JSONValue([
+				"start": JSONValue(["line":JSONValue(4), "character":JSONValue(2)]),
+				"end": JSONValue(["line":JSONValue(4), "character":JSONValue(8)])
+			]),
+			"uri": JSONValue("file:///foo.d")
+		]),
+		JSONValue([
+			"range": JSONValue([
+				"start": JSONValue(["line":JSONValue(14), "character":JSONValue(1)]),
+				"end": JSONValue(["line":JSONValue(14), "character":JSONValue(9)])
+			]),
+			"uri": JSONValue("file:///bar.d")
+		])
+	]));
+	assert(fromJSON!(ArrayOrSingle!Location)(toJSON(single)) == single, fromJSON!(ArrayOrSingle!Location)(toJSON(single)).value.to!string);
+	assert(fromJSON!(ArrayOrSingle!Location)(toJSON(array)) == array);
 }
 
 struct RequestToken
@@ -412,6 +446,9 @@ struct Position
 	}
 }
 
+static assert(__traits(compiles, Position.init._toJSON()));
+static assert(__traits(compiles, Position._fromJSON(JSONValue.init)));
+
 struct TextRange
 {
 	union
@@ -498,20 +535,22 @@ struct TextRange
 	{
 		import painlessjson : toJSON;
 
-		return range[].toJSON;
+		return JSONValue([
+			"start": start.toJSON,
+			"end": end.toJSON
+		]);
 	}
 
 	static TextRange _fromJSON(const JSONValue val)
 	{
 		import painlessjson : fromJSON;
-		import std.exception : enforce;
 
-		enforce(val.type == JSONType.array);
-		enforce(val.array.length == 2);
-
-		return TextRange(val.array[0].fromJSON!Position, val.array[1].fromJSON!Position);
+		return TextRange(val.object["start"].fromJSON!Position, val.object["end"].fromJSON!Position);
 	}
 }
+
+static assert(__traits(compiles, TextRange.init._toJSON()));
+static assert(__traits(compiles, TextRange._fromJSON(JSONValue.init)));
 
 struct Location
 {
@@ -590,12 +629,15 @@ struct TextEdit
 	}
 }
 
+static assert(__traits(compiles, TextEdit.init._toJSON()));
+static assert(__traits(compiles, TextEdit._fromJSON(JSONValue.init)));
+
 unittest
 {
 	assert(toJSON(TextEdit([Position(0, 0), Position(4, 4)], "hello\nworld!")) == JSONValue([
 		"range": JSONValue([
-			JSONValue(["line":JSONValue(0), "character":JSONValue(0)]),
-			JSONValue(["line":JSONValue(4), "character":JSONValue(4)])
+			"start": JSONValue(["line":JSONValue(0), "character":JSONValue(0)]),
+			"end": JSONValue(["line":JSONValue(4), "character":JSONValue(4)])
 		]),
 		"newText": JSONValue("hello\nworld!")
 	]));
