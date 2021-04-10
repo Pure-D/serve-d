@@ -72,6 +72,9 @@ string uriToFile(DocumentUri uri)
 
 DocumentUri uri(string scheme, string authority, string path, string query, string fragment)
 {
-	return scheme ~ "://" ~ (authority.length ? authority : "") ~ (path.length ? path
-			: "/") ~ (query.length ? "?" ~ query : "") ~ (fragment.length ? "#" ~ fragment : "");
+	return scheme ~ "://"
+		~ (authority.length ? authority : "")
+		~ (path.length ? path : "/")
+		~ (query.length ? "?" ~ query : "")
+		~ (fragment.length ? "#" ~ fragment : "");
 }
