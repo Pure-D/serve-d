@@ -140,7 +140,7 @@ TextEdit[] provideRangeFormatting(DocumentRangeFormattingParams params)
 			.options))
 		.filter!(
 				(edit) => edit.range.intersects(params.range)
-	).array;
+		).array;
 }
 
 private TextEdit[] diff(Document document, const string after)
@@ -231,4 +231,156 @@ private TextEdit[] diff(Document document, const string after)
 
 	pushTextEdit();
 	return result;
+}
+
+unittest
+{
+	import std.stdio;
+
+	TextEdit[] test(string from, string after)
+	{
+		Document d = Document.nullDocument(from);
+		auto ret = diff(d, after);
+		foreach_reverse (patch; ret)
+			d.applyChange(patch.range, patch.newText);
+		assert(d.rawText == after);
+		// writefln("diff[%d]: %s", ret.length, ret);
+		return ret;
+	}
+
+	// text replacement tests just in case some future changes are made this way
+	test("text", "after");
+	test("completely", "diffrn");
+	test("complete", "completely");
+	test("build", "built");
+	test("test", "tetestst");
+	test("tetestst", "test");
+
+	// otherwise dfmt only changes whitespaces
+	assert(test("import std.stdio;\n\nvoid main()\n{\n\twriteln();\n}\n",
+			"\timport std.stdio;\n\n\tvoid main()\n\t{\n\t\twriteln();\n\t}\n") == [
+			TextEdit([Position(0, 0), Position(0, 0)], "\t"),
+			TextEdit([Position(2, 0), Position(2, 0)], "\t"),
+			TextEdit([Position(3, 0), Position(3, 0)], "\t"),
+			TextEdit([Position(4, 1), Position(4, 1)], "\t"),
+			TextEdit([Position(5, 0), Position(5, 0)], "\t")
+			]);
+	assert(test(
+			"\timport std.stdio;\n\n\tvoid main()\n\t{\n\t\twriteln();\n\t}\n",
+			"import std.stdio;\n\nvoid main()\n{\n\twriteln();\n}\n") == [
+			TextEdit(
+				[Position(0, 0), Position(0, 1)], ""),
+			TextEdit([Position(2, 0), Position(2, 1)], ""),
+			TextEdit([Position(3, 0), Position(3, 1)], ""),
+			TextEdit([Position(4, 1), Position(4, 2)], ""),
+			TextEdit([Position(5, 0), Position(5, 1)], "")
+			]);
+	assert(test("import std.stdio;void main(){writeln();}",
+			"import std.stdio;\n\nvoid main()\n{\n\twriteln();\n}\n") == [
+			TextEdit(
+				[Position(0, 17), Position(0, 17)], "\n\n"),
+			TextEdit([Position(0, 28), Position(0, 28)], "\n"),
+			TextEdit([Position(0, 29), Position(0, 29)], "\n\t"),
+			TextEdit([Position(0, 39), Position(0, 39)], "\n"),
+			TextEdit([Position(0, 40), Position(0, 40)], "\n")
+			]);
+	assert(test("", "void foo()\n{\n\tcool();\n}\n") == [
+			TextEdit([Position(0, 0), Position(0, 0)], "void foo()\n{\n\tcool();\n}\n")
+			]);
+	assert(test("void foo()\n{\n\tcool();\n}\n", "") == [
+			TextEdit([Position(0, 0), Position(4, 0)], "")
+			]);
+
+	assert(test(q{if (x)
+  foo();
+else
+{
+  bar();
+}}, q{if (x) {
+  foo();
+} else {
+  bar();
+}}) == [
+			TextEdit([Position(0, 6), Position(1, 2)], " {\n  "),
+			TextEdit([Position(2, 0), Position(2, 0)], "} "),
+			TextEdit([Position(2, 4), Position(3, 0)], " ")
+			]);
+
+	assert(test(q{DocumentUri  uriFromFile (string file) {
+	import std.uri :encodeComponent;
+	if(! isAbsolute(file))  throw new Exception("Tried to pass relative path '" ~ file ~ "' to uriFromFile");
+	file = file.buildNormalizedPath.replace("\\", "/");
+	if (file.length == 0) return "";
+	if (file[0] != '/') file = '/'~file; // always triple slash at start but never quad slash
+	if (file.length >= 2 && file[0.. 2] == "//")// Shares (\\share\bob) are different somehow
+		file = file[2 .. $];
+	return "file://"~file.encodeComponent.replace("%2F", "/");
+}
+
+string uriToFile(DocumentUri uri)
+{
+	import std.uri : decodeComponent;
+	import std.string : startsWith;
+
+	if (uri.startsWith("file://"))
+	{
+		string ret = uri["file://".length .. $].decodeComponent;
+		if (ret.length >= 3 && ret[0] == '/' && ret[2] == ':')
+			return ret[1 .. $].replace("/", "\\");
+		else if (ret.length >= 1 && ret[0] != '/')
+			return "\\\\" ~ ret.replace("/", "\\");
+		return ret;
+	}
+	else
+		return null;
+}}, q{DocumentUri uriFromFile(string file)
+{
+	import std.uri : encodeComponent;
+
+	if (!isAbsolute(file))
+		throw new Exception("Tried to pass relative path '" ~ file ~ "' to uriFromFile");
+	file = file.buildNormalizedPath.replace("\\", "/");
+	if (file.length == 0)
+		return "";
+	if (file[0] != '/')
+		file = '/' ~ file; // always triple slash at start but never quad slash
+	if (file.length >= 2 && file[0 .. 2] == "//") // Shares (\\share\bob) are different somehow
+		file = file[2 .. $];
+	return "file://" ~ file.encodeComponent.replace("%2F", "/");
+}
+
+string uriToFile(DocumentUri uri)
+{
+	import std.uri : decodeComponent;
+	import std.string : startsWith;
+
+	if (uri.startsWith("file://"))
+	{
+		string ret = uri["file://".length .. $].decodeComponent;
+		if (ret.length >= 3 && ret[0] == '/' && ret[2] == ':')
+			return ret[1 .. $].replace("/", "\\");
+		else if (ret.length >= 1 && ret[0] != '/')
+			return "\\\\" ~ ret.replace("/", "\\");
+		return ret;
+	}
+	else
+		return null;
+}}) == [
+	TextEdit([Position(0, 12), Position(0, 13)], ""),
+	TextEdit([Position(0, 24), Position(0, 25)], ""),
+	TextEdit([Position(0, 38), Position(0, 39)], "\n"),
+	TextEdit([Position(1, 17), Position(1, 17)], " "),
+	TextEdit([Position(2, 0), Position(2, 0)], "\n"),
+	TextEdit([Position(2, 3), Position(2, 3)], " "),
+	TextEdit([Position(2, 5), Position(2, 6)], ""),
+	TextEdit([Position(2, 23), Position(2, 25)], "\n\t\t"),
+	TextEdit([Position(4, 22), Position(4, 23)], "\n\t\t"),
+	TextEdit([Position(5, 20), Position(5, 21)], "\n\t\t"),
+	TextEdit([Position(5, 31), Position(5, 31)], " "),
+	TextEdit([Position(5, 32), Position(5, 32)], " "),
+	TextEdit([Position(6, 31), Position(6, 31)], " "),
+	TextEdit([Position(6, 45), Position(6, 45)], " "),
+	TextEdit([Position(8, 17), Position(8, 17)], " "),
+	TextEdit([Position(8, 18), Position(8, 18)], " ")
+]);
 }
