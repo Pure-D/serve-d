@@ -117,9 +117,7 @@ TextEdit[] provideFormatting(DocumentFormattingParams params)
 	gFormattingOptions = params.options;
 	auto result = backend.get!DfmtComponent.format(document.rawText,
 			generateDfmtArgs(config, document.eolAt(0))).getYield;
-	return [
-		TextEdit(TextRange(Position(0, 0), document.offsetToPosition(document.length)), result)
-	];
+	return diff(document, result);
 }
 
 string formatCode(string code, string[] dfmtArgs)
@@ -138,30 +136,11 @@ TextEdit[] provideRangeFormatting(DocumentRangeFormattingParams params)
 	import std.algorithm : filter;
 	import std.array : array;
 
-	auto config = workspace(params.textDocument.uri).config;
-	if (!config.d.enableFormatting)
-		return [];
-	auto document = documents[params.textDocument.uri];
-	if (document.languageId != "d")
-		return [];
-	gFormattingOptionsApplyOn = params.textDocument.uri;
-	gFormattingOptions = params.options;
-	auto result = backend.get!DfmtComponent.format(document.rawText,
-			generateDfmtArgs(config, document.eolAt(0))).getYield;
-
-	return diff(document, result).filter!(
-			(edit) => edit.range.isValidEditFor(params.range)
+	return provideFormatting(DocumentFormattingParams(params.textDocument, params
+			.options))
+		.filter!(
+				(edit) => edit.range.intersects(params.range)
 	).array;
-}
-
-package bool isValidEditFor(const TextRange editRange, const TextRange formatRange)
-{
-	//dfmt off
-	return (editRange.start.line < formatRange.end.line
-	|| (editRange.start.line == formatRange.end.line && editRange.start.character <= formatRange.end.character))
-	&& (editRange.end.line > formatRange.start.line
-	|| (editRange.end.line == formatRange.start.line && editRange.end.character >= formatRange.start.character));
-	//dfmt on
 }
 
 private TextEdit[] diff(Document document, const string after)
@@ -182,8 +161,13 @@ private TextEdit[] diff(Document document, const string after)
 	{
 		if (startIndex != stopIndex || text.length > 0)
 		{
-			result ~= TextEdit(TextRange(document.offsetToPosition(startIndex), document.offsetToPosition(
-					stopIndex)), text);
+			result ~= TextEdit(
+				TextRange(
+					document.offsetToPosition(startIndex),
+					document.offsetToPosition(stopIndex)
+				),
+				text
+			);
 			return true;
 		}
 

@@ -365,6 +365,19 @@ struct Position
 {
 	/// Zero-based line & character offset (UTF-16 codepoints)
 	uint line, character;
+
+	int opCmp(const Position other) const
+	{
+		if (line < other.line)
+			return -1;
+		if (line > other.line)
+			return 1;
+		if (character < other.character)
+			return -1;
+		if (character > other.character)
+			return 1;
+		return 0;
+	}
 }
 
 struct TextRange
@@ -379,6 +392,8 @@ struct TextRange
 
 		Position[2] range;
 	}
+
+	enum all = TextRange(0, 0, int.max, int.max); // int.max ought to be enough
 
 	alias range this;
 
@@ -417,6 +432,34 @@ struct TextRange
 		return !(position.line < minLine || position.line > maxLine
 			|| (position.line == minLine && position.character < minCol)
 			|| (position.line == maxLine && position.character > maxCol));
+	}
+
+	/// Returns: true if text range `a` and `b` intersect with at least one character.
+	/// This function is commutative (a·b == b·a)
+	bool intersects(const TextRange b)
+	{
+		return start < b.end && end > b.start;
+	}
+
+	///
+	unittest
+	{
+		bool test(TextRange a, TextRange b)
+		{
+			bool res = a.intersects(b);
+			// test commutativity
+			assert(res == b.intersects(a));
+			return res;
+		}
+
+		assert(test(TextRange(10, 4, 20, 3), TextRange(20, 2, 30, 1)));
+		assert(!test(TextRange(10, 4, 20, 3), TextRange(20, 3, 30, 1)));
+		assert(test(TextRange(10, 4, 20, 3), TextRange(12, 3, 14, 1)));
+		assert(!test(TextRange(10, 4, 20, 3), TextRange(9, 3, 10, 4)));
+		assert(test(TextRange(10, 4, 20, 3), TextRange(9, 3, 10, 5)));
+		assert(test(TextRange(10, 4, 20, 3), TextRange(10, 4, 20, 3)));
+		assert(test(TextRange(0, 0, 0, 1), TextRange(0, 0, uint.max, uint.max)));
+		assert(!test(TextRange(0, 0, 0, 1), TextRange(uint.max, uint.max, uint.max, uint.max)));
 	}
 }
 
@@ -470,6 +513,18 @@ struct TextEdit
 {
 	TextRange range;
 	string newText;
+
+	this(TextRange range, string newText)
+	{
+		this.range = range;
+		this.newText = newText;
+	}
+
+	this(Position[2] range, string newText)
+	{
+		this.range = TextRange(range);
+		this.newText = newText;
+	}
 }
 
 struct CreateFileOptions
