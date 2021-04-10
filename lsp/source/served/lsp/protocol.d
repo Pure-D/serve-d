@@ -461,6 +461,13 @@ struct TextRange
 		assert(test(TextRange(0, 0, 0, 1), TextRange(0, 0, uint.max, uint.max)));
 		assert(!test(TextRange(0, 0, 0, 1), TextRange(uint.max, uint.max, uint.max, uint.max)));
 	}
+
+	const JSONValue _toJSON()
+	{
+		import painlessjson : toJSON;
+
+		return range[].toJSON;
+	}
 }
 
 struct Location
@@ -525,6 +532,22 @@ struct TextEdit
 		this.range = TextRange(range);
 		this.newText = newText;
 	}
+
+	const JSONValue _toJSON()
+	{
+		return JSONValue(["range": range._toJSON, "newText": JSONValue(newText)]);
+	}
+}
+
+unittest
+{
+	assert(toJSON(TextEdit([Position(0, 0), Position(4, 4)], "hello\nworld!")) == JSONValue([
+		"range": JSONValue([
+			JSONValue(["line":JSONValue(0), "character":JSONValue(0)]),
+			JSONValue(["line":JSONValue(4), "character":JSONValue(4)])
+		]),
+		"newText": JSONValue("hello\nworld!")
+	]));
 }
 
 struct CreateFileOptions
