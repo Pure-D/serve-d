@@ -13,6 +13,7 @@ import served.utils.memory;
 version (Have_workspace_d)
 {
 	import workspaced.api : Future;
+
 	enum hasFuture = true;
 }
 else
@@ -64,12 +65,41 @@ struct FiberManager
 	}
 }
 
+private template hasInputRanges(Args...)
+{
+	static if (Args.length == 0)
+		enum hasInputRanges = false;
+	else static if (isInputRange!(Args[$ - 1]))
+		enum hasInputRanges = true;
+	else
+		enum hasInputRanges = hasInputRanges!(Args[0 .. $ - 1]);
+}
+
 // ridiculously high fiber size (192 KiB per fiber to create), but for parsing big files this is needed to not segfault in libdparse
 void joinAll(size_t fiberSize = 4096 * 48, Fibers...)(Fibers fibers)
 {
 	FiberManager f;
-	int i;
-	Fiber[Fibers.length] converted;
+	enum anyInputRanges = hasInputRanges!Fibers;
+	static if (anyInputRanges)
+	{
+		Fiber[] converted;
+		converted.reserve(Fibers.length);
+		void addFiber(Fiber fiber)
+		{
+			converted ~= fiber;
+		}
+	}
+	else
+	{
+		int i;
+		Fiber[Fibers.length] converted;
+
+		void addFiber(Fiber fiber)
+		{
+			converted[i++] = fiber;
+		}
+	}
+
 	foreach (fiber; fibers)
 	{
 		static if (isInputRange!(typeof(fiber)))
@@ -77,21 +107,21 @@ void joinAll(size_t fiberSize = 4096 * 48, Fibers...)(Fibers fibers)
 			foreach (fib; fiber)
 			{
 				static if (is(typeof(fib) : Fiber))
-					converted[i++] = fib;
+					addFiber(fib);
 				else static if (hasFuture && is(typeof(fib) : Future!T, T))
-					converted[i++] = new Fiber(&fib.getYield, fiberSize);
+					addFiber(new Fiber(&fib.getYield, fiberSize));
 				else
-					converted[i++] = new Fiber(fib, fiberSize);
+					addFiber(new Fiber(fib, fiberSize));
 			}
 		}
 		else
 		{
 			static if (is(typeof(fiber) : Fiber))
-				converted[i++] = fiber;
+				addFiber(fiber);
 			else static if (hasFuture && is(typeof(fiber) : Future!T, T))
-				converted[i++] = new Fiber(&fiber.getYield, fiberSize);
+				addFiber(new Fiber(&fiber.getYield, fiberSize));
 			else
-				converted[i++] = new Fiber(fiber, fiberSize);
+				addFiber(new Fiber(fiber, fiberSize));
 		}
 	}
 	f.fibers = converted[];
