@@ -4,7 +4,7 @@
 	"license": "MIT",
 	"copyright": "Copyright © 2017-2021, webfreak",
 	"dependencies": {
-		"workspace-d": "3.6.0-pre.9",
+		"workspace-d": "3.6.0-pre.11",
 		"eventsystem": "~>1.2.0",
 		"libddoc": "0.7.3",
 		"rm-rf": "~>0.1.0",
