@@ -157,17 +157,18 @@ private TextEdit[] diff(Document document, const string after)
 	size_t stopIndex;
 	string text;
 
+	Position cachePosition;
+	size_t cacheIndex;
+
 	bool pushTextEdit()
 	{
 		if (startIndex != stopIndex || text.length > 0)
 		{
-			result ~= TextEdit(
-				TextRange(
-					document.bytesToPosition(startIndex),
-					document.bytesToPosition(stopIndex)
-				),
-				text
-			);
+			auto startPosition = document.movePositionBytes(cachePosition, cacheIndex, startIndex);
+			auto stopPosition = document.movePositionBytes(startPosition, startIndex, stopIndex);
+			cachePosition = stopPosition;
+			cacheIndex = stopIndex;
+			result ~= TextEdit([startPosition, stopPosition], text);
 			return true;
 		}
 
