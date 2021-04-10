@@ -378,6 +378,38 @@ struct Position
 			return 1;
 		return 0;
 	}
+
+	const JSONValue _toJSON()
+	{
+		return JSONValue(["line": JSONValue(line), "character": JSONValue(character)]);
+	}
+
+	static Position _fromJSON(const JSONValue val)
+	{
+		import std.exception : enforce;
+
+		enforce(val.type == JSONType.object);
+		auto line = val.object.get("line", JSONValue.init);
+		auto character = val.object.get("character", JSONValue.init);
+
+		uint iline, icharacter;
+
+		if (line.type == JSONType.integer)
+			iline = cast(uint)line.integer;
+		else if (line.type == JSONType.uinteger)
+			iline = cast(uint)line.uinteger;
+		else
+			throw new JSONException("Position['line'] is not an integer");
+
+		if (character.type == JSONType.integer)
+			icharacter = cast(uint)character.integer;
+		else if (character.type == JSONType.uinteger)
+			icharacter = cast(uint)character.uinteger;
+		else
+			throw new JSONException("Position['character'] is not an integer");
+
+		return Position(iline, icharacter);
+	}
 }
 
 struct TextRange
@@ -468,6 +500,17 @@ struct TextRange
 
 		return range[].toJSON;
 	}
+
+	static TextRange _fromJSON(const JSONValue val)
+	{
+		import painlessjson : fromJSON;
+		import std.exception : enforce;
+
+		enforce(val.type == JSONType.array);
+		enforce(val.array.length == 2);
+
+		return TextRange(val.array[0].fromJSON!Position, val.array[1].fromJSON!Position);
+	}
 }
 
 struct Location
@@ -537,6 +580,14 @@ struct TextEdit
 	{
 		return JSONValue(["range": range._toJSON, "newText": JSONValue(newText)]);
 	}
+
+	static TextEdit _fromJSON(const JSONValue val)
+	{
+		TextEdit ret;
+		ret.range = TextRange._fromJSON(val["range"]);
+		ret.newText = val["newText"].str;
+		return ret;
+	}
 }
 
 unittest
@@ -548,6 +599,7 @@ unittest
 		]),
 		"newText": JSONValue("hello\nworld!")
 	]));
+	assert(fromJSON!TextEdit(toJSON(TextEdit([Position(0, 0), Position(4, 4)], "hello\nworld!"))) == TextEdit([Position(0, 0), Position(4, 4)], "hello\nworld!"));
 }
 
 struct CreateFileOptions
