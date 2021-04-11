@@ -99,7 +99,7 @@ void updateDCD()
 		version (Windows)
 			platformOptions = ["--arch=x86_mscoff"];
 		success = compileDependency(outputFolder, "DCD",
-				"https://github.com/Hackerpilot/DCD.git", [
+				"https://github.com/dlang-community/DCD.git", [
 					[
 						firstConfig.git.userPath, "submodule", "update", "--init",
 						"--recursive"
