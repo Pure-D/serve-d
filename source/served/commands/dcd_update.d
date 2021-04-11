@@ -59,6 +59,12 @@ void updateDCD()
 
 	bool success;
 
+	version (Windows)
+		enum latestVersionBroken = true;
+	else
+		enum latestVersionBroken = false;
+
+	// the latest version that has downloads available
 	enum bundledDCDVersion = "v0.13.2";
 
 	bool compileFromSource = false;
@@ -81,6 +87,9 @@ void updateDCD()
 		if (!checkVersion(bundledDCDVersion, DCDComponent.latestKnownVersion))
 			compileFromSource = true;
 	}
+
+	static if (latestVersionBroken)
+		compileFromSource = true;
 
 	string[] triedPaths;
 
