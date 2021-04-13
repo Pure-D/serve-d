@@ -95,16 +95,13 @@ void updateDCD()
 
 	if (compileFromSource)
 	{
-		string[] platformOptions;
-		version (Windows)
-			platformOptions = ["--arch=x86_mscoff"];
 		success = compileDependency(outputFolder, "DCD",
 				"https://github.com/dlang-community/DCD.git", [
 					[
 						firstConfig.git.userPath, "submodule", "update", "--init",
 						"--recursive"
-					], ["dub", "build", "--config=client"] ~ platformOptions,
-					["dub", "build", "--config=server"] ~ platformOptions
+					], ["dub", "build", "--config=client"],
+					["dub", "build", "--config=server"]
 				]);
 		finalDestinationClient = buildPath(outputFolder, "DCD", "dcd-client" ~ ext);
 		if (!fs.exists(finalDestinationClient))
