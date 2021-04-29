@@ -78,16 +78,15 @@ int main(string[] args)
 	string lang = "en";
 	bool wait;
 
-	void setLogLevel(string level)
+	void setLogLevel(string option, string level)
 	{
-	LevelSwitch:
 		switch (level)
 		{
 			static foreach (levelName; __traits(allMembers, LogLevel))
 			{
 		case levelName:
 				globalLogLevel = __traits(getMember, LogLevel, levelName);
-				break LevelSwitch;
+				return;
 			}
 		default:
 			throw new GetOptException(
@@ -97,7 +96,7 @@ int main(string[] args)
 		}
 	}
 
-	void setLogFile(string file)
+	void setLogFile(string option, string file)
 	{
 		sharedLog = new FileLogger(file, LogLevel.all, CreateFolder.no);
 	}
