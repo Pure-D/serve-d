@@ -806,7 +806,7 @@ void delayedProjectActivation(WorkspaceD.Instance instance, string workspaceRoot
 		if (!disableDub)
 		{
 			error("Failed starting dub in ", root, " - falling back to fsworkspace");
-			proj.startupError(workspaceRoot, translate!"d.ext.dubFail"(instance.cwd));
+			proj.startupError(workspaceRoot, translate!"d.ext.dubFail"(instance.cwd, err ? err.msg : ""));
 		}
 		try
 		{

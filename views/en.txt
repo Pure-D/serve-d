@@ -100,7 +100,7 @@ d.ext.exeIsDir: {0} points to a directory
 d.ext.exeENOENT: {0} is not installed or couldn't be found
 d.ext.compileProgram: Compile {0}
 d.ext.downloadProgram: Download {0}
-d.ext.dubFail: Could not initialize dub for {0}. Falling back to limited functionality!
+d.ext.dubFail: Could not initialize dub for {0}. Falling back to limited functionality!\n\n{1}
 d.ext.dubInvalidRecipeSyntax: There is an issue in your dub.json/dub.sdl package recipe syntax. {0}
 d.ext.dubRecipeMaybeBroken: Dub could not be started. Your dub.json/dub.sdl package recipe might be faulty! Fix it and save the file again.
 d.ext.dubUpgradeFail: Could not upgrade dub project

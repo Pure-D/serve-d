@@ -100,7 +100,7 @@ d.ext.exeIsDir: {0} zeigt auf einen Ordner
 d.ext.exeENOENT: {0} ist nicht installiert oder konnte nicht gefunden werden
 d.ext.compileProgram: {0} Kompilieren
 d.ext.downloadProgram: {0} Downloaden
-d.ext.dubFail: Konnte dub für {0} nicht starten. Funktionalität begrenzt!
+d.ext.dubFail: Konnte dub für {0} nicht starten. Funktionalität begrenzt!\n\n{1}
 d.ext.dubInvalidRecipeSyntax: Im dub.json/dub.sdl Rezept wurde ein Fehler gefunden. {0}
 d.ext.dubRecipeMaybeBroken: Konnte dub nicht starten. Das dub.json/dub.sdl Rezept könnte möglicherweise Fehlerhaft sein! Bitte Fehler beheben und neu speichern.
 d.ext.dubUpgradeFail: Konnte nicht dub upgrade durchführen

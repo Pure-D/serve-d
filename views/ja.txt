@@ -90,7 +90,7 @@ d.ext.config.invalid.archType: アーキテクチャタイプの設定 '{0}' は
 d.ext.config.invalid.buildType: ビルドタイプの設定 '{0}' は利用できませんでした
 d.ext.config.invalid.compiler: コンパイラの設定 '{0}' は利用できませんでした
 # TODO: Add {0} (workspace location) to the following 3 translations
-d.ext.dubFail: dub の初期化に失敗しました
+d.ext.dubFail: dub の初期化に失敗しました\n\n{1}
 d.ext.fsworkspaceFail: fsworkspace を初期化できませんでした 詳細はコンソールを参照してください
 d.ext.dcdFail: DCDを初期化できませんでした{1}
 d.ext.gcLens: {0} bytes allocated / {1} allocations
