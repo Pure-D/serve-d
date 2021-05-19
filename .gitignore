@@ -4,7 +4,7 @@ __dummy.html
 *.o
 *.a
 *.obj
-*-test-library
+*-test-*
 dub.selections.json
 /serve-d
 *.dll
