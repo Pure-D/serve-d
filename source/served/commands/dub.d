@@ -13,7 +13,7 @@ import painlessjson : toJSON;
 import core.time;
 
 import std.algorithm : among, canFind, count, endsWith, map, remove, startsWith;
-import std.array : array;
+import std.array : array, replace;
 import std.experimental.logger;
 import std.json : JSONValue;
 import std.path : baseName, buildPath, dirName, setExtension;
@@ -388,24 +388,26 @@ Task[] provideBuildTasks()
 		auto dub = instance.get!DubComponent;
 		auto workspace = .workspace(instance.cwd.uriFromFile, false);
 		info("Found dub package to build at ", dub.recipePath);
-		string uri = dub.recipePath.dirName.uriFromFile;
+		JSONValue currentMagicValue = JSONValue("$current");
+		auto cwd = JSONValue(dub.recipePath.dirName.replace(workspace.folder.uri.uriToFile, "${workspaceFolder}"));
 		{
 			Task t;
 			t.source = "dub";
 			t.definition = JSONValue([
 					"type": JSONValue("dub"),
 					"run": JSONValue(true),
-					"compiler": JSONValue(dub.compiler),
-					"archType": JSONValue(dub.archType),
-					"buildType": JSONValue(dub.buildType),
-					"configuration": JSONValue(dub.configuration)
+					"compiler": currentMagicValue,
+					"archType": currentMagicValue,
+					"buildType": currentMagicValue,
+					"configuration": currentMagicValue,
+					"cwd": cwd
 					]);
 			t.group = Task.Group.build;
 			t.exec = [
 				workspace.config.d.dubPath.userPath, "run", "--compiler=" ~ dub.compiler,
 				"-a=" ~ dub.archType, "-b=" ~ dub.buildType, "-c=" ~ dub.configuration
 			].fixEmptyArgs;
-			t.scope_ = uri;
+			t.scope_ = workspace.folder.uri;
 			t.name = "Run " ~ dub.name;
 			ret ~= t;
 		}
@@ -415,17 +417,18 @@ Task[] provideBuildTasks()
 			t.definition = JSONValue([
 					"type": JSONValue("dub"),
 					"test": JSONValue(true),
-					"compiler": JSONValue(dub.compiler),
-					"archType": JSONValue(dub.archType),
-					"buildType": JSONValue(dub.buildType),
-					"configuration": JSONValue(dub.configuration)
+					"compiler": currentMagicValue,
+					"archType": currentMagicValue,
+					"buildType": currentMagicValue,
+					"configuration": currentMagicValue,
+					"cwd": cwd
 					]);
 			t.group = Task.Group.test;
 			t.exec = [
 				workspace.config.d.dubPath.userPath, "test", "--compiler=" ~ dub.compiler,
 				"-a=" ~ dub.archType, "-b=" ~ dub.buildType, "-c=" ~ dub.configuration
 			].fixEmptyArgs;
-			t.scope_ = uri;
+			t.scope_ = workspace.folder.uri;
 			t.name = "Test " ~ dub.name;
 			ret ~= t;
 		}
@@ -435,17 +438,18 @@ Task[] provideBuildTasks()
 			t.definition = JSONValue([
 					"type": JSONValue("dub"),
 					"run": JSONValue(false),
-					"compiler": JSONValue(dub.compiler),
-					"archType": JSONValue(dub.archType),
-					"buildType": JSONValue(dub.buildType),
-					"configuration": JSONValue(dub.configuration)
+					"compiler": currentMagicValue,
+					"archType": currentMagicValue,
+					"buildType": currentMagicValue,
+					"configuration": currentMagicValue,
+					"cwd": cwd
 					]);
 			t.group = Task.Group.build;
 			t.exec = [
 				workspace.config.d.dubPath.userPath, "build", "--compiler=" ~ dub.compiler,
 				"-a=" ~ dub.archType, "-b=" ~ dub.buildType, "-c=" ~ dub.configuration
 			].fixEmptyArgs;
-			t.scope_ = uri;
+			t.scope_ = workspace.folder.uri;
 			t.name = "Build " ~ dub.name;
 			ret ~= t;
 		}
@@ -456,10 +460,11 @@ Task[] provideBuildTasks()
 					"type": JSONValue("dub"),
 					"run": JSONValue(false),
 					"force": JSONValue(true),
-					"compiler": JSONValue(dub.compiler),
-					"archType": JSONValue(dub.archType),
-					"buildType": JSONValue(dub.buildType),
-					"configuration": JSONValue(dub.configuration)
+					"compiler": currentMagicValue,
+					"archType": currentMagicValue,
+					"buildType": currentMagicValue,
+					"configuration": currentMagicValue,
+					"cwd": cwd
 					]);
 			t.group = Task.Group.rebuild;
 			t.exec = [
@@ -467,7 +472,7 @@ Task[] provideBuildTasks()
 				"--compiler=" ~ dub.compiler, "-a=" ~ dub.archType,
 				"-b=" ~ dub.buildType, "-c=" ~ dub.configuration
 			].fixEmptyArgs;
-			t.scope_ = uri;
+			t.scope_ = workspace.folder.uri;
 			t.name = "Rebuild " ~ dub.name;
 			ret ~= t;
 		}
