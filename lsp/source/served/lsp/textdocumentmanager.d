@@ -267,6 +267,21 @@ struct Document
 		return ret;
 	}
 
+	/// Converts a line/column byte offset to a line/column position.
+	Position lineColumnBytesToPosition(uint line, uint column)
+	{
+		scope lineText = lineAtScope(line);
+		uint offset = 0;
+		// keep over-extending positions
+		if (column > lineText.length)
+		{
+			offset = column - cast(uint)lineText.length;
+			column -= offset;
+			assert(column <= lineText.length);
+		}
+		return Position(line, cast(uint) lineText[0 .. column].countUTF16Length + offset);
+	}
+
 	/// Returns the position at "end" starting from the given "src" position which is assumed to be at byte "start"
 	/// Faster to quickly calculate nearby positions of known byte positions.
 	/// Falls back to $(LREF bytesToPosition) if end is before start.

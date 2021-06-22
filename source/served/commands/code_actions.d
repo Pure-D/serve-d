@@ -229,7 +229,7 @@ void addSyntaxDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 	string key = diagnostic.code.type == JSONType.string ? diagnostic.code.str : null;
 	switch (key)
 	{
-	case "served.foreach-auto":
+	case "workspaced.foreach-auto":
 		auto b = document.positionToBytes(diagnostic.range.start);
 		auto text = document.rawText[b .. $];
 
