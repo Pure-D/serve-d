@@ -7,6 +7,8 @@ public import served.lsp.textdocumentmanager;
 public import served.lsp.uri;
 public import served.utils.events;
 
+static import served.extension;
+
 import served.serverbase;
 mixin LanguageServerRouter!(served.extension) lspRouter;
 
