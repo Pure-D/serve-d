@@ -93,6 +93,7 @@ void rescanTests(RescanTestsParams params)
 
 private void rescanFile(ref UnittestProject project, TextDocumentIdentifier documentIdentifier)
 {
+	auto document = documents[documentIdentifier.uri];
 	auto symbols = provideDocumentSymbolsOld(DocumentSymbolParamsEx(documentIdentifier, true));
 
 	UnittestInfo[] tests;
@@ -108,8 +109,6 @@ private void rescanFile(ref UnittestProject project, TextDocumentIdentifier docu
 
 		tests ~= UnittestInfo(test.name, name, test.containerName, test.location.range);
 	}
-
-	auto document = documents[documentIdentifier.uri];
 
 	string modulename = backend.get!ModulemanComponent.moduleName(document.rawText);
 	if (!modulename.length)
