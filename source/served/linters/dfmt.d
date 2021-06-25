@@ -127,7 +127,7 @@ unittest
 	auto linted = lintDfmt(dfmt, d);
 	import std.stdio; stderr.writeln("diagnostics:\n", linted);
 	assert(linted.length == 3);
-	assert(linted[0].severity.get == DiagnosticSeverity.information);
-	assert(linted[1].severity.get == DiagnosticSeverity.information);
+	assert(linted[0].severity.get == DiagnosticSeverity.hint);
+	assert(linted[1].severity.get == DiagnosticSeverity.hint);
 	assert(linted[2].severity.get == DiagnosticSeverity.warning);
 }
