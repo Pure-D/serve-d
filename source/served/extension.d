@@ -1028,13 +1028,27 @@ void onDidCloseDocument(DidOpenTextDocumentParams params)
 	// but keep warnings in local projects
 }
 
-int changeTimeout;
+int genericChangeTimeout;
 @protocolNotification("textDocument/didChange")
 void onDidChangeDocument(DocumentLinkParams params)
 {
+	auto document = documents[params.textDocument.uri];
+	if (document.getLanguageId != "d")
+		return;
+
 	doDscanner(params);
+
+	int delay = document.length > 50 * 1024 ? 500 : 50; // be slower after 50KiB
+	clearTimeout(dscannerChangeTimeout);
+	dscannerChangeTimeout = setTimeout({
+		import served.linters.dfmt : lint;
+
+		lint(document);
+		// Delay to avoid too many requests
+	}, delay);
 }
 
+int dscannerChangeTimeout;
 @protocolNotification("coded/doDscanner")  // deprecated alias
 @protocolNotification("served/doDscanner")
 void doDscanner(DocumentLinkParams params)
@@ -1047,8 +1061,8 @@ void doDscanner(DocumentLinkParams params)
 		return;
 
 	int delay = document.length > 50 * 1024 ? 1000 : 200; // be slower after 50KiB
-	clearTimeout(changeTimeout);
-	changeTimeout = setTimeout({
+	clearTimeout(dscannerChangeTimeout);
+	dscannerChangeTimeout = setTimeout({
 		import served.linters.dscanner;
 
 		lint(document);
@@ -1113,7 +1127,7 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 				import served.linters.dscanner;
 
 				lint(document);
-				clearTimeout(changeTimeout);
+				clearTimeout(dscannerChangeTimeout);
 			}
 		}, {
 			if (backend.has!DubComponent(workspaceRoot) && config.d.enableDubLinting)

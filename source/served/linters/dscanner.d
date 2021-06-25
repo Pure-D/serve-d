@@ -320,7 +320,7 @@ void main()
 });
 
 	test.build(document);
-	import std.stdio; stderr.writeln("diagnostics:\n", test.diagnostics);
+	// import std.stdio; stderr.writeln("diagnostics:\n", test.diagnostics);
 	assert(test.syntaxErrorsAt(Position(0, 0)).length == 0);
 	assert(test.syntaxErrorsAt(Position(3, 4)).length == 0);
 	assert(test.syntaxErrorsAt(Position(3, 5)).length == 1);

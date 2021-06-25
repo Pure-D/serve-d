@@ -8,7 +8,7 @@ import served.types;
 
 import painlessjson;
 
-enum NumDiagnosticProviders = 2;
+enum NumDiagnosticProviders = 3;
 alias DiagnosticCollection = PublishDiagnosticsParams[];
 DiagnosticCollection[NumDiagnosticProviders] diagnostics;
 
