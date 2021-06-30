@@ -1039,8 +1039,8 @@ void onDidChangeDocument(DocumentLinkParams params)
 	doDscanner(params);
 
 	int delay = document.length > 50 * 1024 ? 500 : 50; // be slower after 50KiB
-	clearTimeout(dscannerChangeTimeout);
-	dscannerChangeTimeout = setTimeout({
+	clearTimeout(genericChangeTimeout);
+	genericChangeTimeout = setTimeout({
 		import served.linters.dfmt : lint;
 
 		lint(document);
