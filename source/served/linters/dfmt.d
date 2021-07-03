@@ -27,9 +27,9 @@ void lint(Document document)
 	if (!fileConfig.d.enableFormatting)
 		return;
 
-	auto dfmt = backend.get!DfmtComponent;
-	if (!dfmt)
+	if (!backend.has!DfmtComponent)
 		return;
+	auto dfmt = backend.get!DfmtComponent;
 
 	createDiagnosticsFor!DiagnosticSlot(document.uri) = lintDfmt(dfmt, document);
 	updateDiagnostics(document.uri);
