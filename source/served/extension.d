@@ -33,6 +33,7 @@ import workspaced.coms;
 public import served.commands.calltips;
 public import served.commands.code_actions;
 public import served.commands.code_lens;
+public import served.commands.color;
 public import served.commands.complete;
 public import served.commands.dcd_update;
 public import served.commands.definition;
@@ -49,6 +50,7 @@ alias members = AliasSeq!(
 	__traits(derivedMembers, served.commands.calltips),
 	__traits(derivedMembers, served.commands.code_actions),
 	__traits(derivedMembers, served.commands.code_lens),
+	__traits(derivedMembers, served.commands.color),
 	__traits(derivedMembers, served.commands.complete),
 	__traits(derivedMembers, served.commands.dcd_update),
 	__traits(derivedMembers, served.commands.definition),
@@ -457,6 +459,7 @@ InitializeResult initialize(InitializeParams params)
 	result.capabilities.documentSymbolProvider = true;
 	result.capabilities.documentFormattingProvider = true;
 	result.capabilities.documentRangeFormattingProvider = true;
+	result.capabilities.colorProvider = ColorProviderOptions();
 	result.capabilities.workspace = opt(ServerWorkspaceCapabilities(
 			opt(ServerWorkspaceCapabilities.WorkspaceFolders(opt(true), opt(true)))));
 

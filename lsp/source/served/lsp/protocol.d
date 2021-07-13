@@ -1587,6 +1587,39 @@ struct DocumentLinkRegistrationOptions
 	bool resolveProvider;
 }
 
+struct DocumentColorParams
+{
+	TextDocumentIdentifier textDocument;
+}
+
+struct ColorInformation
+{
+	TextRange range;
+	Color color;
+}
+
+struct Color
+{
+	double red = 0;
+	double green = 0;
+	double blue = 0;
+	double alpha = 1;
+}
+
+struct ColorPresentationParams
+{
+	TextDocumentIdentifier textDocument;
+	Color color;
+	TextRange range;
+}
+
+struct ColorPresentation
+{
+	string label;
+	Optional!TextEdit textEdit;
+	Optional!(TextEdit[]) additionalTextEdits;
+}
+
 struct DocumentFormattingParams
 {
 	TextDocumentIdentifier textDocument;

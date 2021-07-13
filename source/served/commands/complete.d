@@ -461,6 +461,38 @@ CompletionList provideDMLSourceComplete(TextDocumentPositionParams params,
 		switch (item.type)
 		{
 		case CompletionType.Class:
+			translated.insertTextFormat = InsertTextFormat.snippet;
+			translated.insertText = item.value ~ ` {$0}`;
+			break;
+		case CompletionType.Color:
+			translated.insertTextFormat = InsertTextFormat.snippet;
+			translated.insertText = item.value ~ `: ${0:#000000}`;
+			break;
+		case CompletionType.String:
+			translated.insertTextFormat = InsertTextFormat.snippet;
+			translated.insertText = item.value ~ `: "$0"`;
+			break;
+		case CompletionType.EnumDefinition:
+			translated.insertTextFormat = InsertTextFormat.plainText;
+			translated.insertText = item.enumName ~ "." ~ item.value;
+			break;
+		case CompletionType.Rectangle:
+		case CompletionType.Number:
+			translated.insertTextFormat = InsertTextFormat.snippet;
+			translated.insertText = item.value ~ `: ${0:0}`;
+			break;
+		case CompletionType.Keyword:
+			// don't set, inherit from label
+			break;
+		default:
+			translated.insertTextFormat = InsertTextFormat.plainText;
+			translated.insertText = item.value ~ ": ";
+			break;
+		}
+
+		switch (item.type)
+		{
+		case CompletionType.Class:
 			translated.kind = CompletionItemKind.class_;
 			break;
 		case CompletionType.String:
