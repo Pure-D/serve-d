@@ -321,6 +321,14 @@ struct Document
 		return src;
 	}
 
+	Position nextPositionBytes(ref Position src, ref size_t start, size_t end) const
+	{
+		auto pos = movePositionBytes(src, start, end);
+		src = pos;
+		start = end;
+		return pos;
+	}
+
 	/// Returns the word range at a given line/column position.
 	TextRange wordRangeAt(Position position) const
 	{
