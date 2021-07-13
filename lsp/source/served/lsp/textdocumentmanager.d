@@ -328,6 +328,16 @@ struct Document
 		return TextRange(Position(position.line, chars[0]), Position(position.line, chars[1]));
 	}
 
+	/// Returns the word range at a given byte position.
+	size_t[2] wordRangeAt(size_t bytes) const
+	{
+		auto lineStart = text.lastIndexOf('\n', bytes) + 1;
+		auto ret = wordInLineBytes(text[lineStart .. $], cast(uint)(bytes - lineStart));
+		ret[0] += lineStart;
+		ret[1] += lineStart;
+		return ret;
+	}
+
 	/// Returns a byte offset range as `[start, end]` of the given 0-based line
 	/// number.
 	size_t[2] lineByteRangeAt(uint line) const
@@ -598,17 +608,28 @@ struct PerDocumentCache(T)
 /// Returns a range of the identifier/word at the given position.
 uint[2] wordInLine(const(char)[] line, uint character)
 {
-	size_t index = 0;
-	uint offs = 0;
+	return wordInLineImpl!(wchar, uint)(line, character);
+}
 
-	uint lastStart = character;
-	uint start = character, end = character + 1;
+/// ditto
+size_t[2] wordInLineBytes(const(char)[] line, size_t bytes)
+{
+	return wordInLineImpl!(char, size_t)(line, bytes);
+}
+
+SizeT[2] wordInLineImpl(CharT, SizeT)(const(char)[] line, SizeT character)
+{
+	size_t index = 0;
+	SizeT offs = 0;
+
+	SizeT lastStart = character;
+	SizeT start = character, end = character + 1;
 	bool searchStart = true;
 
 	while (index < line.length)
 	{
 		const c = decode(line, index);
-		const l = cast(uint) c.codeLength!wchar;
+		const l = cast(SizeT) c.codeLength!CharT;
 
 		if (searchStart)
 		{
@@ -633,9 +654,9 @@ uint[2] wordInLine(const(char)[] line, uint character)
 	}
 
 	if (start > line.length)
-		start = cast(uint)line.length;
+		start = cast(SizeT)line.length;
 	if (end > line.length)
-		end = cast(uint)line.length;
+		end = cast(SizeT)line.length;
 	if (end < start)
 		end = start;
 
