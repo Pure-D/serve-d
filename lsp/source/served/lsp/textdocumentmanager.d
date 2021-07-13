@@ -78,6 +78,13 @@ struct Document
 		return ret;
 	}
 
+	immutable(Document) clone()
+	{
+		Document ret = this;
+		ret.text = text.dup;
+		return cast(immutable) ret;
+	}
+
 	version (unittest) private static Document nullDocumentOwnMemory(char[] content)
 	{
 		Document ret;
@@ -88,9 +95,14 @@ struct Document
 	/// Returns a read-only view of the text. The text may however be changed
 	/// by other operations, so this slice should be used directly and not after
 	/// any context yield or API call potentially modifying the data.
-	const(char)[] rawText()
+	const(char)[] rawText() const
 	{
 		return cast(const(char)[]) text;
+	}
+
+	string rawText() immutable
+	{
+		return text;
 	}
 
 	///
@@ -161,19 +173,19 @@ struct Document
 
 	/// Converts an LSP offset to a byte offset for using for example in array
 	/// slicing.
-	size_t offsetToBytes(size_t offset)
+	size_t offsetToBytes(size_t offset) const
 	{
 		return .countBytesUntilUTF16Index(text, offset);
 	}
 
 	/// Converts a byte offset to an LSP offset.
-	size_t bytesToOffset(size_t bytes)
+	size_t bytesToOffset(size_t bytes) const
 	{
 		return .countUTF16Length(text[0 .. min($, bytes)]);
 	}
 
 	/// Converts a line/column position to an LSP offset.
-	size_t positionToOffset(Position position)
+	size_t positionToOffset(Position position) const
 	{
 		size_t offset = 0;
 		size_t bytes = 0;
@@ -202,7 +214,7 @@ struct Document
 	}
 
 	/// Converts a line/column position to a byte offset.
-	size_t positionToBytes(Position position)
+	size_t positionToBytes(Position position) const
 	{
 		size_t index = 0;
 		while (index < text.length && position.line > 0)
@@ -225,7 +237,7 @@ struct Document
 	}
 
 	/// Converts an LSP offset to a line/column position.
-	Position offsetToPosition(size_t offset)
+	Position offsetToPosition(size_t offset) const
 	{
 		size_t bytes;
 		size_t index;
@@ -248,7 +260,7 @@ struct Document
 	}
 
 	/// Converts a byte offset to a line/column position.
-	Position bytesToPosition(size_t bytes)
+	Position bytesToPosition(size_t bytes) const
 	{
 		if (bytes > text.length)
 			bytes = text.length;
@@ -268,7 +280,7 @@ struct Document
 	}
 
 	/// Converts a line/column byte offset to a line/column position.
-	Position lineColumnBytesToPosition(uint line, uint column)
+	Position lineColumnBytesToPosition(uint line, uint column) const
 	{
 		scope lineText = lineAtScope(line);
 		uint offset = 0;
@@ -285,7 +297,7 @@ struct Document
 	/// Returns the position at "end" starting from the given "src" position which is assumed to be at byte "start"
 	/// Faster to quickly calculate nearby positions of known byte positions.
 	/// Falls back to $(LREF bytesToPosition) if end is before start.
-	Position movePositionBytes(Position src, size_t start, size_t end)
+	Position movePositionBytes(Position src, size_t start, size_t end) const
 	{
 		if (end == start)
 			return src;
@@ -310,7 +322,7 @@ struct Document
 	}
 
 	/// Returns the word range at a given line/column position.
-	TextRange wordRangeAt(Position position)
+	TextRange wordRangeAt(Position position) const
 	{
 		auto chars = wordInLine(lineAtScope(position), position.character);
 		return TextRange(Position(position.line, chars[0]), Position(position.line, chars[1]));
@@ -318,7 +330,7 @@ struct Document
 
 	/// Returns a byte offset range as `[start, end]` of the given 0-based line
 	/// number.
-	size_t[2] lineByteRangeAt(uint line)
+	size_t[2] lineByteRangeAt(uint line) const
 	{
 		size_t start = 0;
 		size_t index = 0;
@@ -345,27 +357,27 @@ struct Document
 	}
 
 	/// Returns the text of a line at the given position.
-	string lineAt(Position position)
+	string lineAt(Position position) const
 	{
 		return lineAt(position.line);
 	}
 
 	/// Returns the text of a line starting at line 0.
-	string lineAt(uint line)
+	string lineAt(uint line) const
 	{
 		return lineAtScope(line).idup;
 	}
 
 	/// Returns the line text which is only in this scope if text isn't modified
 	/// See_Also: $(LREF lineAt)
-	scope const(char)[] lineAtScope(Position position)
+	scope const(char)[] lineAtScope(Position position) const
 	{
 		return lineAtScope(position.line);
 	}
 
 	/// Returns the line text which is only in this scope if text isn't modified
 	/// See_Also: $(LREF lineAt)
-	scope const(char)[] lineAtScope(uint line)
+	scope const(char)[] lineAtScope(uint line) const
 	{
 		auto range = lineByteRangeAt(line);
 		return text[range[0] .. range[1]];
@@ -395,7 +407,7 @@ you?`);
 	}
 
 	/// Returns how a line is terminated at the given 0-based line number.
-	EolType eolAt(int line)
+	EolType eolAt(int line) const
 	{
 		size_t index = 0;
 		int curLine = 0;
