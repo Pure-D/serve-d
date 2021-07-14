@@ -40,6 +40,7 @@ public import served.commands.definition;
 public import served.commands.dub;
 public import served.commands.file_search;
 public import served.commands.format;
+public import served.commands.highlight;
 public import served.commands.symbol_search;
 public import served.commands.test_provider;
 public import served.workers.rename_listener;
@@ -57,6 +58,7 @@ alias members = AliasSeq!(
 	__traits(derivedMembers, served.commands.dub),
 	__traits(derivedMembers, served.commands.file_search),
 	__traits(derivedMembers, served.commands.format),
+	__traits(derivedMembers, served.commands.highlight),
 	__traits(derivedMembers, served.commands.symbol_search),
 	__traits(derivedMembers, served.commands.test_provider),
 	__traits(derivedMembers, served.workers.rename_listener),
@@ -460,6 +462,7 @@ InitializeResult initialize(InitializeParams params)
 	result.capabilities.documentFormattingProvider = true;
 	result.capabilities.documentRangeFormattingProvider = true;
 	result.capabilities.colorProvider = ColorProviderOptions();
+	result.capabilities.documentHighlightProvider = true;
 	result.capabilities.workspace = opt(ServerWorkspaceCapabilities(
 			opt(ServerWorkspaceCapabilities.WorkspaceFolders(opt(true), opt(true)))));
 

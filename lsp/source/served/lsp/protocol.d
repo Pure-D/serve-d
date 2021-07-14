@@ -1465,6 +1465,12 @@ struct ReferenceContext
 	bool includeDeclaration;
 }
 
+struct DocumentHighlightParams
+{
+	TextDocumentIdentifier textDocument;
+	Position position;
+}
+
 struct DocumentHighlight
 {
 	TextRange range;
