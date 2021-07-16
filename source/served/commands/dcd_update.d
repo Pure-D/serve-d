@@ -65,7 +65,7 @@ void updateDCD()
 		enum latestVersionBroken = false;
 
 	// the latest version that has downloads available
-	enum bundledDCDVersion = "v0.13.5";
+	enum bundledDCDVersion = "v0.13.6";
 
 	bool compileFromSource = false;
 	version (DCDFromSource)
