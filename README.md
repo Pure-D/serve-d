@@ -650,6 +650,10 @@ Manually building from source:
 dub build
 ```
 
+serve-d is also on DUB:
+```
+dub fetch serve-d
+```
 ## Issues
 
 If you have issues with any editors using serve-d, please [report an issue](https://github.com/Pure-D/serve-d/issues/new)
