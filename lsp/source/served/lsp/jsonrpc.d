@@ -99,9 +99,15 @@ class RPCProcessor : Fiber
 	/// Sends a notification with the given `method` name to the other RPC side with the given `value` parameter serialized to JSON.
 	void notifyMethod(T)(string method, T value)
 	{
+		notifyMethod(method, value.toJSON);
+	}
+
+	/// ditto
+	void notifyMethod(string method, JSONValue value)
+	{
 		RequestMessage req;
 		req.method = method;
-		req.params = value.toJSON;
+		req.params = value;
 		send(req);
 	}
 
@@ -122,10 +128,16 @@ class RPCProcessor : Fiber
 	/// Returns: a RequestToken to use with $(LREF awaitResponse) to get the response. Can be ignored if the response isn't important.
 	RequestToken sendMethod(T)(string method, T value)
 	{
+		return sendMethod(method, value.toJSON);
+	}
+
+	/// ditto
+	RequestToken sendMethod(string method, JSONValue value)
+	{
 		RequestMessage req;
 		req.id = RequestToken.random;
 		req.method = method;
-		req.params = value.toJSON;
+		req.params = value;
 		send(req);
 		return req.id;
 	}
@@ -137,6 +149,12 @@ class RPCProcessor : Fiber
 	///
 	/// Returns: The response deserialized from the RPC.
 	ResponseMessage sendRequest(T)(string method, T value)
+	{
+		return awaitResponse(sendMethod(method, value));
+	}
+
+	/// ditto
+	ResponseMessage sendRequest(string method, JSONValue value)
 	{
 		return awaitResponse(sendMethod(method, value));
 	}
