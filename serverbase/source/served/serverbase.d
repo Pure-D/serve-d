@@ -73,6 +73,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 	import std.datetime.stopwatch;
 	import std.experimental.logger;
 	import std.functional;
+	import std.json;
 
 	import io = std.stdio;
 
@@ -109,29 +110,113 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			return res;
 		}
 
-		bool found = eventProcessor.emitProtocol!(protocolMethod, (name, callSymbol, uda) {
+		size_t numHandlers;
+		eventProcessor.emitProtocol!(protocolMethod, (name, callSymbol, uda) {
+			numHandlers++;
+		}, false)(msg.method, msg.params);
+
+		// trace("Function ", msg.method, " has ", numHandlers, " handlers");
+		if (numHandlers == 0)
+		{
+			io.stderr.writeln(msg);
+			res.error = ResponseError(ErrorCode.methodNotFound);
+			return res;
+		}
+
+		JSONValue workDoneToken, partialResultToken;
+		if (msg.params.type == JSONType.object)
+		{
+			if (auto doneToken = "workDoneToken" in msg.params)
+				workDoneToken = *doneToken;
+			if (auto partialToken = "partialResultToken" in msg.params)
+				partialResultToken = *partialToken;
+		}
+
+		int working = 0;
+		JSONValue[] partialResults;
+		void handlePartialWork(Symbol, Arguments)(Symbol fn, Arguments args)
+		{
+			import painlessjson : toJSON;
+
+			working++;
+			pushFiber({
+				scope (exit)
+					working--;
+				auto thisId = working;
+				trace("Partial ", thisId, " / ", numHandlers, "...");
+				auto result = fn(args.expand);
+				trace("Partial ", thisId, " = ", result);
+				JSONValue json = toJSON(result);
+				if (partialResultToken == JSONValue.init)
+					partialResults ~= json;
+				else
+					rpc.notifyMethod("$/progress", JSONValue([
+						"token": partialResultToken,
+						"value": json
+					]));
+				processRequestObservers(msg, json);
+			});
+		}
+
+		bool done;
+		bool found = eventProcessor.emitProtocolRaw!(protocolMethod, (name, symbol, arguments, uda) {
+			if (done)
+				return;
+
 			try
 			{
-				trace("Calling " ~ name);
-				auto requestResult = callSymbol();
+				trace("Calling ", name);
+				alias RequestResultT = typeof(symbol(arguments.expand));
 
-				static if (is(typeof(requestResult) : JSONValue))
+				static if (is(RequestResultT : JSONValue))
+				{
+					auto requestResult = symbol(arguments.expand);
 					res.result = requestResult;
+					done = true;
+					processRequestObservers(msg, requestResult);
+				}
 				else
+				{
+					static if (is(RequestResultT : T[], T))
+					{
+						if (numHandlers > 1)
+						{
+							handlePartialWork(symbol, arguments);
+							return;
+						}
+					}
+					else assert(numHandlers == 1, "Registered more than one "
+						~ msg.method ~ " handler on non-partial method returning "
+						~ RequestResultT.stringof);
+					auto requestResult = symbol(arguments.expand);
 					res.result = toJSON(requestResult);
-
-				processRequestObservers(msg, requestResult);
+					done = true;
+					processRequestObservers(msg, requestResult);
+				}
 			}
 			catch (MethodException e)
 			{
 				res.error = e.error;
 			}
-		}, true)(msg.method, msg.params);
+		}, false)(msg.method, msg.params);
 
-		if (!found)
+		assert(found);
+
+		if (!done)
 		{
-			io.stderr.writeln(msg);
-			res.error = ResponseError(ErrorCode.methodNotFound);
+			while (working > 0)
+				Fiber.yield();
+
+			if (partialResultToken == JSONValue.init)
+			{
+				JSONValue[] combined;
+				foreach (partial; partialResults)
+				{
+					assert(partial.type == JSONType.array);
+					combined ~= partial.array;
+				}
+				res.result = JSONValue(combined);
+			}
 		}
 
 		return res;

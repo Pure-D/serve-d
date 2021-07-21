@@ -1,10 +1,22 @@
 module served.utils.events;
 
+/// Called for requests (not notifications) from the client to the server. This
+/// UDA must be used at most once per method for regular methods. For methods
+/// returning arrays (T[]) it's possible to register multiple functions with the
+/// same method. In this case, if the client supports it, partial results will
+/// be sent for each returning method, meaning the results are streamed. In case
+/// the client does not support partial methods, all results will be
+/// concatenated together and returned as one.
 struct protocolMethod
 {
 	string method;
 }
 
+/// Called after the @protocolMethod for this method is handled. May have as
+/// many handlers registered as needed. When the actual protocol method is a
+/// partial method (multiple handlers, returning array) this will be ran on each
+/// chunk returned by every handler. In that case the handler will be run
+/// multiple times on different fibers.
 struct postProtocolMethod
 {
 	string method;
@@ -136,6 +148,56 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 				}
 
 				callback(name, &callSymbol, uda);
+				return true;
+			}
+			else
+				return false;
+		}, returnFirst);
+	}
+
+	/// Same as emitProtocol, but for the callback instead of getting a delegate
+	/// to call, you get a function pointer and a tuple with the arguments for
+	/// each instantiation that can be expanded.
+	///
+	/// So the callback gets called like `callback(name, symbol, arguments, uda)`
+	/// and the implementation can then call the symbol function using
+	/// `symbol(arguments.expand)`.
+	///
+	/// This works around scoping issues and copies the arguments once more on
+	/// invocation, causing ref/out parameters to get lost however. Allows to
+	/// copy the arguments to other fibers for parallel processing.
+	bool emitProtocolRaw(alias UDA, alias callback, bool returnFirst)(string method,
+			JSONValue params)
+	{
+		import std.typecons : tuple;
+
+		return iterateExtensionMethodsByUDA!(UDA, (name, symbol, uda) {
+			if (uda.method == method)
+			{
+				debug (PerfTraceLog) mixin(traceStatistics(uda.method ~ ":" ~ name));
+
+				alias symbolArgs = Parameters!symbol;
+
+				static if (symbolArgs.length == 0)
+				{
+					auto arguments = tuple();
+				}
+				else static if (symbolArgs.length == 1)
+				{
+					auto arguments = tuple(fromJSON!(symbolArgs[0])(params));
+				}
+				else static if (availableExtraArgs.length > 0
+					&& symbolArgs.length <= 1 + availableExtraArgs.length)
+				{
+					auto arguments = tuple(fromJSON!(symbolArgs[0])(params), forward!(
+						availableExtraArgs[0 .. symbolArgs.length + -1]));
+				}
+				else
+				{
+					static assert(0, "Function for " ~ name ~ " can't have more than one argument");
+				}
+
+				callback(name, symbol, arguments, uda);
 				return true;
 			}
 			else
