@@ -979,8 +979,9 @@ string determineOutputFolder()
 @protocolMethod("shutdown")
 JSONValue shutdown()
 {
+	if (!backend)
+		return JSONValue(null);
 	backend.shutdown();
-	backend.destroy();
 	served.extension.setTimeout({
 		throw new Error("RPC still running 1s after shutdown");
 	}, 1.seconds);
@@ -1183,5 +1184,6 @@ shared static this()
 
 shared static ~this()
 {
+	if (backend)
 	backend.shutdown();
 }
