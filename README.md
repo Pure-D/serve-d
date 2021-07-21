@@ -547,6 +547,26 @@ file was edited / opened / etc)
 }
 ```
 
+#### Request `served/getProfileGCEntries`
+
+**Params**: none
+
+Returns all profilegc.log entries parsed and combined.
+
+**Returns**: `ProfileGCEntry[]`
+
+```js
+interface ProfileGCEntry
+{
+	bytesAllocated: number;
+	allocationCount: number;
+	type: string; /// the function and/or type name
+	uri: string; /// absolute, normalized uri
+	displayFile: string; /// as parsed from file
+	line: number; /// 1-based line number
+}
+```
+
 ------
 
 #### Client notification `coded/updateSetting`

@@ -79,6 +79,8 @@ struct Configuration
 		bool enableAutoComplete = true;
 		bool enableFormatting = true;
 		bool enableDMDImportTiming = false;
+		bool enableCoverageDecoration = true;
+		bool enableGCProfilerDecorations = true;
 		bool neverUseDub = false;
 		string[] projectImportPaths;
 		string dubConfiguration;

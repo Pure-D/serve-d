@@ -43,6 +43,7 @@ public import served.commands.format;
 public import served.commands.highlight;
 public import served.commands.symbol_search;
 public import served.commands.test_provider;
+public import served.workers.profilegc;
 public import served.workers.rename_listener;
 
 //dfmt off
@@ -61,6 +62,7 @@ alias members = AliasSeq!(
 	__traits(derivedMembers, served.commands.highlight),
 	__traits(derivedMembers, served.commands.symbol_search),
 	__traits(derivedMembers, served.commands.test_provider),
+	__traits(derivedMembers, served.workers.profilegc),
 	__traits(derivedMembers, served.workers.rename_listener),
 );
 //dfmt on
@@ -1185,5 +1187,5 @@ shared static this()
 shared static ~this()
 {
 	if (backend)
-	backend.shutdown();
+		backend.shutdown();
 }
