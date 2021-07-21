@@ -84,6 +84,9 @@ SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParamsEx params)
 	if (cached.symbolsVerbose.length)
 		return params.verbose ? cached.symbolsVerbose : cached.symbols;
 	auto document = documents.tryGet(params.textDocument.uri);
+	if (document.languageId != "d")
+		return null;
+
 	auto result = backend.best!DscannerComponent(params.textDocument.uri.uriToFile)
 		.listDefinitions(uriToFile(params.textDocument.uri), document.rawText, true).getYield;
 	auto ret = appender!(SymbolInformationEx[]);
