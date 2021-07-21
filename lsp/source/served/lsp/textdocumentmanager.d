@@ -498,6 +498,20 @@ struct TextDocumentManager
 		return documentStore[index];
 	}
 
+	/// Tries to get a document from a URI, returns Document.init if it is not
+	/// in the in-memory cache / not sent by the client.
+	/// Throws: FileException in case the file doesn't exist or other file
+	///         system errors. In this case no new document should have been
+	///         inserted yet.
+	ref Document getOrFromFilesystem(string uri)
+	{
+		auto idx = documentStore.countUntil!(a => a.uri == uri);
+		if (idx == -1)
+			return loadFromFilesystem(uri);
+		else
+			return documentStore[idx];
+	}
+
 	/// Unloads the given URI so it's no longer accessible. Note that this
 	/// should only be done for documents loaded manually and never for LSP
 	/// documents as it will break all features in that file until reopened.
