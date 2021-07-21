@@ -6,12 +6,12 @@ import std.conv;
 import std.path;
 import std.string;
 
-DocumentUri uriFromFile(string file)
+DocumentUri uriFromFile(scope const(char)[] file)
 {
 	import std.uri : encodeComponent;
 
 	if (!isAbsolute(file))
-		throw new Exception("Tried to pass relative path '" ~ file ~ "' to uriFromFile");
+		throw new Exception(text("Tried to pass relative path '", file, "' to uriFromFile"));
 	file = file.buildNormalizedPath.replace("\\", "/");
 	if (file.length == 0)
 		return "";
@@ -19,7 +19,7 @@ DocumentUri uriFromFile(string file)
 		file = '/' ~ file; // always triple slash at start but never quad slash
 	if (file.length >= 2 && file[0 .. 2] == "//") // Shares (\\share\bob) are different somehow
 		file = file[2 .. $];
-	return "file://" ~ file.encodeComponent.replace("%2F", "/");
+	return text("file://", file.encodeComponent.replace("%2F", "/"));
 }
 
 string uriToFile(DocumentUri uri)
@@ -108,6 +108,9 @@ unittest
 /// path is absolute. Cleans `./` and `../` sequences using `uriNormalize`.
 DocumentUri uriBuildNormalized(DocumentUri uri, scope const(char)[] path)
 {
+	if (isAbsolute(path))
+		return uriFromFile(path);
+
 	path = path.replace("\\", "/");
 
 	if (path.startsWith("/"))
