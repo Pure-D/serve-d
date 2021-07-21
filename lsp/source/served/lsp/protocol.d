@@ -1245,6 +1245,19 @@ struct DidCloseTextDocumentParams
 	TextDocumentIdentifier textDocument;
 }
 
+struct FileSystemWatcher
+{
+	string globPattern;
+	Optional!WatchKind kind;
+}
+
+enum WatchKind
+{
+	create = 1,
+	change = 2,
+	delete_ = 4
+}
+
 struct DidChangeWatchedFilesParams
 {
 	FileEvent[] changes;
