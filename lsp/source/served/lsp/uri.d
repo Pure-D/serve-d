@@ -139,7 +139,10 @@ unittest
 {
 	assert(uriBuildNormalized("file:///foo/bar", "baz") == "file:///foo/bar/baz");
 	assert(uriBuildNormalized("file:///foo/bar", "../baz") == "file:///foo/baz");
-	assert(uriBuildNormalized("file:///foo/bar", "/home/baz") == "file:///home/baz");
+	version (Windows)
+		assert(uriBuildNormalized("file:///foo/bar", `c:\home\baz`) == "file:///c%3A/home/baz");
+	else
+		assert(uriBuildNormalized("file:///foo/bar", "/home/baz") == "file:///home/baz");
 }
 
 /// Cleans `./` and `../` from the URI
