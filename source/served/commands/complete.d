@@ -424,14 +424,7 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 		}
 
 		if (document.getLanguageId == "d")
-		{
-			auto ret = provideDSourceComplete(params, instance, document);
-			foreach(ref CompletionItem item; ret.items)
-			{
-				item.detail = "test";
-			}
-			return ret;
-		}
+			return provideDSourceComplete(params, instance, document);
 		else if (document.getLanguageId == "diet")
 			return provideDietSourceComplete(params, instance, document);
 		else if (document.getLanguageId == "dml")
