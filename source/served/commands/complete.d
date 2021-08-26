@@ -937,7 +937,19 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 		item.kind = identifier.type.convertFromDCDType;
 		if (identifier.documentation.length)
 			item.documentation = MarkupContent(identifier.documentation.ddocToMarked);
-		if (identifier.definition.length)
+		
+		if (identifier.definition.length == 0)
+		{
+			if(identifier.type == "c")
+				item.label.description = "Class";
+			else if(identifier.type == "s")
+				item.label.description = "Struct";
+			else if(identifier.type == "g")
+				item.label.description = "Enum";
+			else if(identifier.type == "t")
+				item.label.description = "Template";
+		}
+		else
 		{
 			item.detail = identifier.definition;
 
