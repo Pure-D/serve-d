@@ -960,25 +960,37 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 			item.detail = identifier.definition;
 
 			// check if that's actually a proper completion item to process
-			if(identifier.definition.indexOf(" ") != -1)
+			if (identifier.definition.indexOf(" ") != -1)
 			{
 				item.label.description = identifier.definition[0 .. identifier.definition.indexOf(" ")];
 				
 				// if function, only show the parenthesis content
-				if(identifier.type == "f")
-				{
-					// handle case where function returns 'auto'
-					auto beforeParenthesis = identifier.definition[0 .. identifier.definition.indexOf("(")];
-					
-					// if definition doesn't contains a return type, then it is a function that returns auto
-					auto isAuto = beforeParenthesis.indexOf(" ") == -1;
-					if(isAuto)
-						item.label.description = "auto";
-
+				if (identifier.type == "f")
 					item.label.detail = " " ~ identifier.definition[identifier.definition.indexOf("(") .. $];
-				}
 				else // else only give the type
 					item.label.detail = " " ~ item.label.description;
+			}
+
+
+			// handle special cases
+			if (identifier.type == "e")
+			{
+				// lowercare to differentiate member from enum name
+				item.label.description = "enum";
+			}
+			else if (identifier.type == "f")
+			{
+				// handle case where function returns 'auto'
+				auto beforeParenthesis = identifier.definition[0 .. identifier.definition.indexOf("(")];
+				
+				// if definition doesn't contains a return type, then it is a function that returns auto
+				// it could be 'enum', but that's typically the same, and there is no way to get that info right now
+				// need to check on DCD's part, auto/enum are removed from the definition
+				auto isAuto = beforeParenthesis.indexOf(" ") == -1;
+				if (isAuto)
+					item.label.description = "auto";
+
+				item.label.detail = " " ~ identifier.definition[identifier.definition.indexOf("(") .. $];
 			}
 			
 
