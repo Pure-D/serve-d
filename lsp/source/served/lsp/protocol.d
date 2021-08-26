@@ -1,1086 +1,1733 @@
-module served.commands.complete;
+module served.lsp.protocol;
 
-import served.commands.format : formatCode, formatSnippet;
-import served.extension;
-import served.types;
-import served.utils.ddoc;
-import served.utils.fibermanager;
+import std.conv;
+import std.json;
+import std.meta;
+import std.traits;
 
-import workspaced.api;
-import workspaced.com.dfmt : DfmtComponent;
-import workspaced.com.dcd;
-import workspaced.com.snippets;
-import workspaced.coms;
+import painlessjson;
 
-import std.algorithm : among, any, canFind, chunkBy, endsWith, filter, map, min,
-	reverse, sort, startsWith, uniq;
-import std.array : appender, array;
-import std.conv : text, to;
-import std.experimental.logger;
-import std.json : JSONType, JSONValue;
-import std.string : indexOf, join, lastIndexOf, lineSplitter, strip,
-	stripLeft, stripRight, toLower;
-import std.utf : decodeFront;
-
-import dparse.lexer : Token;
-
-import painlessjson : fromJSON, toJSON;
-
-import fs = std.file;
-import io = std.stdio;
-
-static immutable sortPrefixDoc = "0_";
-static immutable sortPrefixSnippets = "2_5_";
-// dcd additionally sorts inside with sortFromDCDType return value (appends to this)
-static immutable sortPrefixDCD = "2_";
-
-CompletionItemKind convertFromDCDType(string type)
+struct Optional(T)
 {
-	if (type.length != 1)
-		return CompletionItemKind.text;
+	bool isNull = true;
+	T value;
 
-	switch (type[0])
+	this(T val)
 	{
-	case 'c': // class name
-		return CompletionItemKind.class_;
-	case 'i': // interface name
-		return CompletionItemKind.interface_;
-	case 's': // struct name
-	case 'u': // union name
-		return CompletionItemKind.struct_;
-	case 'a': // array
-	case 'A': // associative array
-	case 'v': // variable name
-		return CompletionItemKind.variable;
-	case 'm': // member variable
-		return CompletionItemKind.field;
-	case 'e': // enum member
-		return CompletionItemKind.enumMember;
-	case 'k': // keyword
-		return CompletionItemKind.keyword;
-	case 'f': // function
-		return CompletionItemKind.function_;
-	case 'g': // enum name
-		return CompletionItemKind.enum_;
-	case 'P': // package name
-	case 'M': // module name
-		return CompletionItemKind.module_;
-	case 'l': // alias name
-		return CompletionItemKind.reference;
-	case 't': // template name
-	case 'T': // mixin template name
-		return CompletionItemKind.property;
-	case 'h': // template type parameter
-	case 'p': // template variadic parameter
-		return CompletionItemKind.typeParameter;
-	default:
-		return CompletionItemKind.text;
+		value = val;
+		isNull = false;
 	}
-}
 
-string sortFromDCDType(string type)
-{
-	if (type.length != 1)
-		return "9_";
-
-	switch (type[0])
+	this(U)(U val)
 	{
-	case 'v': // variable name
-		return "2_";
-	case 'm': // member variable
-		return "3_";
-	case 'f': // function
-		return "4_";
-	case 'k': // keyword
-	case 'e': // enum member
-		return "5_";
-	case 'c': // class name
-	case 'i': // interface name
-	case 's': // struct name
-	case 'u': // union name
-	case 'a': // array
-	case 'A': // associative array
-	case 'g': // enum name
-	case 'P': // package name
-	case 'M': // module name
-	case 'l': // alias name
-	case 't': // template name
-	case 'T': // mixin template name
-	case 'h': // template type parameter
-	case 'p': // template variadic parameter
-		return "6_";
-	default:
-		return "9_";
+		value = val;
+		isNull = false;
 	}
-}
 
-SymbolKind convertFromDCDSearchType(string type)
-{
-	if (type.length != 1)
-		return cast(SymbolKind) 0;
-	switch (type[0])
+	this(typeof(null))
 	{
-	case 'c':
-		return SymbolKind.class_;
-	case 'i':
-		return SymbolKind.interface_;
-	case 's':
-	case 'u':
-		return SymbolKind.package_;
-	case 'a':
-	case 'A':
-	case 'v':
-		return SymbolKind.variable;
-	case 'm':
-	case 'e':
-		return SymbolKind.field;
-	case 'f':
-	case 'l':
-		return SymbolKind.function_;
-	case 'g':
-		return SymbolKind.enum_;
-	case 'P':
-	case 'M':
-		return SymbolKind.namespace;
-	case 't':
-	case 'T':
-		return SymbolKind.property;
-	case 'k':
-	default:
-		return cast(SymbolKind) 0;
+		isNull = true;
 	}
-}
 
-SymbolKind convertFromDscannerType(string type, string name = null)
-{
-	if (type.length != 1)
-		return cast(SymbolKind) 0;
-	switch (type[0])
+	void opAssign(typeof(null))
 	{
-	case 'c':
-		return SymbolKind.class_;
-	case 's':
-		return SymbolKind.struct_;
-	case 'i':
-		return SymbolKind.interface_;
-	case 'T':
-		return SymbolKind.property;
-	case 'f':
-	case 'U':
-	case 'Q':
-	case 'W':
-	case 'P':
-		if (name == "this")
-			return SymbolKind.constructor;
+		nullify();
+	}
+
+	void opAssign(T val)
+	{
+		isNull = false;
+		value = val;
+	}
+
+	void opAssign(U)(U val)
+	{
+		isNull = false;
+		value = val;
+	}
+
+	void nullify()
+	{
+		isNull = true;
+		value = T.init;
+	}
+
+	string toString() const
+	{
+		if (isNull)
+			return "null(" ~ T.stringof ~ ")";
 		else
-			return SymbolKind.function_;
-	case 'C':
-	case 'S':
-		return SymbolKind.constructor;
-	case 'g':
-		return SymbolKind.enum_;
-	case 'u':
-		return SymbolKind.struct_;
-	case 'D':
-	case 'V':
-	case 'e':
-		return SymbolKind.constant;
-	case 'v':
-		return SymbolKind.variable;
-	case 'a':
-		return SymbolKind.field;
-	default:
-		return cast(SymbolKind) 0;
-	}
-}
-
-SymbolKindEx convertExtendedFromDscannerType(string type)
-{
-	if (type.length != 1)
-		return cast(SymbolKindEx) 0;
-	switch (type[0])
-	{
-	case 'U':
-		return SymbolKindEx.test;
-	case 'D':
-		return SymbolKindEx.debugSpec;
-	case 'V':
-		return SymbolKindEx.versionSpec;
-	case 'C':
-		return SymbolKindEx.staticCtor;
-	case 'S':
-		return SymbolKindEx.sharedStaticCtor;
-	case 'Q':
-		return SymbolKindEx.staticDtor;
-	case 'W':
-		return SymbolKindEx.sharedStaticDtor;
-	case 'P':
-		return SymbolKindEx.postblit;
-	default:
-		return cast(SymbolKindEx) 0;
-	}
-}
-
-C[] substr(C, T)(C[] s, T start, T end)
-{
-	if (!s.length)
-		return s;
-	if (start < 0)
-		start = 0;
-	if (start >= s.length)
-		start = s.length - 1;
-	if (end > s.length)
-		end = s.length;
-	if (end < start)
-		return s[start .. start];
-	return s[start .. end];
-}
-
-/// Extracts all function parameters for a given declaration string.
-/// Params:
-///   sig = the function signature such as `string[] example(string sig, bool exact = false)`
-///   exact = set to true to make the returned values include the closing paren at the end (if exists)
-const(char)[][] extractFunctionParameters(scope const(char)[] sig, bool exact = false)
-{
-	if (!sig.length)
-		return [];
-	auto params = appender!(const(char)[][]);
-	ptrdiff_t i = sig.length - 1;
-
-	if (sig[i] == ')' && !exact)
-		i--;
-
-	ptrdiff_t paramEnd = i + 1;
-
-	void skipStr()
-	{
-		i--;
-		if (sig[i + 1] == '\'')
-			for (; i >= 0; i--)
-				if (sig[i] == '\'')
-					return;
-		bool escapeNext = false;
-		while (i >= 0)
-		{
-			if (sig[i] == '\\')
-				escapeNext = false;
-			if (escapeNext)
-				break;
-			if (sig[i] == '"')
-				escapeNext = true;
-			i--;
-		}
+			return value.to!string;
 	}
 
-	void skip(char open, char close)
+	const JSONValue _toJSON()
 	{
-		i--;
-		int depth = 1;
-		while (i >= 0 && depth > 0)
-		{
-			if (sig[i] == '"' || sig[i] == '\'')
-				skipStr();
-			else
+		import painlessjson : toJSON;
+
+		if (isNull)
+			return JSONValue(null);
+		else
+			return value.toJSON;
+	}
+
+	static Optional!T _fromJSON(JSONValue val)
+	{
+		Optional!T ret;
+		ret.isNull = false;
+		ret.value = val.fromJSON!T;
+		return ret;
+	}
+
+	ref inout(T) get() inout
+	{
+		return value;
+	}
+
+	alias value this;
+}
+
+mixin template StrictOptionalSerializer()
+{
+	const JSONValue _toJSON()
+	{
+		JSONValue[string] ret = this.defaultToJSON.object;
+		foreach (member; __traits(allMembers, typeof(this)))
+			static if (is(typeof(__traits(getMember, this, member)) == Optional!T, T))
 			{
-				if (sig[i] == close)
-					depth++;
-				else if (sig[i] == open)
-					depth--;
-				i--;
+				static if (hasUDA!(__traits(getMember, this, member), SerializedName))
+					string name = getUDAs!(__traits(getMember, this, member), SerializedName)[0].to;
+				else static if (hasUDA!(__traits(getMember, this, member), SerializedToName))
+					string name = getUDAs!(__traits(getMember, this, member), SerializedToName)[0].name;
+				else
+					string name = member;
+
+				if (__traits(getMember, this, member).isNull)
+					ret.remove(name);
 			}
+		return JSONValue(ret);
+	}
+}
+
+Optional!T opt(T)(T val)
+{
+	return Optional!T(val);
+}
+
+struct ArrayOrSingle(T)
+{
+	T[] value;
+
+	this(T val)
+	{
+		value = [val];
+	}
+
+	this(T[] val)
+	{
+		value = val;
+	}
+
+	void opAssign(T val)
+	{
+		value = [val];
+	}
+
+	void opAssign(T[] val)
+	{
+		value = val;
+	}
+
+	const JSONValue _toJSON()
+	{
+		if (value.length == 1)
+			return value[0].toJSON;
+		else
+			return value.toJSON;
+	}
+
+	static ArrayOrSingle!T _fromJSON(JSONValue val)
+	{
+		ArrayOrSingle!T ret;
+		if (val.type == JSONType.array)
+			ret.value = val.fromJSON!(T[]);
+		else
+			ret.value = [val.fromJSON!T];
+		return ret;
+	}
+
+	alias value this;
+}
+
+static assert(__traits(compiles, ArrayOrSingle!Location.init._toJSON()));
+static assert(__traits(compiles, ArrayOrSingle!Location._fromJSON(JSONValue.init)));
+
+unittest
+{
+	auto single = ArrayOrSingle!Location(Location("file:///foo.d", TextRange(4, 2, 4, 8)));
+	auto array = ArrayOrSingle!Location([Location("file:///foo.d", TextRange(4, 2, 4, 8)), Location("file:///bar.d", TextRange(14, 1, 14, 9))]);
+	assert(toJSON(single) == JSONValue([
+		"range": JSONValue([
+			"start": JSONValue(["line":JSONValue(4), "character":JSONValue(2)]),
+			"end": JSONValue(["line":JSONValue(4), "character":JSONValue(8)])
+		]),
+		"uri": JSONValue("file:///foo.d")
+	]));
+	assert(toJSON(array) == JSONValue([
+		JSONValue([
+			"range": JSONValue([
+				"start": JSONValue(["line":JSONValue(4), "character":JSONValue(2)]),
+				"end": JSONValue(["line":JSONValue(4), "character":JSONValue(8)])
+			]),
+			"uri": JSONValue("file:///foo.d")
+		]),
+		JSONValue([
+			"range": JSONValue([
+				"start": JSONValue(["line":JSONValue(14), "character":JSONValue(1)]),
+				"end": JSONValue(["line":JSONValue(14), "character":JSONValue(9)])
+			]),
+			"uri": JSONValue("file:///bar.d")
+		])
+	]));
+	assert(fromJSON!(ArrayOrSingle!Location)(toJSON(single)) == single, fromJSON!(ArrayOrSingle!Location)(toJSON(single)).value.to!string);
+	assert(fromJSON!(ArrayOrSingle!Location)(toJSON(array)) == array);
+}
+
+struct RequestToken
+{
+	this(const(JSONValue)* val)
+	{
+		if (!val)
+		{
+			hasData = false;
+			return;
+		}
+		hasData = true;
+		if (val.type == JSONType.string)
+		{
+			isString = true;
+			str = val.str;
+		}
+		else if (val.type == JSONType.integer)
+		{
+			isString = false;
+			num = val.integer;
+		}
+		else
+			throw new Exception("Invalid ID");
+	}
+
+	union
+	{
+		string str;
+		long num;
+	}
+
+	bool hasData, isString;
+
+	JSONValue toJSON()
+	{
+		JSONValue ret = null;
+		if (!hasData)
+			return ret;
+		ret = isString ? JSONValue(str) : JSONValue(num);
+		return ret;
+	}
+
+	JSONValue _toJSON()()
+	{
+		pragma(msg, "Attempted painlesstraits.toJSON on RequestToken");
+	}
+
+	void _fromJSON()(JSONValue val)
+	{
+		pragma(msg, "Attempted painlesstraits.fromJSON on RequestToken");
+	}
+
+	string toString()
+	{
+		return hasData ? (isString ? str : num.to!string) : "none";
+	}
+
+	static RequestToken random()
+	{
+		import std.uuid;
+
+		JSONValue id = JSONValue(randomUUID.toString);
+		return RequestToken(&id);
+	}
+
+	bool opEquals(RequestToken b) const
+	{
+		return isString == b.isString && (isString ? str == b.str : num == b.num);
+	}
+}
+
+struct RequestMessage
+{
+	this(JSONValue val)
+	{
+		id = RequestToken("id" in val);
+		method = val["method"].str;
+		auto ptr = "params" in val;
+		if (ptr)
+			params = *ptr;
+	}
+
+	RequestToken id;
+	string method;
+	JSONValue params;
+
+	bool isCancelRequest()
+	{
+		return method == "$/cancelRequest";
+	}
+
+	JSONValue toJSON()
+	{
+		auto ret = JSONValue([
+				"jsonrpc": JSONValue("2.0"),
+				"method": JSONValue(method)
+				]);
+		if (!params.isNull)
+			ret["params"] = params;
+		if (id.hasData)
+			ret["id"] = id.toJSON;
+		return ret;
+	}
+}
+
+enum ErrorCode
+{
+	parseError = -32700,
+	invalidRequest = -32600,
+	methodNotFound = -32601,
+	invalidParams = -32602,
+	internalError = -32603,
+	serverErrorStart = -32099,
+	serverErrorEnd = -32000,
+	serverNotInitialized = -32002,
+	unknownErrorCode = -32001
+}
+
+enum MessageType
+{
+	error = 1,
+	warning,
+	info,
+	log
+}
+
+struct ResponseError
+{
+	ErrorCode code;
+	string message;
+	JSONValue data;
+
+	this(Throwable t)
+	{
+		code = ErrorCode.unknownErrorCode;
+		message = t.msg;
+		data = JSONValue(t.to!string);
+	}
+
+	this(ErrorCode c)
+	{
+		code = c;
+		message = c.to!string;
+	}
+
+	this(ErrorCode c, string msg)
+	{
+		code = c;
+		message = msg;
+	}
+}
+
+class MethodException : Exception
+{
+	this(ResponseError error, string file = __FILE__, size_t line = __LINE__) pure nothrow @nogc @safe
+	{
+		super(error.message, file, line);
+		this.error = error;
+	}
+
+	ResponseError error;
+}
+
+struct ResponseMessage
+{
+	this(RequestToken id, JSONValue result)
+	{
+		this.id = id;
+		this.result = result;
+	}
+
+	this(RequestToken id, ResponseError error)
+	{
+		this.id = id;
+		this.error = error;
+	}
+
+	RequestToken id;
+	Optional!JSONValue result;
+	Optional!ResponseError error;
+}
+
+alias DocumentUri = string;
+
+enum EolType
+{
+	cr,
+	lf,
+	crlf
+}
+
+string toString(EolType eol)
+{
+	final switch (eol)
+	{
+	case EolType.cr:
+		return "\r";
+	case EolType.lf:
+		return "\n";
+	case EolType.crlf:
+		return "\r\n";
+	}
+}
+
+struct Position
+{
+	/// Zero-based line & character offset (UTF-16 codepoints)
+	uint line, character;
+
+	int opCmp(const Position other) const
+	{
+		if (line < other.line)
+			return -1;
+		if (line > other.line)
+			return 1;
+		if (character < other.character)
+			return -1;
+		if (character > other.character)
+			return 1;
+		return 0;
+	}
+
+	const JSONValue _toJSON()
+	{
+		return JSONValue(["line": JSONValue(line), "character": JSONValue(character)]);
+	}
+
+	static Position _fromJSON(const JSONValue val)
+	{
+		import std.exception : enforce;
+
+		enforce(val.type == JSONType.object);
+		auto line = val.object.get("line", JSONValue.init);
+		auto character = val.object.get("character", JSONValue.init);
+
+		uint iline, icharacter;
+
+		if (line.type == JSONType.integer)
+			iline = cast(uint)line.integer;
+		else if (line.type == JSONType.uinteger)
+			iline = cast(uint)line.uinteger;
+		else
+			throw new JSONException("Position['line'] is not an integer");
+
+		if (character.type == JSONType.integer)
+			icharacter = cast(uint)character.integer;
+		else if (character.type == JSONType.uinteger)
+			icharacter = cast(uint)character.uinteger;
+		else
+			throw new JSONException("Position['character'] is not an integer");
+
+		return Position(iline, icharacter);
+	}
+}
+
+static assert(__traits(compiles, Position.init._toJSON()));
+static assert(__traits(compiles, Position._fromJSON(JSONValue.init)));
+
+struct TextRange
+{
+	union
+	{
+		struct
+		{
+			Position start;
+			Position end;
+		}
+
+		Position[2] range;
+	}
+
+	enum all = TextRange(0, 0, int.max, int.max); // int.max ought to be enough
+
+	alias range this;
+
+	this(Num)(Num startLine, Num startCol, Num endLine, Num endCol) if (isNumeric!Num)
+	{
+		this(Position(cast(uint) startLine, cast(uint) startCol),
+				Position(cast(uint) endLine, cast(uint) endCol));
+	}
+
+	this(Position start, Position end)
+	{
+		this.start = start;
+		this.end = end;
+	}
+
+	this(Position[2] range)
+	{
+		this.range = range;
+	}
+
+	this(Position pos)
+	{
+		this.start = pos;
+		this.end = pos;
+	}
+
+	/// Returns: true if this range contains the position or the position is at
+	/// the edges of this range.
+	bool contains(Position position)
+	{
+		int minLine = start.line;
+		int minCol = start.character;
+		int maxLine = end.line;
+		int maxCol = end.character;
+
+		return !(position.line < minLine || position.line > maxLine
+			|| (position.line == minLine && position.character < minCol)
+			|| (position.line == maxLine && position.character > maxCol));
+	}
+
+	/// Returns: true if text range `a` and `b` intersect with at least one character.
+	/// This function is commutative (a·b == b·a)
+	bool intersects(const TextRange b)
+	{
+		return start < b.end && end > b.start;
+	}
+
+	///
+	unittest
+	{
+		bool test(TextRange a, TextRange b)
+		{
+			bool res = a.intersects(b);
+			// test commutativity
+			assert(res == b.intersects(a));
+			return res;
+		}
+
+		assert(test(TextRange(10, 4, 20, 3), TextRange(20, 2, 30, 1)));
+		assert(!test(TextRange(10, 4, 20, 3), TextRange(20, 3, 30, 1)));
+		assert(test(TextRange(10, 4, 20, 3), TextRange(12, 3, 14, 1)));
+		assert(!test(TextRange(10, 4, 20, 3), TextRange(9, 3, 10, 4)));
+		assert(test(TextRange(10, 4, 20, 3), TextRange(9, 3, 10, 5)));
+		assert(test(TextRange(10, 4, 20, 3), TextRange(10, 4, 20, 3)));
+		assert(test(TextRange(0, 0, 0, 1), TextRange(0, 0, uint.max, uint.max)));
+		assert(!test(TextRange(0, 0, 0, 1), TextRange(uint.max, uint.max, uint.max, uint.max)));
+	}
+
+	const JSONValue _toJSON()
+	{
+		import painlessjson : toJSON;
+
+		return JSONValue([
+			"start": start.toJSON,
+			"end": end.toJSON
+		]);
+	}
+
+	static TextRange _fromJSON(const JSONValue val)
+	{
+		import painlessjson : fromJSON;
+
+		return TextRange(val.object["start"].fromJSON!Position, val.object["end"].fromJSON!Position);
+	}
+}
+
+static assert(__traits(compiles, TextRange.init._toJSON()));
+static assert(__traits(compiles, TextRange._fromJSON(JSONValue.init)));
+
+struct Location
+{
+	DocumentUri uri;
+	TextRange range;
+}
+
+struct Diagnostic
+{
+	mixin StrictOptionalSerializer;
+
+	TextRange range;
+	Optional!DiagnosticSeverity severity;
+	Optional!JSONValue code;
+	Optional!string source;
+	string message;
+	Optional!(DiagnosticRelatedInformation[]) relatedInformation;
+	Optional!(DiagnosticTag[]) tags;
+}
+
+struct DiagnosticRelatedInformation
+{
+	Location location;
+	string message;
+}
+
+enum DiagnosticSeverity
+{
+	error = 1,
+	warning,
+	information,
+	hint
+}
+
+enum DiagnosticTag
+{
+	unnecessary = 1,
+	deprecated_
+}
+
+struct Command
+{
+	string title;
+	string command;
+	JSONValue[] arguments;
+}
+
+struct TextEdit
+{
+	TextRange range;
+	string newText;
+
+	this(TextRange range, string newText)
+	{
+		this.range = range;
+		this.newText = newText;
+	}
+
+	this(Position[2] range, string newText)
+	{
+		this.range = TextRange(range);
+		this.newText = newText;
+	}
+
+	const JSONValue _toJSON()
+	{
+		return JSONValue(["range": range._toJSON, "newText": JSONValue(newText)]);
+	}
+
+	static TextEdit _fromJSON(const JSONValue val)
+	{
+		TextEdit ret;
+		ret.range = TextRange._fromJSON(val["range"]);
+		ret.newText = val["newText"].str;
+		return ret;
+	}
+}
+
+static assert(__traits(compiles, TextEdit.init._toJSON()));
+static assert(__traits(compiles, TextEdit._fromJSON(JSONValue.init)));
+
+unittest
+{
+	assert(toJSON(TextEdit([Position(0, 0), Position(4, 4)], "hello\nworld!")) == JSONValue([
+		"range": JSONValue([
+			"start": JSONValue(["line":JSONValue(0), "character":JSONValue(0)]),
+			"end": JSONValue(["line":JSONValue(4), "character":JSONValue(4)])
+		]),
+		"newText": JSONValue("hello\nworld!")
+	]));
+	assert(fromJSON!TextEdit(toJSON(TextEdit([Position(0, 0), Position(4, 4)], "hello\nworld!"))) == TextEdit([Position(0, 0), Position(4, 4)], "hello\nworld!"));
+}
+
+struct CreateFileOptions
+{
+	mixin StrictOptionalSerializer;
+
+	Optional!bool overwrite;
+	Optional!bool ignoreIfExists;
+}
+
+struct CreateFile
+{
+	mixin StrictOptionalSerializer;
+
+	string uri;
+	Optional!CreateFileOptions options;
+	string kind = "create";
+}
+
+struct RenameFileOptions
+{
+	mixin StrictOptionalSerializer;
+
+	Optional!bool overwrite;
+	Optional!bool ignoreIfExists;
+}
+
+struct RenameFile
+{
+	mixin StrictOptionalSerializer;
+
+	string oldUri;
+	string newUri;
+	Optional!RenameFileOptions options;
+	string kind = "rename";
+}
+
+struct DeleteFileOptions
+{
+	mixin StrictOptionalSerializer;
+
+	Optional!bool recursive;
+	Optional!bool ignoreIfNotExists;
+}
+
+struct DeleteFile
+{
+	mixin StrictOptionalSerializer;
+
+	string uri;
+	Optional!DeleteFileOptions options;
+	string kind = "delete";
+}
+
+struct TextDocumentEdit
+{
+	VersionedTextDocumentIdentifier textDocument;
+	TextEdit[] edits;
+}
+
+alias TextEditCollection = TextEdit[];
+
+struct WorkspaceEdit
+{
+	mixin StrictOptionalSerializer;
+
+	TextEditCollection[DocumentUri] changes;
+
+	Optional!JSONValue documentChanges;
+}
+
+struct TextDocumentIdentifier
+{
+	DocumentUri uri;
+}
+
+struct VersionedTextDocumentIdentifier
+{
+	DocumentUri uri;
+	@SerializedName("version") long version_;
+}
+
+struct TextDocumentItem
+{
+	DocumentUri uri;
+	string languageId;
+	@SerializedName("version") long version_;
+	string text;
+}
+
+struct TextDocumentPositionParams
+{
+	TextDocumentIdentifier textDocument;
+	Position position;
+}
+
+struct DocumentFilter
+{
+	Optional!string language;
+	Optional!string scheme;
+	Optional!string pattern;
+}
+
+alias DocumentSelector = DocumentFilter[];
+
+struct InitializeParams
+{
+	int processId;
+	string rootPath;
+	DocumentUri rootUri;
+	JSONValue initializationOptions;
+	ClientCapabilities capabilities;
+	string trace = "off";
+	WorkspaceFolder[] workspaceFolders;
+}
+
+struct DynamicRegistration
+{
+	mixin StrictOptionalSerializer;
+
+	Optional!bool dynamicRegistration;
+}
+
+enum ResourceOperationKind : string
+{
+	create = "create",
+	rename = "rename",
+	delete_ = "delete"
+}
+
+enum FailureHandlingKind : string
+{
+	abort = "abort",
+	transactional = "transactional",
+	textOnlyTransactional = "textOnlyTransactional",
+	undo = "undo"
+}
+
+struct WorkspaceEditClientCapabilities
+{
+	mixin StrictOptionalSerializer;
+
+	Optional!bool documentChanges;
+	Optional!(string[]) resourceOperations;
+	Optional!string failureHandling;
+}
+
+struct WorkspaceClientCapabilities
+{
+	mixin StrictOptionalSerializer;
+
+	bool applyEdit;
+	Optional!WorkspaceEditClientCapabilities workspaceEdit;
+	Optional!DynamicRegistration didChangeConfiguration;
+	Optional!DynamicRegistration didChangeWatchedFiles;
+	Optional!DynamicRegistration symbol;
+	Optional!DynamicRegistration executeCommand;
+	Optional!bool workspaceFolders;
+	Optional!bool configuration;
+}
+
+struct TextDocumentClientCapabilities
+{
+	mixin StrictOptionalSerializer;
+
+	struct SyncInfo
+	{
+		mixin StrictOptionalSerializer;
+
+		Optional!bool dynamicRegistration;
+		Optional!bool willSave;
+		Optional!bool willSaveWaitUntil;
+		Optional!bool didSave;
+	}
+
+	struct CompletionInfo
+	{
+		mixin StrictOptionalSerializer;
+
+		struct CompletionItem
+		{
+			mixin StrictOptionalSerializer;
+
+			Optional!bool snippetSupport;
+			Optional!bool commitCharactersSupport;
+			//Optional!(MarkupKind[]) documentationFormat;
+			Optional!bool deprecatedSupport;
+			Optional!bool preselectSupport;
+		}
+
+		struct CompletionItemKindSet
+		{
+			mixin StrictOptionalSerializer;
+
+			// CompletionItemKind[]
+			Optional!(int[]) valueSet;
+		}
+
+		Optional!bool dynamicRegistration;
+		Optional!CompletionItem completionItem;
+		Optional!CompletionItemKindSet completionItemKind;
+		Optional!bool contextSupport;
+	}
+
+	struct SignatureHelpInfo
+	{
+		struct SignatureInformationInfo
+		{
+			struct ParameterInformationInfo
+			{
+				mixin StrictOptionalSerializer;
+
+				Optional!bool labelOffsetSupport;
+			}
+
+			mixin StrictOptionalSerializer;
+
+			// MarkupKind[]
+			Optional!(string[]) documentationFormat;
+			Optional!ParameterInformationInfo parameterInformation;
+		}
+
+		mixin StrictOptionalSerializer;
+
+		Optional!bool dynamicRegistration;
+		Optional!SignatureInformationInfo signatureInformation;
+
+		@SerializeIgnore bool supportsLabelOffset() @property
+		{
+			if (signatureInformation.isNull || signatureInformation.parameterInformation.isNull
+					|| signatureInformation.parameterInformation.labelOffsetSupport.isNull)
+				return false;
+			return signatureInformation.parameterInformation.labelOffsetSupport.get;
 		}
 	}
 
-	while (i >= 0)
+	struct DocumentSymbolInfo
 	{
-		switch (sig[i])
+		mixin StrictOptionalSerializer;
+
+		struct SymbolKindSet
 		{
-		case ',':
-			params.put(sig.substr(i + 1, paramEnd).strip);
-			paramEnd = i;
-			i--;
-			break;
-		case ';':
-		case '(':
-			auto param = sig.substr(i + 1, paramEnd).strip;
-			if (param.length)
-				params.put(param);
-			auto ret = params.data;
-			reverse(ret);
-			return ret;
-		case ')':
-			skip('(', ')');
-			break;
-		case '}':
-			skip('{', '}');
-			break;
-		case ']':
-			skip('[', ']');
-			break;
-		case '"':
-		case '\'':
-			skipStr();
-			break;
-		default:
-			i--;
-			break;
+			mixin StrictOptionalSerializer;
+
+			// SymbolKind[]
+			Optional!(int[]) valueSet;
 		}
+
+		Optional!bool dynamicRegistration;
+		Optional!SymbolKindSet symbolKind;
+		Optional!bool hierarchicalDocumentSymbolSupport;
 	}
-	auto ret = params.data;
-	reverse(ret);
-	return ret;
+
+	struct PublishDiagnosticsCap
+	{
+		mixin StrictOptionalSerializer;
+
+		Optional!bool relatedInformation;
+	}
+
+	struct CodeActionClientCapabilities
+	{
+		struct CodeActionLiteralSupport
+		{
+			struct CodeActionKinds
+			{
+				// CodeActionKind[]
+				string[] valueSet;
+			}
+
+			CodeActionKinds codeActionKind;
+		}
+
+		mixin StrictOptionalSerializer;
+
+		Optional!bool dynamicRegistration;
+		Optional!CodeActionLiteralSupport codeActionLiteralSupport;
+	}
+
+	Optional!SyncInfo synchronization;
+	Optional!CompletionInfo completion;
+	Optional!DynamicRegistration hover;
+	Optional!SignatureHelpInfo signatureHelp;
+	Optional!DynamicRegistration references;
+	Optional!DynamicRegistration documentHighlight;
+	Optional!DocumentSymbolInfo documentSymbol;
+	Optional!DynamicRegistration formatting;
+	Optional!DynamicRegistration rangeFormatting;
+	Optional!DynamicRegistration onTypeFormatting;
+	Optional!DynamicRegistration definition;
+	Optional!DynamicRegistration typeDefinition;
+	Optional!DynamicRegistration implementation;
+	Optional!CodeActionClientCapabilities codeAction;
+	Optional!DynamicRegistration codeLens;
+	Optional!DynamicRegistration documentLink;
+	Optional!DynamicRegistration colorProvider;
+	Optional!DynamicRegistration rename;
+	Optional!PublishDiagnosticsCap publishDiagnostics;
+}
+
+enum CodeActionKind : string
+{
+	empty = "",
+	quickfix = "quickfix",
+	refactor = "refactor",
+	refactorExtract = "refactor.extract",
+	refactorInline = "refactor.inline",
+	refactorRewrite = "refactor.rewrite",
+	refactorSource = "source",
+	sourceOrganizeImports = "source.organizeImports",
+}
+
+struct CodeAction
+{
+	mixin StrictOptionalSerializer;
+
+	this(Command command)
+	{
+		title = command.title;
+		this.command = command;
+	}
+
+	this(string title, WorkspaceEdit edit)
+	{
+		this.title = title;
+		this.edit = edit;
+	}
+
+	string title;
+	// CodeActionKind
+	Optional!string kind;
+	Optional!(Diagnostic[]) diagnostics;
+	Optional!bool isPreferred;
+	Optional!WorkspaceEdit edit;
+	Optional!Command command;
+}
+
+struct ClientCapabilities
+{
+	Optional!WorkspaceClientCapabilities workspace;
+	Optional!TextDocumentClientCapabilities textDocument;
+	JSONValue experimental;
 }
 
 unittest
 {
-	void assertEqual(A, B)(A a, B b)
-	{
-		import std.conv : to;
-
-		assert(a == b, a.to!string ~ " is not equal to " ~ b.to!string);
-	}
-
-	assertEqual(extractFunctionParameters("void foo()"), cast(string[])[]);
-	assertEqual(extractFunctionParameters(`auto bar(int foo, Button, my.Callback cb)`),
-			["int foo", "Button", "my.Callback cb"]);
-	assertEqual(extractFunctionParameters(`SomeType!(int, "int_") foo(T, Args...)(T a, T b, string[string] map, Other!"(" stuff1, SomeType!(double, ")double") myType, Other!"(" stuff, Other!")")`),
-			[
-				"T a", "T b", "string[string] map", `Other!"(" stuff1`,
-				`SomeType!(double, ")double") myType`, `Other!"(" stuff`, `Other!")"`
-			]);
-	assertEqual(extractFunctionParameters(`SomeType!(int,"int_")foo(T,Args...)(T a,T b,string[string] map,Other!"(" stuff1,SomeType!(double,")double")myType,Other!"(" stuff,Other!")")`),
-			[
-				"T a", "T b", "string[string] map", `Other!"(" stuff1`,
-				`SomeType!(double,")double")myType`, `Other!"(" stuff`, `Other!")"`
-			]);
-	assertEqual(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4`,
-			true), [`4`]);
-	assertEqual(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4, f(4)`,
-			true), [`4`, `f(4)`]);
-	assertEqual(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4, ["a"], JSONValue(["b": JSONValue("c")]), recursive(func, call!s()), "texts )\"(too"`,
-			true), [
-			`4`, `["a"]`, `JSONValue(["b": JSONValue("c")])`,
-			`recursive(func, call!s())`, `"texts )\"(too"`
-			]);
+	string json = q{{
+		"workspace": {
+			"configuration": true
+		}
+	}};
+	auto caps = json.parseJSON.fromJSON!ClientCapabilities;
+	assert(caps.workspace.configuration);
 }
 
-/// Provide snippets in auto-completion
-__gshared bool doCompleteSnippets = false;
-
-// === Protocol Methods starting here ===
-
-@protocolMethod("textDocument/completion")
-CompletionList provideComplete(TextDocumentPositionParams params)
+struct InitializeResult
 {
-	Document document = documents[params.textDocument.uri];
-	auto instance = activeInstance = backend.getBestInstance(document.uri.uriToFile);
-	trace("Completing from instance ", instance ? instance.cwd : "null");
+	ServerCapabilities capabilities;
+}
 
-	if (document.uri.toLower.endsWith("dscanner.ini"))
+struct InitializeError
+{
+	bool retry;
+}
+
+enum TextDocumentSyncKind
+{
+	none,
+	full,
+	incremental
+}
+
+struct CompletionOptions
+{
+	bool resolveProvider;
+	string[] triggerCharacters;
+}
+
+struct SignatureHelpOptions
+{
+	string[] triggerCharacters;
+}
+
+struct CodeLensOptions
+{
+	bool resolveProvider;
+}
+
+struct DocumentOnTypeFormattingOptions
+{
+	mixin StrictOptionalSerializer;
+
+	string firstTriggerCharacter;
+	Optional!(string[]) moreTriggerCharacter;
+}
+
+struct DocumentLinkOptions
+{
+	bool resolveProvider;
+}
+
+struct ColorProviderOptions
+{
+}
+
+struct ExecuteCommandOptions
+{
+	string[] commands;
+}
+
+struct SaveOptions
+{
+	bool includeText;
+}
+
+struct TextDocumentSyncOptions
+{
+	bool openClose;
+	int change;
+	bool willSave;
+	bool willSaveWaitUntil;
+	SaveOptions save;
+}
+
+struct ServerCapabilities
+{
+	mixin StrictOptionalSerializer;
+
+	JSONValue textDocumentSync;
+	bool hoverProvider;
+	Optional!CompletionOptions completionProvider;
+	Optional!SignatureHelpOptions signatureHelpProvider;
+	bool definitionProvider;
+	Optional!bool typeDefinitionProvider;
+	Optional!bool implementationProvider;
+	bool referencesProvider;
+	bool documentHighlightProvider;
+	bool documentSymbolProvider;
+	bool workspaceSymbolProvider;
+	bool codeActionProvider;
+	Optional!CodeLensOptions codeLensProvider;
+	bool documentFormattingProvider;
+	bool documentRangeFormattingProvider;
+	Optional!DocumentOnTypeFormattingOptions documentOnTypeFormattingProvider;
+	bool renameProvider;
+	Optional!DocumentLinkOptions documentLinkProvider;
+	Optional!ColorProviderOptions colorProvider;
+	Optional!ExecuteCommandOptions executeCommandProvider;
+	Optional!ServerWorkspaceCapabilities workspace;
+	JSONValue experimental;
+}
+
+struct ServerWorkspaceCapabilities
+{
+	mixin StrictOptionalSerializer;
+
+	struct WorkspaceFolders
 	{
-		trace("Providing dscanner.ini completion");
-		auto possibleFields = backend.get!DscannerComponent.listAllIniFields;
-		scope line = document.lineAtScope(params.position).strip;
-		auto defaultList = CompletionList(false, possibleFields.map!(a => CompletionItem(CompletionItemLabel(a.name),
-				CompletionItemKind.field.opt, Optional!string.init,
-				MarkupContent(a.documentation).opt, Optional!bool.init, Optional!bool.init,
-				Optional!string.init, Optional!string.init, (a.name ~ '=').opt)).array);
-		if (!line.length)
-			return defaultList;
-		if (line[0] == '[')
-			return CompletionList(false, [
-					CompletionItem(CompletionItemLabel("analysis.config.StaticAnalysisConfig"),
-						CompletionItemKind.keyword.opt),
-					CompletionItem(CompletionItemLabel("analysis.config.ModuleFilters"), CompletionItemKind.keyword.opt, Optional!string.init,
-						MarkupContent("In this optional section a comma-separated list of inclusion and exclusion"
-						~ " selectors can be specified for every check on which selective filtering"
-						~ " should be applied. These given selectors match on the module name and"
-						~ " partial matches (std. or .foo.) are possible. Moreover, every selectors"
-						~ " must begin with either + (inclusion) or - (exclusion). Exclusion selectors"
-						~ " take precedence over all inclusion operators.").opt)
-					]);
-		auto eqIndex = line.indexOf('=');
-		auto quotIndex = line.lastIndexOf('"');
-		if (quotIndex != -1 && params.position.character >= quotIndex)
-			return CompletionList.init;
-		if (params.position.character < eqIndex)
-			return defaultList;
+		mixin StrictOptionalSerializer;
+
+		Optional!bool supported;
+		Optional!bool changeNotifications;
+	}
+
+	Optional!WorkspaceFolders workspaceFolders;
+}
+
+struct ShowMessageParams
+{
+	MessageType type;
+	string message;
+}
+
+struct ShowMessageRequestParams
+{
+	mixin StrictOptionalSerializer;
+
+	MessageType type;
+	string message;
+	Optional!(MessageActionItem[]) actions;
+}
+
+struct MessageActionItem
+{
+	string title;
+}
+
+struct LogMessageParams
+{
+	MessageType type;
+	string message;
+}
+
+struct Registration
+{
+	string id;
+	string method;
+	JSONValue registerOptions;
+}
+
+struct RegistrationParams
+{
+	Registration[] registrations;
+}
+
+struct TextDocumentRegistrationOptions
+{
+	mixin StrictOptionalSerializer;
+
+	Optional!DocumentSelector documentSelector;
+}
+
+struct Unregistration
+{
+	string id;
+	string method;
+}
+
+struct UnregistrationParams
+{
+	Unregistration[] unregistrations;
+}
+
+struct DidChangeConfigurationParams
+{
+	JSONValue settings;
+}
+
+struct ConfigurationParams
+{
+	ConfigurationItem[] items;
+}
+
+struct ConfigurationItem
+{
+	mixin StrictOptionalSerializer;
+
+	Optional!string scopeUri;
+	Optional!string section;
+}
+
+struct DidOpenTextDocumentParams
+{
+	TextDocumentItem textDocument;
+}
+
+struct DidChangeTextDocumentParams
+{
+	VersionedTextDocumentIdentifier textDocument;
+	TextDocumentContentChangeEvent[] contentChanges;
+}
+
+struct TextDocumentContentChangeEvent
+{
+	mixin StrictOptionalSerializer;
+
+	Optional!TextRange range;
+	Optional!int rangeLength;
+	string text;
+}
+
+struct TextDocumentChangeRegistrationOptions
+{
+	mixin StrictOptionalSerializer;
+
+	Optional!DocumentSelector documentSelector;
+	TextDocumentSyncKind syncKind;
+}
+
+struct WillSaveTextDocumentParams
+{
+	TextDocumentIdentifier textDocument;
+	TextDocumentSaveReason reason;
+}
+
+enum TextDocumentSaveReason
+{
+	manual = 1,
+	afterDelay,
+	focusOut
+}
+
+struct DidSaveTextDocumentParams
+{
+	mixin StrictOptionalSerializer;
+
+	TextDocumentIdentifier textDocument;
+	Optional!string text;
+}
+
+struct TextDocumentSaveRegistrationOptions
+{
+	mixin StrictOptionalSerializer;
+
+	Optional!DocumentSelector documentSelector;
+	bool includeText;
+}
+
+struct DidCloseTextDocumentParams
+{
+	TextDocumentIdentifier textDocument;
+}
+
+struct FileSystemWatcher
+{
+	string globPattern;
+	Optional!WatchKind kind;
+}
+
+enum WatchKind
+{
+	create = 1,
+	change = 2,
+	delete_ = 4
+}
+
+struct DidChangeWatchedFilesParams
+{
+	FileEvent[] changes;
+}
+
+struct FileEvent
+{
+	DocumentUri uri;
+	FileChangeType type;
+}
+
+enum FileChangeType
+{
+	created = 1,
+	changed,
+	deleted
+}
+
+struct PublishDiagnosticsParams
+{
+	DocumentUri uri;
+	Diagnostic[] diagnostics;
+}
+
+struct CompletionList
+{
+	bool isIncomplete;
+	CompletionItem[] items;
+}
+
+enum InsertTextFormat
+{
+	plainText = 1,
+	snippet
+}
+
+struct CompletionItemLabel
+{
+	string label;
+	Optional!string detail;
+	Optional!string description;
+	
+	int opCmp(const CompletionItemLabel r) const
+  	{
+    	immutable c = label == r.label;
+    	return c ? 0 : 1;
+  	}
+}
+
+struct CompletionItem
+{
+	mixin StrictOptionalSerializer;
+
+	CompletionItemLabel label;
+	Optional!CompletionItemKind kind;
+	Optional!string detail;
+	Optional!MarkupContent documentation;
+	@SerializedName("deprecated") Optional!bool deprecated_;
+	Optional!bool preselect;
+	Optional!string sortText;
+	Optional!string filterText;
+	Optional!string insertText;
+	Optional!InsertTextFormat insertTextFormat;
+	Optional!TextEdit textEdit;
+	Optional!(TextEdit[]) additionalTextEdits;
+	Optional!(string[]) commitCharacters;
+	Optional!Command command;
+	JSONValue data;
+}
+
+enum CompletionItemKind
+{
+	text = 1,
+	method,
+	function_,
+	constructor,
+	field,
+	variable,
+	class_,
+	interface_,
+	module_,
+	property,
+	unit,
+	value,
+	enum_,
+	keyword,
+	snippet,
+	color,
+	file,
+	reference,
+	folder,
+	enumMember,
+	constant,
+	struct_,
+	event,
+	operator,
+	typeParameter
+}
+
+struct CompletionRegistrationOptions
+{
+	Optional!DocumentSelector documentSelector;
+	Optional!(string[]) triggerCharacters;
+	bool resolveProvider;
+}
+
+struct Hover
+{
+	ArrayOrSingle!MarkedString contents;
+	Optional!TextRange range;
+}
+
+struct MarkedString
+{
+	string value;
+	string language;
+
+	const JSONValue _toJSON()
+	{
+		if (!language.length)
+			return JSONValue(value);
 		else
-			return CompletionList(false, [
-					CompletionItem(CompletionItemLabel(`"disabled"`), CompletionItemKind.value.opt,
-						"Check is disabled".opt),
-					CompletionItem(CompletionItemLabel(`"enabled"`), CompletionItemKind.value.opt,
-						"Check is enabled".opt),
-					CompletionItem(CompletionItemLabel(`"skip-unittest"`), CompletionItemKind.value.opt,
-						"Check is enabled but not operated in the unittests".opt)
+			return JSONValue([
+					"value": JSONValue(value),
+					"language": JSONValue(language)
 					]);
 	}
-	else
-	{
-		if (!instance)
-		{
-			trace("Providing no completion because no instance");
-			return CompletionList.init;
-		}
 
-		if (document.getLanguageId == "d")
-		{
-			auto ret = provideDSourceComplete(params, instance, document);
-			foreach(ref CompletionItem item; ret.items)
-			{
-				item.detail = "test";
-			}
-			return ret;
-		}
-		else if (document.getLanguageId == "diet")
-			return provideDietSourceComplete(params, instance, document);
-		else if (document.getLanguageId == "dml")
-			return provideDMLSourceComplete(params, instance, document);
+	static MarkedString fromJSON(JSONValue val)
+	{
+		MarkedString ret;
+		if (val.type == JSONType.string)
+			ret.value = val.str;
 		else
 		{
-			tracef("Providing no completion for unknown language ID %s.", document.getLanguageId);
-			return CompletionList.init;
+			ret.value = val["value"].str;
+			ret.language = val["language"].str;
 		}
+		return ret;
 	}
 }
 
-CompletionList provideDMLSourceComplete(TextDocumentPositionParams params,
-		WorkspaceD.Instance instance, ref Document document)
+enum MarkupKind : string
 {
-	import workspaced.com.dlangui : DlanguiComponent, CompletionType;
-
-	CompletionList ret;
-
-	auto items = backend.get!DlanguiComponent.complete(document.rawText,
-			cast(int) document.positionToBytes(params.position)).getYield();
-	ret.items.length = items.length;
-	foreach (i, item; items)
-	{
-		CompletionItem translated;
-
-		translated.sortText = ((item.type == CompletionType.Class ? "1." : "0.") ~ item.value).opt;
-		translated.label.label = item.value;
-		if (item.documentation.length)
-			translated.documentation = MarkupContent(item.documentation).opt;
-		if (item.enumName.length)
-			translated.detail = item.enumName.opt;
-
-		switch (item.type)
-		{
-		case CompletionType.Class:
-			translated.insertTextFormat = InsertTextFormat.snippet;
-			translated.insertText = item.value ~ ` {$0}`;
-			break;
-		case CompletionType.Color:
-			translated.insertTextFormat = InsertTextFormat.snippet;
-			translated.insertText = item.value ~ `: ${0:#000000}`;
-			break;
-		case CompletionType.String:
-			translated.insertTextFormat = InsertTextFormat.snippet;
-			translated.insertText = item.value ~ `: "$0"`;
-			break;
-		case CompletionType.EnumDefinition:
-			translated.insertTextFormat = InsertTextFormat.plainText;
-			translated.insertText = item.enumName ~ "." ~ item.value;
-			break;
-		case CompletionType.Rectangle:
-		case CompletionType.Number:
-			translated.insertTextFormat = InsertTextFormat.snippet;
-			translated.insertText = item.value ~ `: ${0:0}`;
-			break;
-		case CompletionType.Keyword:
-			// don't set, inherit from label
-			break;
-		default:
-			translated.insertTextFormat = InsertTextFormat.plainText;
-			translated.insertText = item.value ~ ": ";
-			break;
-		}
-
-		switch (item.type)
-		{
-		case CompletionType.Class:
-			translated.kind = CompletionItemKind.class_;
-			break;
-		case CompletionType.String:
-			translated.kind = CompletionItemKind.value;
-			break;
-		case CompletionType.Number:
-			translated.kind = CompletionItemKind.value;
-			break;
-		case CompletionType.Color:
-			translated.kind = CompletionItemKind.color;
-			break;
-		case CompletionType.EnumDefinition:
-			translated.kind = CompletionItemKind.enum_;
-			break;
-		case CompletionType.EnumValue:
-			translated.kind = CompletionItemKind.enumMember;
-			break;
-		case CompletionType.Rectangle:
-			translated.kind = CompletionItemKind.typeParameter;
-			break;
-		case CompletionType.Boolean:
-			translated.kind = CompletionItemKind.constant;
-			break;
-		case CompletionType.Keyword:
-			translated.kind = CompletionItemKind.keyword;
-			break;
-		default:
-		case CompletionType.Undefined:
-			break;
-		}
-
-		ret.items[i] = translated;
-	}
-
-	return ret;
+	plaintext = "plaintext",
+	markdown = "markdown"
 }
 
-CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
-		WorkspaceD.Instance instance, ref Document document)
+struct MarkupContent
 {
-	import served.utils.diet;
-	import dc = dietc.complete;
+	string kind;
+	string value;
 
-	auto completion = updateDietFile(document.uri.uriToFile, document.rawText.idup);
-
-	size_t offset = document.positionToBytes(params.position);
-	auto raw = completion.completeAt(offset);
-	CompletionItem[] ret;
-
-	if (raw is dc.Completion.completeD)
+	this(MarkupKind kind, string value)
 	{
-		auto d = workspace(params.textDocument.uri).config.d;
-		string code;
-		contextExtractD(completion, offset, code, offset, d.dietContextCompletion);
-		if (offset <= code.length && instance.has!DCDComponent)
+		this.kind = kind;
+		this.value = value;
+	}
+
+	this(string text)
+	{
+		kind = MarkupKind.plaintext;
+		value = text;
+	}
+
+	this(MarkedString[] markup)
+	{
+		kind = MarkupKind.markdown;
+		foreach (block; markup)
 		{
-			info("DCD Completing Diet for ", code, " at ", offset);
-			auto dcd = instance.get!DCDComponent.listCompletion(code, cast(int) offset).getYield;
-			if (dcd.type == DCDCompletions.Type.identifiers)
+			if (block.language.length)
 			{
-				ret = dcd.identifiers.convertDCDIdentifiers(d.argumentSnippets, d.completeNoDupes);
-			}
-		}
-	}
-	else
-		ret = raw.map!((a) {
-			CompletionItem ret;
-			ret.label.label = a.text;
-			ret.kind = a.type.mapToCompletionItemKind.opt;
-			if (a.definition.length)
-			{
-				ret.detail = a.definition.opt;
-				ret.label.detail = ret.detail;
-			}
-			if (a.documentation.length)
-				ret.documentation = MarkupContent(a.documentation).opt;
-			if (a.preselected)
-				ret.preselect = true.opt;
-			return ret;
-		}).array;
-
-	return CompletionList(false, ret);
-}
-
-CompletionList provideDSourceComplete(TextDocumentPositionParams params,
-		WorkspaceD.Instance instance, ref Document document)
-{
-	auto lineRange = document.lineByteRangeAt(params.position.line);
-	auto byteOff = cast(int) document.positionToBytes(params.position);
-
-	string line = document.rawText[lineRange[0] .. lineRange[1]].idup;
-	string prefix = line[0 .. min($, params.position.character)].strip;
-	CompletionItem[] completion;
-	Token commentToken;
-	if (document.rawText.isInComment(byteOff, backend, &commentToken))
-		if (commentToken.text.startsWith("///", "/**", "/++"))
-		{
-			trace("Providing comment completion");
-			int prefixLen = prefix[0] == '/' ? 3 : 1;
-			auto remaining = prefix[prefixLen .. $].stripLeft;
-
-			foreach (compl; import("ddocs.txt").lineSplitter)
-			{
-				if (compl.startsWith(remaining))
-				{
-					auto item = CompletionItem(CompletionItemLabel(compl), CompletionItemKind.snippet.opt);
-					item.insertText = compl ~ ": ";
-					completion ~= item;
-				}
-			}
-
-			// make the comment one "line" so provide doc complete shows complete
-			// after a /** */ comment block if you are on the first line.
-			lineRange[1] = commentToken.index + commentToken.text.length;
-			provideDocComplete(params, instance, document, completion, line, lineRange);
-
-			return CompletionList(false, completion);
-		}
-
-	bool completeDCD = instance.has!DCDComponent;
-	bool completeDoc = instance.has!DscannerComponent;
-	bool completeSnippets = doCompleteSnippets && instance.has!SnippetsComponent;
-
-	tracef("Performing regular D comment completion (DCD=%s, Documentation=%s, Snippets=%s)",
-			completeDCD, completeDoc, completeSnippets);
-	const config = workspace(params.textDocument.uri).config;
-	DCDCompletions result = DCDCompletions.empty;
-	joinAll({
-		if (completeDCD)
-			result = instance.get!DCDComponent.listCompletion(document.rawText, byteOff).getYield;
-	}, {
-		if (completeDoc)
-			provideDocComplete(params, instance, document, completion, line, lineRange);
-	}, {
-		if (completeSnippets)
-			provideSnippetComplete(params, instance, document, config, completion, byteOff);
-	});
-
-	if (completeDCD && result != DCDCompletions.init)
-	{
-		if (result.type == DCDCompletions.Type.identifiers)
-		{
-			auto d = config.d;
-			completion ~= convertDCDIdentifiers(result.identifiers, d.argumentSnippets, d.completeNoDupes);
-		}
-		else if (result.type != DCDCompletions.Type.calltips)
-		{
-			trace("Unexpected result from DCD: ", result);
-		}
-	}
-	return CompletionList(false, completion);
-}
-
-private void provideDocComplete(TextDocumentPositionParams params, WorkspaceD.Instance instance,
-		ref Document document, ref CompletionItem[] completion, string line, size_t[2] lineRange)
-{
-	string lineStripped = line.strip;
-	if (lineStripped.among!("", "/", "/*", "/+", "//", "///", "/**", "/++"))
-	{
-		auto defs = instance.get!DscannerComponent.listDefinitions(uriToFile(
-				params.textDocument.uri), document.rawText[lineRange[1] .. $]).getYield;
-		ptrdiff_t di = -1;
-		FuncFinder: foreach (i, def; defs)
-		{
-			if (def.line >= 0 && def.line <= 5)
-			{
-				di = i;
-				break FuncFinder;
-			}
-		}
-		if (di == -1)
-			return;
-		auto def = defs[di];
-		auto sig = "signature" in def.attributes;
-		if (!sig)
-		{
-			CompletionItem doc = CompletionItem(CompletionItemLabel("///"));
-			doc.kind = CompletionItemKind.snippet;
-			doc.insertTextFormat = InsertTextFormat.snippet;
-			auto eol = document.eolAt(params.position.line).toString;
-			doc.insertText = "/// ";
-			CompletionItem doc2 = doc;
-			CompletionItem doc3 = doc;
-			doc2.label.label = "/**";
-			doc2.insertText = "/** " ~ eol ~ " * $0" ~ eol ~ " */";
-			doc3.label.label = "/++";
-			doc3.insertText = "/++ " ~ eol ~ " * $0" ~ eol ~ " +/";
-
-			completion.addDocComplete(doc, lineStripped);
-			completion.addDocComplete(doc2, lineStripped);
-			completion.addDocComplete(doc3, lineStripped);
-			return;
-		}
-		auto funcArgs = extractFunctionParameters(*sig);
-		string[] docs = ["$0"];
-		int argNo = 1;
-		foreach (arg; funcArgs)
-		{
-			auto space = arg.stripRight.lastIndexOf(' ');
-			if (space == -1)
-				continue;
-			auto identifier = arg[space + 1 .. $];
-			if (!identifier.isValidDIdentifier)
-				continue;
-			if (argNo == 1)
-				docs ~= "Params:";
-			docs ~= text("  ", identifier, " = $", argNo.to!string);
-			argNo++;
-		}
-		auto retAttr = "return" in def.attributes;
-		if (retAttr && *retAttr != "void")
-		{
-			docs ~= "Returns: $" ~ argNo.to!string;
-			argNo++;
-		}
-		auto depr = "deprecation" in def.attributes;
-		if (depr)
-		{
-			docs ~= "Deprecated: $" ~ argNo.to!string ~ *depr;
-			argNo++;
-		}
-		CompletionItem doc = CompletionItem(CompletionItemLabel("///"));
-		doc.kind = CompletionItemKind.snippet;
-		doc.insertTextFormat = InsertTextFormat.snippet;
-		auto eol = document.eolAt(params.position.line).toString;
-		doc.insertText = docs.map!(a => "/// " ~ a).join(eol);
-		CompletionItem doc2 = doc;
-		CompletionItem doc3 = doc;
-		doc2.label.label = "/**";
-		doc2.insertText = "/** " ~ eol ~ docs.map!(a => " * " ~ a ~ eol).join() ~ " */";
-		doc3.label.label = "/++";
-		doc3.insertText = "/++ " ~ eol ~ docs.map!(a => " + " ~ a ~ eol).join() ~ " +/";
-
-		doc.sortText = opt(sortPrefixDoc ~ "0");
-		doc2.sortText = opt(sortPrefixDoc ~ "1");
-		doc3.sortText = opt(sortPrefixDoc ~ "2");
-
-		completion.addDocComplete(doc, lineStripped);
-		completion.addDocComplete(doc2, lineStripped);
-		completion.addDocComplete(doc3, lineStripped);
-	}
-}
-
-private void provideSnippetComplete(TextDocumentPositionParams params, WorkspaceD.Instance instance,
-		ref Document document, ref const UserConfiguration config,
-		ref CompletionItem[] completion, int byteOff)
-{
-	if (byteOff > 0 && document.rawText[byteOff - 1 .. $].startsWith("."))
-		return; // no snippets after '.' character
-
-	auto snippets = instance.get!SnippetsComponent;
-	auto ret = snippets.getSnippetsYield(document.uri.uriToFile, document.rawText, byteOff);
-	trace("got ", ret.snippets.length, " snippets fitting in this context: ",
-			ret.snippets.map!"a.shortcut");
-	auto eol = document.eolAt(0);
-	foreach (Snippet snippet; ret.snippets)
-	{
-		auto item = snippet.snippetToCompletionItem;
-		item.data["level"] = JSONValue(ret.info.level.to!string);
-		if (!snippet.unformatted)
-			item.data["format"] = toJSON(generateDfmtArgs(config, eol));
-		item.data["params"] = toJSON(params);
-		completion ~= item;
-	}
-}
-
-private void addDocComplete(ref CompletionItem[] completion, CompletionItem doc, string prefix)
-{
-	if (!doc.label.label.startsWith(prefix))
-		return;
-	if (prefix.length > 0)
-		doc.insertText = doc.insertText[prefix.length .. $];
-	completion ~= doc;
-}
-
-private bool isInComment(scope const(char)[] code, size_t at, WorkspaceD backend, Token* outToken = null)
-{
-	if (!backend)
-		return false;
-
-	import dparse.lexer : DLexer, LexerConfig, StringBehavior, tok;
-
-	// TODO: does this kind of token parsing belong in serve-d?
-
-	LexerConfig config;
-	config.fileName = "stdin";
-	config.stringBehavior = StringBehavior.source;
-	auto lexer = DLexer(code, config, &backend.stringCache);
-
-	while (!lexer.empty) switch (lexer.front.type)
-	{
-	case tok!"comment":
-		auto t = lexer.front;
-
-		auto commentEnd = t.index + t.text.length;
-		if (t.text.startsWith("//"))
-			commentEnd++;
-
-		if (t.index <= at && at < commentEnd)
-		{
-			if (outToken !is null)
-				*outToken = t;
-			return true;
-		}
-
-		lexer.popFront();
-		break;
-	case tok!"__EOF__":
-		return false;
-	default:
-		lexer.popFront();
-		break;
-	}
-	return false;
-}
-
-@protocolMethod("completionItem/resolve")
-CompletionItem resolveCompletionItem(CompletionItem item)
-{
-	auto data = item.data;
-
-	if (item.insertTextFormat.get == InsertTextFormat.snippet
-			&& item.kind.get == CompletionItemKind.snippet && data.type == JSONType.object)
-	{
-		const resolved = "resolved" in data.object;
-		if (resolved.type != JSONType.true_)
-		{
-			TextDocumentPositionParams params = data.object["params"]
-				.fromJSON!TextDocumentPositionParams;
-
-			Document document = documents[params.textDocument.uri];
-			auto f = document.uri.uriToFile;
-			auto instance = backend.getBestInstance(f);
-
-			if (instance.has!SnippetsComponent)
-			{
-				auto snippets = instance.get!SnippetsComponent;
-				auto snippet = snippetFromCompletionItem(item);
-				snippet = snippets.resolveSnippet(f, document.rawText,
-						cast(int) document.positionToBytes(params.position), snippet).getYield;
-				item = snippetToCompletionItem(snippet);
-			}
-		}
-
-		if (const format = "format" in data.object)
-		{
-			auto args = (*format).fromJSON!(string[]);
-			if (item.insertTextFormat.get == InsertTextFormat.snippet)
-			{
-				SnippetLevel level = SnippetLevel.global;
-				if (const levelStr = "level" in data.object)
-					level = levelStr.str.to!SnippetLevel;
-				item.insertText = formatSnippet(item.insertText.get, args, level).opt;
+				value ~= "```" ~ block.language ~ "\n";
+				value ~= block.value;
+				value ~= "```";
 			}
 			else
-			{
-				item.insertText = formatCode(item.insertText.get, args).opt;
-			}
+				value ~= block.value;
+			value ~= "\n\n";
 		}
-
-		// TODO: format code
-		return item;
 	}
-	else
+}
+
+struct SignatureHelp
+{
+	SignatureInformation[] signatures;
+	Optional!int activeSignature;
+	Optional!int activeParameter;
+
+	this(SignatureInformation[] signatures)
 	{
-		return item;
+		this.signatures = signatures;
 	}
-}
 
-CompletionItem snippetToCompletionItem(Snippet snippet)
-{
-	CompletionItem item;
-	item.label.label = snippet.shortcut;
-	item.sortText = opt(sortPrefixSnippets ~ snippet.shortcut);
-	item.detail = snippet.title.opt;
-	item.kind = CompletionItemKind.snippet.opt;
-	item.documentation = MarkupContent(MarkupKind.markdown,
-			snippet.documentation ~ "\n\n```d\n" ~ snippet.snippet ~ "\n```\n");
-	item.filterText = snippet.shortcut.opt;
-	if (capabilities.textDocument.completion.completionItem.snippetSupport)
+	this(SignatureInformation[] signatures, int activeSignature, int activeParameter)
 	{
-		item.insertText = snippet.snippet.opt;
-		item.insertTextFormat = InsertTextFormat.snippet.opt;
+		this.signatures = signatures;
+		this.activeSignature = activeSignature;
+		this.activeParameter = activeParameter;
 	}
-	else
-		item.insertText = snippet.plain.opt;
-
-	item.data = JSONValue([
-			"resolved": JSONValue(snippet.resolved),
-			"id": JSONValue(snippet.id),
-			"providerId": JSONValue(snippet.providerId),
-			"data": snippet.data
-			]);
-	return item;
 }
 
-Snippet snippetFromCompletionItem(CompletionItem item)
+struct SignatureInformation
 {
-	Snippet snippet;
-	snippet.shortcut = item.label.label;
-	snippet.title = item.detail.get;
-	snippet.documentation = item.documentation.get.value;
-	auto end = snippet.documentation.lastIndexOf("\n\n```d\n");
-	if (end != -1)
-		snippet.documentation = snippet.documentation[0 .. end];
-
-	if (capabilities.textDocument.completion.completionItem.snippetSupport)
-		snippet.snippet = item.insertText.get;
-	else
-		snippet.plain = item.insertText.get;
-
-	snippet.resolved = item.data["resolved"].boolean;
-	snippet.id = item.data["id"].str;
-	snippet.providerId = item.data["providerId"].str;
-	snippet.data = item.data["data"];
-	return snippet;
+	string label;
+	Optional!MarkupContent documentation;
+	Optional!(ParameterInformation[]) parameters;
 }
 
-unittest
+struct ParameterInformation
 {
-	auto backend = new WorkspaceD();
-	assert(isInComment(`hello /** world`, 10, backend));
-	assert(!isInComment(`hello /** world`, 3, backend));
-	assert(isInComment(`hello /* world */ bar`, 8, backend));
-	assert(isInComment(`hello /* world */ bar`, 16, backend));
-	assert(!isInComment(`hello /* world */ bar`, 17, backend));
-	assert(!isInComment("int x;\n// line comment\n", 6, backend));
-	assert(isInComment("int x;\n// line comment\n", 7, backend));
-	assert(isInComment("int x;\n// line comment\n", 9, backend));
-	assert(isInComment("int x;\n// line comment\n", 21, backend));
-	assert(isInComment("int x;\n// line comment\n", 22, backend));
-	assert(!isInComment("int x;\n// line comment\n", 23, backend));
+	JSONValue label;
+	Optional!MarkupContent documentation;
 }
 
-auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, bool completeNoDupes)
+struct SignatureHelpRegistrationOptions
 {
-	CompletionItem[] completion;
-	foreach (identifier; identifiers)
-	{
-		CompletionItem item;
-		item.label.label = identifier.identifier;
-		item.kind = identifier.type.convertFromDCDType;
-		if (identifier.documentation.length)
-			item.documentation = MarkupContent(identifier.documentation.ddocToMarked);
-		if (identifier.definition.length)
-		{
-			item.detail = identifier.definition;
-
-			// check if that's actually a proper completion item to process
-			if(identifier.definition.indexOf(" ") != -1)
-			{
-				item.label.description = identifier.definition[0 .. identifier.definition.indexOf(" ")];
-				
-				// if function, only show the parenthesis content
-				if(identifier.type == "f")
-					item.label.detail = " " ~ identifier.definition[identifier.definition.indexOf("(") .. $];
-				else // else only give the type
-					item.label.detail = " " ~ item.label.description;
-			}
-			
-
-			if (!completeNoDupes)
-				item.sortText = identifier.definition;
-			// TODO: only add arguments when this is a function call, eg not on template arguments
-			if (identifier.type == "f" && argumentSnippets)
-			{
-				item.insertTextFormat = InsertTextFormat.snippet;
-				string args;
-				auto parts = identifier.definition.extractFunctionParameters;
-				if (parts.length)
-				{
-					int numRequired;
-					foreach (i, part; parts)
-					{
-						ptrdiff_t equals = part.indexOf('=');
-						if (equals != -1)
-						{
-							part = part[0 .. equals].stripRight;
-							// remove default value from autocomplete
-						}
-						auto space = part.lastIndexOf(' ');
-						if (space != -1)
-							part = part[space + 1 .. $];
-
-						if (args.length)
-							args ~= ", ";
-						args ~= "${" ~ (i + 1).to!string ~ ":" ~ part ~ "}";
-						numRequired++;
-					}
-					item.insertText = identifier.identifier ~ "(${0:" ~ args ~ "})";
-				}
-			}
-		}
-
-		if (item.sortText.isNull)
-			item.sortText = item.label.label.opt;
-
-		item.sortText = opt(sortPrefixDCD ~ identifier.type.sortFromDCDType ~ item.sortText.get);
-
-		completion ~= item;
-	}
-
-	// sort only for duplicate detection (use sortText for UI sorting)
-	completion.sort!"a.label < b.label";
-	if (completeNoDupes)
-		return completion.chunkBy!((a, b) => a.label == b.label && a.kind == b.kind)
-			.map!((a) {
-				CompletionItem ret = a.front;
-				auto details = a.map!"a.detail"
-					.filter!"!a.isNull && a.value.length"
-					.uniq
-					.array;
-				auto docs = a.map!"a.documentation"
-					.filter!"!a.isNull && a.value.value.length"
-					.uniq
-					.array;
-				if (docs.length)
-					ret.documentation = MarkupContent(MarkupKind.markdown,
-						docs.map!"a.value.value".join("\n\n"));
-				if (details.length)
-					ret.detail = details.map!"a.value".join("\n");
-				return ret;
-			})
-			.array;
-	else
-		return completion.chunkBy!((a, b) => a.label == b.label && a.detail == b.detail
-				&& a.kind == b.kind)
-			.map!((a) {
-				CompletionItem ret = a.front;
-				auto docs = a.map!"a.documentation"
-					.filter!"!a.isNull && a.value.value.length"
-					.uniq
-					.array;
-				if (docs.length)
-					ret.documentation = MarkupContent(MarkupKind.markdown,
-						docs.map!"a.value.value".join("\n\n"));
-				return ret;
-			})
-			.array;
+	Optional!DocumentSelector documentSelector;
+	Optional!(string[]) triggerCharacters;
 }
 
-// === Protocol Notifications starting here ===
-
-/// Restarts all DCD servers started by this serve-d instance. Returns `true` once done.
-@protocolMethod("served/restartServer")
-bool restartServer()
+struct ReferenceParams
 {
-	Future!void[] fut;
-	foreach (instance; backend.instances)
-		if (instance.has!DCDComponent)
-			fut ~= instance.get!DCDComponent.restartServer();
-	joinAll(fut);
-	return true;
+	TextDocumentIdentifier textDocument;
+	Position position;
+	ReferenceContext context;
 }
 
-/// Kills all DCD servers started by this serve-d instance.
-@protocolNotification("served/killServer")
-void killServer()
+struct ReferenceContext
 {
-	foreach (instance; backend.instances)
-		if (instance.has!DCDComponent)
-			instance.get!DCDComponent.killServer();
+	bool includeDeclaration;
 }
 
-/// Registers a snippet across the whole serve-d application which may be limited to given grammatical scopes.
-/// Requires `--provide context-snippets`
-/// Returns: `false` if SnippetsComponent hasn't been loaded yet, otherwise `true`.
-@protocolMethod("served/addDependencySnippet")
-bool addDependencySnippet(AddDependencySnippetParams params)
+struct DocumentHighlightParams
 {
-	if (!backend.has!SnippetsComponent)
-		return false;
-	PlainSnippet snippet;
-	foreach (i, ref v; snippet.tupleof)
-	{
-		static assert(__traits(identifier, snippet.tupleof[i]) == __traits(identifier,
-				params.snippet.tupleof[i]),
-				"struct definition changed without updating SerializablePlainSnippet");
-		// convert enums
-		v = cast(typeof(v)) params.snippet.tupleof[i];
-	}
-	backend.get!SnippetsComponent.addDependencySnippet(params.requiredDependencies, snippet);
-	return true;
+	TextDocumentIdentifier textDocument;
+	Position position;
+}
+
+struct DocumentHighlight
+{
+	TextRange range;
+	Optional!DocumentHighlightKind kind;
+}
+
+enum DocumentHighlightKind
+{
+	text = 1,
+	read,
+	write
+}
+
+struct DocumentSymbolParams
+{
+	TextDocumentIdentifier textDocument;
+}
+
+struct SymbolInformation
+{
+	string name;
+	SymbolKind kind;
+	Location location;
+	Optional!string containerName;
+}
+
+struct DocumentSymbol
+{
+	mixin StrictOptionalSerializer;
+
+	string name;
+	Optional!string detail;
+	SymbolKind kind;
+	@SerializedName("deprecated") Optional!bool deprecated_;
+	TextRange range;
+	TextRange selectionRange;
+	DocumentSymbol[] children;
+	@SerializeIgnore string parent;
+}
+
+enum SymbolKind
+{
+	file = 1,
+	module_,
+	namespace,
+	package_,
+	class_,
+	method,
+	property,
+	field,
+	constructor,
+	enum_,
+	interface_,
+	function_,
+	variable,
+	constant,
+	string,
+	number,
+	boolean,
+	array,
+	object,
+	key,
+	null_,
+	enumMember,
+	struct_,
+	event,
+	operator,
+	typeParameter
+}
+
+struct WorkspaceSymbolParams
+{
+	string query;
+}
+
+struct CodeActionParams
+{
+	TextDocumentIdentifier textDocument;
+	TextRange range;
+	CodeActionContext context;
+}
+
+struct CodeActionContext
+{
+	Diagnostic[] diagnostics;
+}
+
+struct CodeLensParams
+{
+	TextDocumentIdentifier textDocument;
+}
+
+struct CodeLens
+{
+	TextRange range;
+	Optional!Command command;
+	JSONValue data;
+}
+
+struct CodeLensRegistrationOptions
+{
+	Optional!DocumentSelector documentSelector;
+	bool resolveProvider;
+}
+
+struct DocumentLinkParams
+{
+	TextDocumentIdentifier textDocument;
+}
+
+struct DocumentLink
+{
+	TextRange range;
+	DocumentUri target;
+}
+
+struct DocumentLinkRegistrationOptions
+{
+	Optional!DocumentSelector documentSelector;
+	bool resolveProvider;
+}
+
+struct DocumentColorParams
+{
+	TextDocumentIdentifier textDocument;
+}
+
+struct ColorInformation
+{
+	TextRange range;
+	Color color;
+}
+
+struct Color
+{
+	double red = 0;
+	double green = 0;
+	double blue = 0;
+	double alpha = 1;
+}
+
+struct ColorPresentationParams
+{
+	TextDocumentIdentifier textDocument;
+	Color color;
+	TextRange range;
+}
+
+struct ColorPresentation
+{
+	string label;
+	Optional!TextEdit textEdit;
+	Optional!(TextEdit[]) additionalTextEdits;
+}
+
+struct DocumentFormattingParams
+{
+	TextDocumentIdentifier textDocument;
+	FormattingOptions options;
+}
+
+struct FormattingOptions
+{
+	int tabSize;
+	bool insertSpaces;
+	JSONValue data;
+}
+
+struct DocumentRangeFormattingParams
+{
+	TextDocumentIdentifier textDocument;
+	TextRange range;
+	FormattingOptions options;
+}
+
+struct DocumentOnTypeFormattingParams
+{
+	TextDocumentIdentifier textDocument;
+	Position position;
+	string ch;
+	FormattingOptions options;
+}
+
+struct DocumentOnTypeFormattingRegistrationOptions
+{
+	Optional!DocumentSelector documentSelector;
+	string firstTriggerCharacter;
+	Optional!(string[]) moreTriggerCharacter;
+}
+
+struct RenameParams
+{
+	TextDocumentIdentifier textDocument;
+	Position position;
+	string newName;
+}
+
+struct ExecuteCommandParams
+{
+	string command;
+	Optional!(JSONValue[]) arguments;
+}
+
+struct ExecuteCommandRegistrationOptions
+{
+	string[] commands;
+}
+
+struct ApplyWorkspaceEditParams
+{
+	WorkspaceEdit edit;
+}
+
+struct ApplyWorkspaceEditResponse
+{
+	bool applied;
+}
+
+struct WorkspaceFolder
+{
+	string uri;
+	string name;
+}
+
+struct DidChangeWorkspaceFoldersParams
+{
+	WorkspaceFoldersChangeEvent event;
+}
+
+struct WorkspaceFoldersChangeEvent
+{
+	WorkspaceFolder[] added;
+	WorkspaceFolder[] removed;
 }
