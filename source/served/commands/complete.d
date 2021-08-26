@@ -948,8 +948,12 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 				item.label.description = "Enum";
 			else if(identifier.type == "t")
 				item.label.description = "Template";
-			else if(identifier.type == "i")
-				item.label.description = "Interface";
+			else if(identifier.type == "l")
+				item.label.description = "Alias";
+			else if(identifier.type == "M")
+				item.label.description = "Module";
+			else if(identifier.type == "P")
+				item.label.description = "Package";
 		}
 		else
 		{
