@@ -962,7 +962,17 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 				
 				// if function, only show the parenthesis content
 				if(identifier.type == "f")
+				{
+					// handle case where function returns 'auto'
+					auto beforeParenthesis = identifier.definition[0 .. identifier.definition.indexOf("(")];
+					
+					// if definition doesn't contains a return type, then it is a function that returns auto
+					auto isAuto = beforeParenthesis.indexOf(" ") == -1;
+					if(isAuto)
+						item.label.description = "auto";
+
 					item.label.detail = " " ~ identifier.definition[identifier.definition.indexOf("(") .. $];
+				}
 				else // else only give the type
 					item.label.detail = " " ~ item.label.description;
 			}
