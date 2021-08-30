@@ -172,6 +172,12 @@ int main(string[] args)
 			doTrackTests = true;
 			trace("Discoverying & emitting unittests for language client");
 			break;
+		case "tasks-current":
+			import served.commands.dub : useBuildTaskDollarCurrent;
+
+			useBuildTaskDollarCurrent = true;
+			trace("Using `$current` in build tasks");
+			break;
 		default:
 			warningf("Unknown --provide flag '%s' provided. Maybe serve-d is outdated?", provide);
 			break;

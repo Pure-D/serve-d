@@ -377,6 +377,7 @@ private string[] fixEmptyArgs(string[] args)
 	return args.remove!(a => a.endsWith('='));
 }
 
+__gshared bool useBuildTaskDollarCurrent = false;
 @protocolMethod("served/buildTasks")
 Task[] provideBuildTasks()
 {
@@ -388,7 +389,19 @@ Task[] provideBuildTasks()
 		auto dub = instance.get!DubComponent;
 		auto workspace = .workspace(instance.cwd.uriFromFile, false);
 		info("Found dub package to build at ", dub.recipePath);
-		JSONValue currentMagicValue = JSONValue("$current");
+
+		JSONValue dollarMagicValue;
+		if (useBuildTaskDollarCurrent)
+			dollarMagicValue = JSONValue("$current");
+
+		JSONValue currentValue(string prop)()
+		{
+			if (useBuildTaskDollarCurrent)
+				return JSONValue("$current");
+			else
+				return JSONValue(__traits(getMember, dub, prop));
+		}
+
 		auto cwd = JSONValue(dub.recipePath.dirName.replace(workspace.folder.uri.uriToFile, "${workspaceFolder}"));
 		{
 			Task t;
@@ -396,10 +409,10 @@ Task[] provideBuildTasks()
 			t.definition = JSONValue([
 					"type": JSONValue("dub"),
 					"run": JSONValue(true),
-					"compiler": currentMagicValue,
-					"archType": currentMagicValue,
-					"buildType": currentMagicValue,
-					"configuration": currentMagicValue,
+					"compiler": currentValue!"compiler",
+					"archType": currentValue!"archType",
+					"buildType": currentValue!"buildType",
+					"configuration": currentValue!"configuration",
 					"cwd": cwd
 					]);
 			t.group = Task.Group.build;
@@ -417,10 +430,10 @@ Task[] provideBuildTasks()
 			t.definition = JSONValue([
 					"type": JSONValue("dub"),
 					"test": JSONValue(true),
-					"compiler": currentMagicValue,
-					"archType": currentMagicValue,
-					"buildType": currentMagicValue,
-					"configuration": currentMagicValue,
+					"compiler": currentValue!"compiler",
+					"archType": currentValue!"archType",
+					"buildType": currentValue!"buildType",
+					"configuration": currentValue!"configuration",
 					"cwd": cwd
 					]);
 			t.group = Task.Group.test;
@@ -438,10 +451,10 @@ Task[] provideBuildTasks()
 			t.definition = JSONValue([
 					"type": JSONValue("dub"),
 					"run": JSONValue(false),
-					"compiler": currentMagicValue,
-					"archType": currentMagicValue,
-					"buildType": currentMagicValue,
-					"configuration": currentMagicValue,
+					"compiler": currentValue!"compiler",
+					"archType": currentValue!"archType",
+					"buildType": currentValue!"buildType",
+					"configuration": currentValue!"configuration",
 					"cwd": cwd
 					]);
 			t.group = Task.Group.build;
@@ -460,10 +473,10 @@ Task[] provideBuildTasks()
 					"type": JSONValue("dub"),
 					"run": JSONValue(false),
 					"force": JSONValue(true),
-					"compiler": currentMagicValue,
-					"archType": currentMagicValue,
-					"buildType": currentMagicValue,
-					"configuration": currentMagicValue,
+					"compiler": currentValue!"compiler",
+					"archType": currentValue!"archType",
+					"buildType": currentValue!"buildType",
+					"configuration": currentValue!"configuration",
 					"cwd": cwd
 					]);
 			t.group = Task.Group.rebuild;
