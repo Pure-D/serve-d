@@ -967,8 +967,6 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 				// if function, only show the parenthesis content
 				if (identifier.type == "f")
 					item.label.detail = " " ~ identifier.definition[identifier.definition.indexOf("(") .. $];
-				else // else only give the type
-					item.label.detail = " " ~ item.label.description;
 			}
 
 
