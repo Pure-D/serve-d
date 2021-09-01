@@ -830,6 +830,8 @@ struct TextDocumentClientCapabilities
 			//Optional!(MarkupKind[]) documentationFormat;
 			Optional!bool deprecatedSupport;
 			Optional!bool preselectSupport;
+			Optional!bool insertReplaceSupport;
+			Optional!bool labelDetailsSupport;
 		}
 
 		struct CompletionItemKindSet
@@ -1016,8 +1018,16 @@ enum TextDocumentSyncKind
 
 struct CompletionOptions
 {
+	mixin StrictOptionalSerializer;
+
+	struct CompletionItem
+	{
+		Optional!bool labelDetailsSupport;
+	}
+
 	bool resolveProvider;
 	string[] triggerCharacters;
+	Optional!CompletionItem completionItem;
 }
 
 struct SignatureHelpOptions
@@ -1294,24 +1304,30 @@ enum InsertTextFormat
 	snippet
 }
 
-struct CompletionItemLabel
+struct CompletionItemLabelDetails
 {
-	string label;
+	mixin StrictOptionalSerializer;
+
+	/**
+	 * An optional string which is rendered less prominently directly after
+	 * {@link CompletionItemLabel.label label}, without any spacing. Should be
+	 * used for function signatures or type annotations.
+	 */
 	Optional!string detail;
+
+	/**
+	 * An optional string which is rendered less prominently after
+	 * {@link CompletionItemLabel.detail}. Should be used for fully qualified
+	 * names or file path.
+	 */
 	Optional!string description;
-	
-	int opCmp(const CompletionItemLabel r) const
-  	{
-    	immutable c = label == r.label;
-    	return c ? 0 : 1;
-  	}
 }
 
 struct CompletionItem
 {
 	mixin StrictOptionalSerializer;
 
-	CompletionItemLabel label;
+	string label;
 	Optional!CompletionItemKind kind;
 	Optional!string detail;
 	Optional!MarkupContent documentation;
@@ -1326,6 +1342,7 @@ struct CompletionItem
 	Optional!(string[]) commitCharacters;
 	Optional!Command command;
 	JSONValue data;
+	Optional!CompletionItemLabelDetails labelDetails;
 }
 
 enum CompletionItemKind

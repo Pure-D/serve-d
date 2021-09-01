@@ -451,7 +451,7 @@ InitializeResult initialize(InitializeParams params)
 	// only provide fixes when doCompleteSnippets is requested
 	result.capabilities.completionProvider = CompletionOptions(doCompleteSnippets, [
 			".", "=", "/", "*", "+", "-"
-			]);
+			], CompletionOptions.CompletionItem(true.opt).opt);
 	result.capabilities.signatureHelpProvider = SignatureHelpOptions([
 			"(", "[", ","
 			]);
