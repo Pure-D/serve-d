@@ -9,17 +9,18 @@ import served.utils.fibermanager;
 import workspaced.api;
 import workspaced.com.dfmt : DfmtComponent;
 import workspaced.com.dcd;
+import workspaced.com.dcdext;
 import workspaced.com.snippets;
 import workspaced.coms;
 
-import std.algorithm : among, any, canFind, chunkBy, endsWith, filter, map, min,
-	reverse, sort, startsWith, uniq;
+import std.algorithm : among, any, canFind, chunkBy, endsWith, filter, findSplit,
+	map, min, reverse, sort, startsWith, uniq;
 import std.array : appender, array;
 import std.conv : text, to;
 import std.experimental.logger;
 import std.json : JSONType, JSONValue;
-import std.string : indexOf, join, lastIndexOf, lineSplitter, strip,
-	stripLeft, stripRight, toLower;
+import std.string : indexOf, join, lastIndexOf, lineSplitter, strip, stripLeft,
+	stripRight, toLower;
 import std.utf : decodeFront;
 
 import dparse.lexer : Token;
@@ -381,17 +382,19 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 		trace("Providing dscanner.ini completion");
 		auto possibleFields = backend.get!DscannerComponent.listAllIniFields;
 		scope line = document.lineAtScope(params.position).strip;
-		auto defaultList = CompletionList(false, possibleFields.map!(a => CompletionItem(CompletionItemLabel(a.name),
-				CompletionItemKind.field.opt, Optional!string.init,
-				MarkupContent(a.documentation).opt, Optional!bool.init, Optional!bool.init,
-				Optional!string.init, Optional!string.init, (a.name ~ '=').opt)).array);
+		auto defaultList = CompletionList(false, possibleFields.map!((a) {
+			CompletionItem ret = CompletionItem(a.name, CompletionItemKind.field.opt);
+			ret.documentation = MarkupContent(a.documentation).opt;
+			ret.insertText = (a.name ~ '=').opt;
+			return ret;
+		}).array);
 		if (!line.length)
 			return defaultList;
 		if (line[0] == '[')
 			return CompletionList(false, [
-					CompletionItem(CompletionItemLabel("analysis.config.StaticAnalysisConfig"),
+					CompletionItem("analysis.config.StaticAnalysisConfig",
 						CompletionItemKind.keyword.opt),
-					CompletionItem(CompletionItemLabel("analysis.config.ModuleFilters"), CompletionItemKind.keyword.opt, Optional!string.init,
+					CompletionItem("analysis.config.ModuleFilters", CompletionItemKind.keyword.opt, Optional!string.init,
 						MarkupContent("In this optional section a comma-separated list of inclusion and exclusion"
 						~ " selectors can be specified for every check on which selective filtering"
 						~ " should be applied. These given selectors match on the module name and"
@@ -407,11 +410,11 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 			return defaultList;
 		else
 			return CompletionList(false, [
-					CompletionItem(CompletionItemLabel(`"disabled"`), CompletionItemKind.value.opt,
+					CompletionItem(`"disabled"`, CompletionItemKind.value.opt,
 						"Check is disabled".opt),
-					CompletionItem(CompletionItemLabel(`"enabled"`), CompletionItemKind.value.opt,
+					CompletionItem(`"enabled"`, CompletionItemKind.value.opt,
 						"Check is enabled".opt),
-					CompletionItem(CompletionItemLabel(`"skip-unittest"`), CompletionItemKind.value.opt,
+					CompletionItem(`"skip-unittest"`, CompletionItemKind.value.opt,
 						"Check is enabled but not operated in the unittests".opt)
 					]);
 	}
@@ -452,7 +455,7 @@ CompletionList provideDMLSourceComplete(TextDocumentPositionParams params,
 		CompletionItem translated;
 
 		translated.sortText = ((item.type == CompletionType.Class ? "1." : "0.") ~ item.value).opt;
-		translated.label.label = item.value;
+		translated.label = item.value;
 		if (item.documentation.length)
 			translated.documentation = MarkupContent(item.documentation).opt;
 		if (item.enumName.length)
@@ -538,6 +541,8 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 
 	auto completion = updateDietFile(document.uri.uriToFile, document.rawText.idup);
 
+	auto dcdext = instance.has!DCDExtComponent ? instance.get!DCDExtComponent : null;
+
 	size_t offset = document.positionToBytes(params.position);
 	auto raw = completion.completeAt(offset);
 	CompletionItem[] ret;
@@ -553,19 +558,20 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 			auto dcd = instance.get!DCDComponent.listCompletion(code, cast(int) offset).getYield;
 			if (dcd.type == DCDCompletions.Type.identifiers)
 			{
-				ret = dcd.identifiers.convertDCDIdentifiers(d.argumentSnippets, d.completeNoDupes);
+				ret = dcd.identifiers.convertDCDIdentifiers(d.argumentSnippets, d.completeNoDupes, dcdext);
 			}
 		}
 	}
 	else
 		ret = raw.map!((a) {
 			CompletionItem ret;
-			ret.label.label = a.text;
+			ret.label = a.text;
 			ret.kind = a.type.mapToCompletionItemKind.opt;
 			if (a.definition.length)
 			{
 				ret.detail = a.definition.opt;
-				ret.label.detail = ret.detail;
+				if (capabilities.textDocument.completion.completionItem.labelDetailsSupport)
+					ret.labelDetails = CompletionItemLabelDetails(ret.detail);
 			}
 			if (a.documentation.length)
 				ret.documentation = MarkupContent(a.documentation).opt;
@@ -583,6 +589,8 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 	auto lineRange = document.lineByteRangeAt(params.position.line);
 	auto byteOff = cast(int) document.positionToBytes(params.position);
 
+	auto dcdext = instance.has!DCDExtComponent ? instance.get!DCDExtComponent : null;
+
 	string line = document.rawText[lineRange[0] .. lineRange[1]].idup;
 	string prefix = line[0 .. min($, params.position.character)].strip;
 	CompletionItem[] completion;
@@ -598,7 +606,7 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 			{
 				if (compl.startsWith(remaining))
 				{
-					auto item = CompletionItem(CompletionItemLabel(compl), CompletionItemKind.snippet.opt);
+					auto item = CompletionItem(compl, CompletionItemKind.snippet.opt);
 					item.insertText = compl ~ ": ";
 					completion ~= item;
 				}
@@ -636,7 +644,7 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 		if (result.type == DCDCompletions.Type.identifiers)
 		{
 			auto d = config.d;
-			completion ~= convertDCDIdentifiers(result.identifiers, d.argumentSnippets, d.completeNoDupes);
+			completion ~= convertDCDIdentifiers(result.identifiers, d.argumentSnippets, d.completeNoDupes, dcdext);
 		}
 		else if (result.type != DCDCompletions.Type.calltips)
 		{
@@ -669,16 +677,16 @@ private void provideDocComplete(TextDocumentPositionParams params, WorkspaceD.In
 		auto sig = "signature" in def.attributes;
 		if (!sig)
 		{
-			CompletionItem doc = CompletionItem(CompletionItemLabel("///"));
+			CompletionItem doc = CompletionItem("///");
 			doc.kind = CompletionItemKind.snippet;
 			doc.insertTextFormat = InsertTextFormat.snippet;
 			auto eol = document.eolAt(params.position.line).toString;
 			doc.insertText = "/// ";
 			CompletionItem doc2 = doc;
 			CompletionItem doc3 = doc;
-			doc2.label.label = "/**";
+			doc2.label = "/**";
 			doc2.insertText = "/** " ~ eol ~ " * $0" ~ eol ~ " */";
-			doc3.label.label = "/++";
+			doc3.label = "/++";
 			doc3.insertText = "/++ " ~ eol ~ " * $0" ~ eol ~ " +/";
 
 			completion.addDocComplete(doc, lineStripped);
@@ -714,16 +722,16 @@ private void provideDocComplete(TextDocumentPositionParams params, WorkspaceD.In
 			docs ~= "Deprecated: $" ~ argNo.to!string ~ *depr;
 			argNo++;
 		}
-		CompletionItem doc = CompletionItem(CompletionItemLabel("///"));
+		CompletionItem doc = CompletionItem("///");
 		doc.kind = CompletionItemKind.snippet;
 		doc.insertTextFormat = InsertTextFormat.snippet;
 		auto eol = document.eolAt(params.position.line).toString;
 		doc.insertText = docs.map!(a => "/// " ~ a).join(eol);
 		CompletionItem doc2 = doc;
 		CompletionItem doc3 = doc;
-		doc2.label.label = "/**";
+		doc2.label = "/**";
 		doc2.insertText = "/** " ~ eol ~ docs.map!(a => " * " ~ a ~ eol).join() ~ " */";
-		doc3.label.label = "/++";
+		doc3.label = "/++";
 		doc3.insertText = "/++ " ~ eol ~ docs.map!(a => " + " ~ a ~ eol).join() ~ " +/";
 
 		doc.sortText = opt(sortPrefixDoc ~ "0");
@@ -761,7 +769,7 @@ private void provideSnippetComplete(TextDocumentPositionParams params, Workspace
 
 private void addDocComplete(ref CompletionItem[] completion, CompletionItem doc, string prefix)
 {
-	if (!doc.label.label.startsWith(prefix))
+	if (!doc.label.startsWith(prefix))
 		return;
 	if (prefix.length > 0)
 		doc.insertText = doc.insertText[prefix.length .. $];
@@ -865,7 +873,7 @@ CompletionItem resolveCompletionItem(CompletionItem item)
 CompletionItem snippetToCompletionItem(Snippet snippet)
 {
 	CompletionItem item;
-	item.label.label = snippet.shortcut;
+	item.label = snippet.shortcut;
 	item.sortText = opt(sortPrefixSnippets ~ snippet.shortcut);
 	item.detail = snippet.title.opt;
 	item.kind = CompletionItemKind.snippet.opt;
@@ -892,7 +900,7 @@ CompletionItem snippetToCompletionItem(Snippet snippet)
 Snippet snippetFromCompletionItem(CompletionItem item)
 {
 	Snippet snippet;
-	snippet.shortcut = item.label.label;
+	snippet.shortcut = item.label;
 	snippet.title = item.detail.get;
 	snippet.documentation = item.documentation.get.value;
 	auto end = snippet.documentation.lastIndexOf("\n\n```d\n");
@@ -927,46 +935,100 @@ unittest
 	assert(!isInComment("int x;\n// line comment\n", 23, backend));
 }
 
-auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, bool completeNoDupes)
+auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, bool completeNoDupes, DCDExtComponent dcdext)
 {
 	CompletionItem[] completion;
 	foreach (identifier; identifiers)
 	{
 		CompletionItem item;
-		item.label.label = identifier.identifier;
+		string detailDetail, detailDescription;
+		item.label = identifier.identifier;
 		item.kind = identifier.type.convertFromDCDType;
 		if (identifier.documentation.length)
 			item.documentation = MarkupContent(identifier.documentation.ddocToMarked);
 		
 		if (identifier.definition.length == 0)
 		{
-			if(identifier.type == "c")
-				item.label.description = "Class";
-			else if(identifier.type == "s")
-				item.label.description = "Struct";
-			else if(identifier.type == "g")
-				item.label.description = "Enum";
-			else if(identifier.type == "t")
-				item.label.description = "Template";
-			else if(identifier.type == "l")
-				item.label.description = "Alias";
-			else if(identifier.type == "M")
-				item.label.description = "Module";
-			else if(identifier.type == "P")
-				item.label.description = "Package";
+			if (identifier.type.length == 1)
+			{
+				switch (identifier.type[0])
+				{
+				case 'c':
+					detailDescription = "Class";
+					break;
+				case 'i':
+					detailDescription = "Interface";
+					break;
+				case 's':
+					detailDescription = "Struct";
+					break;
+				case 'u':
+					detailDescription = "Union";
+					break;
+				case 'a':
+					detailDescription = "Array";
+					break;
+				case 'A':
+					detailDescription = "AA";
+					break;
+				case 'v':
+					detailDescription = "Variable";
+					break;
+				case 'm':
+					detailDescription = "Member";
+					break;
+				case 'e':
+					// lowercare to differentiate member from enum name
+					detailDescription = "enum";
+					break;
+				case 'k':
+					detailDescription = "Keyword";
+					break;
+				case 'f':
+					detailDescription = "Function";
+					break;
+				case 'g':
+					detailDescription = "Enum";
+					break;
+				case 'P':
+					detailDescription = "Package";
+					break;
+				case 'M':
+					detailDescription = "Module";
+					break;
+				case 't':
+				case 'T':
+					detailDescription = "Template";
+					break;
+				case 'h':
+					detailDescription = "<T>";
+					break;
+				case 'p':
+					detailDescription = "<T...>";
+					break;
+				case 'l': // Alias (eventually should show what it aliases to)
+				default:
+					break;
+				}
+			}
 		}
 		else
 		{
 			item.detail = identifier.definition;
 
 			// check if that's actually a proper completion item to process
-			if (identifier.definition.indexOf(" ") != -1)
+			auto definitionSpace = identifier.definition.indexOf(' ');
+			if (definitionSpace != -1)
 			{
-				item.label.description = identifier.definition[0 .. identifier.definition.indexOf(" ")];
+				detailDescription = identifier.definition[0 .. definitionSpace];
 				
 				// if function, only show the parenthesis content
 				if (identifier.type == "f")
-					item.label.detail = " " ~ identifier.definition[identifier.definition.indexOf("(") .. $];
+				{
+					auto paren = identifier.definition.indexOf('(');
+					if (paren != -1)
+						detailDetail = " " ~ identifier.definition[paren .. $];
+				}
 			}
 
 
@@ -974,26 +1036,30 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 			if (identifier.type == "e")
 			{
 				// lowercare to differentiate member from enum name
-				item.label.description = "enum";
+				detailDescription = "enum";
 			}
-			else if (identifier.type == "f")
+			else if (identifier.type == "f" && dcdext)
 			{
-				// handle case where function returns 'auto'
-				auto beforeParenthesis = identifier.definition[0 .. identifier.definition.indexOf("(")];
-				
+				CalltipsSupport funcParams = dcdext.extractCallParameters(
+					identifier.definition, cast(int) identifier.definition.length - 1, true);
+
 				// if definition doesn't contains a return type, then it is a function that returns auto
 				// it could be 'enum', but that's typically the same, and there is no way to get that info right now
 				// need to check on DCD's part, auto/enum are removed from the definition
-				auto isAuto = beforeParenthesis.indexOf(" ") == -1;
-				if (isAuto)
-					item.label.description = "auto";
+				auto nameEnd = funcParams.templateArgumentsRange[0];
+				if (!nameEnd) nameEnd = funcParams.functionParensRange[0];
+				if (!nameEnd) nameEnd = cast(int) identifier.definition.length;
+				auto retTypeEnd = identifier.definition.lastIndexOf(' ', nameEnd);
+				if (retTypeEnd != -1)
+					detailDescription = identifier.definition[0 .. retTypeEnd].strip;
+				else
+					detailDescription = "auto";
 
-				item.label.detail = " " ~ identifier.definition[identifier.definition.indexOf("(") .. $];
+				detailDetail = " " ~ identifier.definition[nameEnd .. $];
 			}
-			
 
-			if (!completeNoDupes)
-				item.sortText = identifier.definition;
+			item.sortText = identifier.definition;
+
 			// TODO: only add arguments when this is a function call, eg not on template arguments
 			if (identifier.type == "f" && argumentSnippets)
 			{
@@ -1026,9 +1092,21 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 		}
 
 		if (item.sortText.isNull)
-			item.sortText = item.label.label.opt;
+			item.sortText = item.label.opt;
 
 		item.sortText = opt(sortPrefixDCD ~ identifier.type.sortFromDCDType ~ item.sortText.get);
+
+		if (detailDescription.length || detailDetail.length)
+		{
+			CompletionItemLabelDetails d;
+			if (detailDetail.length)
+				d.detail = detailDetail.opt;
+			if (detailDescription.length)
+				d.description = detailDescription.opt;
+
+			if (capabilities.textDocument.completion.completionItem.labelDetailsSupport)
+				item.labelDetails = d.opt;
+		}
 
 		completion ~= item;
 	}
