@@ -31,7 +31,7 @@ This implements most language features of the language server protocol for D and
 
 ## Usage
 
-To use serve-d you will need an [Editor](https://microsoft.github.io/language-server-protocol/implementors/tools/) (client) with support for the Language Server Protocol. Depending on the editor the initialization code might look different and will need to be adapted for each editor. This is realtively small though and can be done easily for all editors.
+To use serve-d you will need an [Editor](https://microsoft.github.io/language-server-protocol/implementors/tools/) (client) with support for the Language Server Protocol. Depending on the editor the initialization code might look different and will need to be adapted for each editor. This is relatively small though and can be done easily for all editors.
 
 **Officially Supported Editors**
 
