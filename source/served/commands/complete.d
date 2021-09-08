@@ -968,7 +968,7 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 				// if function, only show the parenthesis content
 				if (identifier.type == "f")
 				{
-					// function params stare after the identifier
+					// function params start after the identifier
 					// doing it this way properly cover cases where the function is templated
 					// eg: "const(T)[] split_alloc(T)(Allocator* allocator, const(T)[] text, const(T) delimiter)"
 					// as a result, we also get to see the template information
