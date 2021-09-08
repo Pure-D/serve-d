@@ -968,13 +968,13 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 				// if function, only show the parenthesis content
 				if (identifier.type == "f")
 				{
-					// function params starte after the identifier
-					// doing it this way properly cover cases where the function is tempalted
+					// function params stare after the identifier
+					// doing it this way properly cover cases where the function is templated
 					// eg: "const(T)[] split_alloc(T)(Allocator* allocator, const(T)[] text, const(T) delimiter)"
-					// as a result, we alto get to see the template information
+					// as a result, we also get to see the template information
 
 					// Completion Popup;
-					// 	[ identifier: split_alloc - detail: (T)(Allocator* allocator, const(T)[] text, const(T) delimiter) - description: const(T)[]  ]
+					//  [ identifier: split_alloc - detail: (T)(Allocator* allocator, const(T)[] text, const(T) delimiter) - description: const(T)[]  ]
 
 					auto starti = identifier.definition.indexOf(identifier.identifier) + identifier.identifier.length;
 					item.label.detail = " " ~ identifier.definition[starti .. $];
