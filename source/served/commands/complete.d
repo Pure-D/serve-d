@@ -550,7 +550,7 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 		if (offset <= code.length && instance.has!DCDComponent)
 		{
 			info("DCD Completing Diet for ", code, " at ", offset);
-			auto dcd = instance.get!DCDComponent.listCompletion(document.uri, code, cast(int) offset).getYield;
+			auto dcd = instance.get!DCDComponent.listCompletion(code, cast(int) offset).getYield;
 			if (dcd.type == DCDCompletions.Type.identifiers)
 			{
 				ret = dcd.identifiers.convertDCDIdentifiers(d.argumentSnippets, d.completeNoDupes);
@@ -622,7 +622,7 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 	DCDCompletions result = DCDCompletions.empty;
 	joinAll({
 		if (completeDCD)
-			result = instance.get!DCDComponent.listCompletion(document.uri, document.rawText, byteOff).getYield;
+			result = instance.get!DCDComponent.listCompletion(document.rawText, byteOff).getYield;
 	}, {
 		if (completeDoc)
 			provideDocComplete(params, instance, document, completion, line, lineRange);
