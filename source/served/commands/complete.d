@@ -974,7 +974,7 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 					// as a result, we also get to see the template information
 
 					// Completion Popup;
-					//  [ identifier: split_alloc - detail: (T)(Allocator* allocator, const(T)[] text, const(T) delimiter) - description: const(T)[]  ]
+					//  [ identifier: split_alloc - detail: (T)(Allocator* allocator, const(T)[] text, const(T) delimiter) - description: const(T)[] ]
 
 					auto starti = identifier.definition.indexOf(identifier.identifier) + identifier.identifier.length;
 					item.label.detail = " " ~ identifier.definition[starti .. $];
@@ -1041,12 +1041,6 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 			item.sortText = item.label.label.opt;
 
 		item.sortText = opt(sortPrefixDCD ~ identifier.type.sortFromDCDType ~ item.sortText.get);
-
-
-		static if(PRINT)
-		{
-			append("C:\\Users\\ryuukk\\Downloads\\test_served.txt", "\t" ~ to!string(item) ~ "\n");
-		}
 		completion ~= item;
 	}
 
