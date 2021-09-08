@@ -1294,11 +1294,24 @@ enum InsertTextFormat
 	snippet
 }
 
+struct CompletionItemLabel
+{
+	string label;
+	Optional!string detail;
+	Optional!string description;
+	
+	int opCmp(const CompletionItemLabel r) const
+  	{
+    	immutable c = label == r.label;
+    	return c ? 0 : 1;
+  	}
+}
+
 struct CompletionItem
 {
 	mixin StrictOptionalSerializer;
 
-	string label;
+	CompletionItemLabel label;
 	Optional!CompletionItemKind kind;
 	Optional!string detail;
 	Optional!MarkupContent documentation;
