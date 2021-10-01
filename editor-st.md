@@ -21,12 +21,9 @@ Client Configuration:
 				// optional settings
 				"d.servedReleaseChannel": "nightly",
 				"d.aggressiveUpdate": false,
-				"d.enableDMDImportTiming": false,
 				"d.manyProjectsAction": "load",
 				"d.enableAutoComplete": true,
-				"d.alwaysShowDubStatusButtons": true,
 				"d.completeNoDupes": true,
-				"d.enableGCProfilerDecorations": false
 			}
 		}
 	}
