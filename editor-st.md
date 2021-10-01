@@ -15,10 +15,10 @@ Client Configuration:
 			"command": ["C:/Users/MY_NAME_HERE/AppData/Roaming/code-d/bin/serve-d.exe"],
 			"selector": "source.d",
 			"settings": {
-				"d.dcdServerPath": ""C:/Users/MY_NAME_HERE/AppData/Roaming/code-d/bin/dcd-server.exe",
-				"d.dcdClientPath": ""C:/Users/MY_NAME_HERE/AppData/Roaming/code-d/bin/dcd-client.exe",
-        
-        // optional settings
+				"d.dcdServerPath": "C:/Users/MY_NAME_HERE/AppData/Roaming/code-d/bin/dcd-server.exe",
+				"d.dcdClientPath": "C:/Users/MY_NAME_HERE/AppData/Roaming/code-d/bin/dcd-client.exe",
+
+				// optional settings
 				"d.servedReleaseChannel": "nightly",
 				"d.aggressiveUpdate": false,
 				"d.enableDMDImportTiming": false,
