@@ -43,6 +43,7 @@ _add LSP configurations using serve-d for other editors and PR them here!_
 **Other Editor Guides**
 
 * [vim](editor-vim.md)
+* [sublime text](editor-st.md)
 
 ### Command Line options
 
