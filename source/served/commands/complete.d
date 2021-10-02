@@ -1110,7 +1110,7 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 			{
 				// labelDetails is not supported, but let's use what we computed, it's still very useful
 
-				// if we fot a detailed Description, use that
+				// if we got a detailed Description, use that
 				if (detailDescription.length)
 					item.detail = detailDescription;
 
