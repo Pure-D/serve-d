@@ -1106,6 +1106,11 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 
 			if (capabilities.textDocument.completion.completionItem.labelDetailsSupport)
 				item.labelDetails = d.opt;
+			else
+			{
+				if (item.detail.length == 0 && detailDescription.length)
+					item.detail = detailDescription;
+			}
 		}
 
 		completion ~= item;
