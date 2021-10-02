@@ -1108,8 +1108,18 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 				item.labelDetails = d.opt;
 			else
 			{
-				if (item.detail.length == 0 && detailDescription.length)
+				// labelDetails is not supported, but let's use what we computed, it's still very useful
+
+				// if we fot a detailed Description, use that
+				if (detailDescription.length)
 					item.detail = detailDescription;
+
+				// if we got a detailed detail, use that, and properly set the insertText
+				if (detailDetail)
+				{
+					item.insertText = item.label;
+					item.label ~= detailDetail;
+				}
 			}
 		}
 
