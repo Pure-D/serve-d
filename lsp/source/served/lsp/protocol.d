@@ -52,6 +52,11 @@ struct Optional(T)
 		value = T.init;
 	}
 
+	bool opCast(T : bool)() const
+	{
+		return !isNull;
+	}
+
 	string toString() const
 	{
 		if (isNull)
