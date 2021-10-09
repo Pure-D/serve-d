@@ -17,6 +17,7 @@ import std.algorithm : among, any, canFind, chunkBy, endsWith, filter, findSplit
 	map, min, reverse, sort, startsWith, uniq;
 import std.array : appender, array;
 import std.conv : text, to;
+import std.format : format;
 import std.experimental.logger;
 import std.json : JSONType, JSONValue;
 import std.string : indexOf, join, lastIndexOf, lineSplitter, strip, stripLeft,
@@ -558,7 +559,7 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 			auto dcd = instance.get!DCDComponent.listCompletion(code, cast(int) offset).getYield;
 			if (dcd.type == DCDCompletions.Type.identifiers)
 			{
-				ret = dcd.identifiers.convertDCDIdentifiers(d.argumentSnippets, d.completeNoDupes, dcdext);
+				ret = dcd.identifiers.convertDCDIdentifiers(d.argumentSnippets, dcdext);
 			}
 		}
 	}
@@ -644,7 +645,7 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 		if (result.type == DCDCompletions.Type.identifiers)
 		{
 			auto d = config.d;
-			completion ~= convertDCDIdentifiers(result.identifiers, d.argumentSnippets, d.completeNoDupes, dcdext);
+			completion ~= convertDCDIdentifiers(result.identifiers, d.argumentSnippets, dcdext);
 		}
 		else if (result.type != DCDCompletions.Type.calltips)
 		{
@@ -935,7 +936,7 @@ unittest
 	assert(!isInComment("int x;\n// line comment\n", 23, backend));
 }
 
-auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, bool completeNoDupes, DCDExtComponent dcdext)
+auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, DCDExtComponent dcdext)
 {
 	CompletionItem[] completion;
 	foreach (identifier; identifiers)
@@ -1035,7 +1036,7 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 			// handle special cases
 			if (identifier.type == "e")
 			{
-				// lowercare to differentiate member from enum name
+				// enum definitions are the enum identifiers (not the type)
 				detailDescription = "enum";
 			}
 			else if (identifier.type == "f" && dcdext)
@@ -1104,50 +1105,103 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, b
 			if (detailDescription.length)
 				d.description = detailDescription.opt;
 
-			if (capabilities.textDocument.completion.completionItem.labelDetailsSupport)
-				item.labelDetails = d.opt;
+			item.labelDetails = d.opt;
 		}
 
 		completion ~= item;
 	}
 
 	// sort only for duplicate detection (use sortText for UI sorting)
-	completion.sort!"a.label < b.label";
-	if (completeNoDupes)
-		return completion.chunkBy!((a, b) => a.label == b.label && a.kind == b.kind)
-			.map!((a) {
-				CompletionItem ret = a.front;
-				auto details = a.map!"a.detail"
-					.filter!"!a.isNull && a.value.length"
+	completion.sort!"a.effectiveInsertText < b.effectiveInsertText";
+	return completion.chunkBy!(
+			(a, b) =>
+				a.effectiveInsertText == b.effectiveInsertText
+				&& a.kind == b.kind
+		).map!((a) {
+			CompletionItem ret = a.front;
+			auto details = a.map!"a.detail"
+				.filter!"!a.isNull && a.value.length"
+				.uniq
+				.array;
+			auto docs = a.map!"a.documentation"
+				.filter!"!a.isNull && a.value.value.length"
+				.uniq
+				.array;
+			auto labelDetails = a.map!"a.labelDetails"
+				.filter!"!a.isNull"
+				.uniq
+				.array;
+			if (docs.length)
+				ret.documentation = MarkupContent(MarkupKind.markdown,
+					docs.map!"a.value.value".join("\n\n"));
+			if (details.length)
+				ret.detail = details.map!"a.value".join("\n");
+
+			if (labelDetails.length == 1)
+			{
+				ret.labelDetails = labelDetails[0];
+			}
+			else if (labelDetails.length > 1)
+			{
+				auto descriptions = labelDetails
+					.filter!"!a.description.isNull"
+					.map!"a.description.get"
+					.array
+					.sort!"a<b"
 					.uniq
 					.array;
-				auto docs = a.map!"a.documentation"
-					.filter!"!a.isNull && a.value.value.length"
+				auto detailDetails = labelDetails
+					.filter!"!a.detail.isNull"
+					.map!"a.detail.get"
+					.array
+					.sort!"a<b"
 					.uniq
 					.array;
-				if (docs.length)
-					ret.documentation = MarkupContent(MarkupKind.markdown,
-						docs.map!"a.value.value".join("\n\n"));
-				if (details.length)
-					ret.detail = details.map!"a.value".join("\n");
-				return ret;
-			})
-			.array;
-	else
-		return completion.chunkBy!((a, b) => a.label == b.label && a.detail == b.detail
-				&& a.kind == b.kind)
-			.map!((a) {
-				CompletionItem ret = a.front;
-				auto docs = a.map!"a.documentation"
-					.filter!"!a.isNull && a.value.value.length"
-					.uniq
-					.array;
-				if (docs.length)
-					ret.documentation = MarkupContent(MarkupKind.markdown,
-						docs.map!"a.value.value".join("\n\n"));
-				return ret;
-			})
-			.array;
+
+				CompletionItemLabelDetails detail;
+				if (descriptions.length == 1)
+					detail.description = descriptions[0];
+				else if (descriptions.length)
+					detail.description = descriptions.join(" | ");
+
+				if (detailDetails.length == 1)
+					detail.detail = detailDetails[0];
+				else if (detailDetails.length && detailDetails[0].endsWith(")"))
+					detail.detail = format!" (*%d overloads*)"(detailDetails.length);
+				else if (detailDetails.length) // dunno when/if this can even happen
+					detail.description = detailDetails.join(" |");
+
+				ret.labelDetails = detail;
+			}
+
+			migrateLabelDetailsSupport(ret);
+			return ret;
+		})
+		.array;
+}
+
+private void migrateLabelDetailsSupport(ref CompletionItem item)
+{
+	if (!capabilities.textDocument.completion.completionItem.labelDetailsSupport
+		&& !item.labelDetails.isNull)
+	{
+		// labelDetails is not supported, but let's use what we computed, it's
+		// still very useful
+		CompletionItemLabelDetails detail = item.labelDetails.get;
+
+		// don't overwrite `detail`, it may be used to show full definition in a
+		// documentation popup.
+
+		// if we got a detailed detail, use that and properly set the insertText
+		if (detail.detail)
+		{
+			if (item.insertText.isNull)
+				item.insertText = item.label;
+			item.label ~= detail.detail;
+		}
+
+		item.labelDetails.nullify();
+	}
 }
 
 // === Protocol Notifications starting here ===

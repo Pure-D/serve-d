@@ -90,7 +90,6 @@ struct Configuration
 		bool overrideDfmtEditorconfig = true;
 		bool aggressiveUpdate = false; // differs from default code-d settings on purpose!
 		bool argumentSnippets = false;
-		bool completeNoDupes = true;
 		bool scanAllFolders = true;
 		string[] disabledRootGlobs;
 		string[] extraRoots;

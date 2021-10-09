@@ -1348,6 +1348,11 @@ struct CompletionItem
 	Optional!Command command;
 	JSONValue data;
 	Optional!CompletionItemLabelDetails labelDetails;
+
+	string effectiveInsertText() const
+	{
+		return insertText.isNull ? label : insertText.get;
+	}
 }
 
 enum CompletionItemKind
