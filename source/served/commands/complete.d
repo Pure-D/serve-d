@@ -597,6 +597,11 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 	CompletionItem[] completion;
 	Token commentToken;
 	if (document.rawText.isInComment(byteOff, backend, &commentToken))
+	{
+		import dparse.lexer : tok;
+		if (commentToken.type == tok!"__EOF__")
+			return CompletionList.init;
+
 		if (commentToken.text.startsWith("///", "/**", "/++"))
 		{
 			trace("Providing comment completion");
@@ -620,6 +625,7 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 
 			return CompletionList(false, completion);
 		}
+	}
 
 	bool completeDCD = instance.has!DCDComponent;
 	bool completeDoc = instance.has!DscannerComponent;
@@ -791,29 +797,37 @@ private bool isInComment(scope const(char)[] code, size_t at, WorkspaceD backend
 	config.stringBehavior = StringBehavior.source;
 	auto lexer = DLexer(code, config, &backend.stringCache);
 
-	while (!lexer.empty) switch (lexer.front.type)
+	while (!lexer.empty)
 	{
-	case tok!"comment":
-		auto t = lexer.front;
+		if (lexer.front.index > at)
+			return false;
 
-		auto commentEnd = t.index + t.text.length;
-		if (t.text.startsWith("//"))
-			commentEnd++;
-
-		if (t.index <= at && at < commentEnd)
+		switch (lexer.front.type)
 		{
-			if (outToken !is null)
-				*outToken = t;
-			return true;
-		}
+		case tok!"comment":
+			auto t = lexer.front;
 
-		lexer.popFront();
-		break;
-	case tok!"__EOF__":
-		return false;
-	default:
-		lexer.popFront();
-		break;
+			auto commentEnd = t.index + t.text.length;
+			if (t.text.startsWith("//"))
+				commentEnd++;
+
+			if (t.index <= at && at < commentEnd)
+			{
+				if (outToken !is null)
+					*outToken = t;
+				return true;
+			}
+
+			lexer.popFront();
+			break;
+		case tok!"__EOF__":
+			if (outToken !is null)
+				*outToken = lexer.front;
+			return true;
+		default:
+			lexer.popFront();
+			break;
+		}
 	}
 	return false;
 }
