@@ -69,12 +69,19 @@ struct ProfileGCCache
 
 	void update(DocumentUri uri)
 	{
+		import std.file : FileException;
+
 		try
 		{
 			auto profileGC = documents.getOrFromFilesystem(uri);
 			trace("Processing profilegc.log ", uri);
 			auto entries = caches.require(uri).process(uri.uriDirName, profileGC.rawText);
 			// trace("Processed: ", entries);
+		}
+		catch (FileException e)
+		{
+			trace("File Exception processing profilegc: ", e.msg);
+			caches.remove(uri);
 		}
 		catch (Exception e)
 		{

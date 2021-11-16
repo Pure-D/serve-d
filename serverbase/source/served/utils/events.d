@@ -171,6 +171,18 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 	{
 		import std.typecons : tuple;
 
+		T parseParam(T)()
+		{
+			try
+			{
+				return fromJSON!T(params);
+			}
+			catch (Exception e)
+			{
+				throw new Exception("Failed converting input parameter " ~ params.toPrettyString ~ " to needed type `" ~ T.stringof ~ "`: " ~ e.msg);
+			}
+		}
+
 		return iterateExtensionMethodsByUDA!(UDA, (name, symbol, uda) {
 			if (uda.method == method)
 			{
@@ -184,12 +196,12 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 				}
 				else static if (symbolArgs.length == 1)
 				{
-					auto arguments = tuple(fromJSON!(symbolArgs[0])(params));
+					auto arguments = tuple(parseParam!(symbolArgs[0]));
 				}
 				else static if (availableExtraArgs.length > 0
 					&& symbolArgs.length <= 1 + availableExtraArgs.length)
 				{
-					auto arguments = tuple(fromJSON!(symbolArgs[0])(params), forward!(
+					auto arguments = tuple(parseParam!(symbolArgs[0]), forward!(
 						availableExtraArgs[0 .. symbolArgs.length + -1]));
 				}
 				else
