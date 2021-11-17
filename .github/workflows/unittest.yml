@@ -12,8 +12,6 @@ jobs:
         exclude:
         - os: windows-latest
           dc: dmd-latest
-        - os: macos-latest
-          dc: dmd-latest
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
@@ -24,7 +22,7 @@ jobs:
           compiler: ${{ matrix.dc }}
 
       - name: dub upgrade
-        uses: WebFreak001/dub-upgrade@v0.1.0
+        run: dub upgrade
 
       - name: LSP tests
         run: dub test :lsp
@@ -51,8 +49,3 @@ jobs:
         run: dub test
         env:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
-
-      - name: cache dependency binaries
-        uses: WebFreak001/dub-upgrade@v0.1.0
-        with:
-          store: true
