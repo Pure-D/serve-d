@@ -273,36 +273,32 @@ private:
 				break;
 			assert(content.length == contentLength);
 			RequestMessage request;
-			bool validRequest = false;
+			RequestMessage[] extraRequests;
 			try
 			{
 				auto json = parseJSON(content);
-				auto id = "id" in json;
-				bool isResponse = false;
-				if (id)
+				if (json.type == JSONType.array)
 				{
-					auto tok = RequestToken(id);
-					foreach (ref waiting; responseTokens)
+					auto arr = json.array;
+					if (arr.length == 0)
+						send(ResponseMessage(RequestToken.init, ResponseError(ErrorCode.invalidRequest, "Empty batch request")));
+
+					foreach (subRequest; arr)
 					{
-						if (!waiting.got && waiting.token == tok)
-						{
-							waiting.got = true;
-							waiting.ret.id = tok;
-							auto res = "result" in json;
-							auto err = "error" in json;
-							if (res)
-								waiting.ret.result = *res;
-							if (err)
-								waiting.ret.error = (*err).fromJSON!ResponseError;
-							isResponse = true;
-							break;
-						}
+						auto res = handleRequestImpl(subRequest);
+						if (request == RequestMessage.init)
+							request = res;
+						else if (res != RequestMessage.init)
+							extraRequests ~= res;
 					}
 				}
-				if (!isResponse)
+				else if (json.type == JSONType.object)
 				{
-					request = RequestMessage(json);
-					validRequest = true;
+					request = handleRequestImpl(json);
+				}
+				else
+				{
+					send(ResponseMessage(RequestToken.init, ResponseError(ErrorCode.invalidRequest, "Invalid request type (must be object or array)")));
 				}
 			}
 			catch (Exception e)
@@ -313,12 +309,10 @@ private:
 					trace(content);
 					auto idx = content.indexOf("\"id\":");
 					auto endIdx = content.indexOf(",", idx);
-					JSONValue fallback;
-					if (idx != -1 && endIdx != -1)
-						fallback = parseJSON(content[idx .. endIdx].strip);
-					else
-						fallback = JSONValue(0);
-					send(ResponseMessage(RequestToken(&fallback), ResponseError(ErrorCode.parseError)));
+					RequestToken fallback;
+					if (!content.startsWith("[") && idx != -1 && endIdx != -1)
+						fallback = RequestToken(parseJSON(content[idx .. endIdx].strip));
+					send(ResponseMessage(fallback, ResponseError(ErrorCode.parseError)));
 				}
 				catch (Exception e)
 				{
@@ -326,12 +320,64 @@ private:
 					trace(e);
 				}
 			}
-			if (validRequest)
+
+			if (request != RequestMessage.init)
+			{
+				onData(request);
+				Fiber.yield();
+			}
+
+			foreach (req; extraRequests)
 			{
 				onData(request);
 				Fiber.yield();
 			}
 		}
+	}
+
+	RequestMessage handleRequestImpl(JSONValue json)
+	{
+		auto id = "id" in json;
+		bool isResponse = false;
+		if (id)
+		{
+			auto tok = RequestToken(id);
+			foreach (ref waiting; responseTokens)
+			{
+				if (!waiting.got && waiting.token == tok)
+				{
+					waiting.got = true;
+					waiting.ret.id = tok;
+					auto res = "result" in json;
+					auto err = "error" in json;
+					if (res)
+						waiting.ret.result = *res;
+					if (err)
+						waiting.ret.error = (*err).fromJSON!ResponseError;
+					isResponse = true;
+					break;
+				}
+			}
+		}
+		if (!isResponse)
+		{
+			RequestMessage request = RequestMessage(json);
+			if (request.params != JSONValue.init
+				&& request.params.type != JSONType.object
+				&& request.params.type != JSONType.array)
+			{
+				send(ResponseMessage(request.id,
+					ResponseError(ErrorCode.invalidParams,
+						"`params` MUST be an object (named arguments) or array "
+						~ "(positional arguments), other types are not allowed by spec"
+				)));
+			}
+			else
+			{
+				return request;
+			}
+		}
+		return RequestMessage.init;
 	}
 }
 
