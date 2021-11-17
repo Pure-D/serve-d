@@ -28,6 +28,13 @@ struct LanguageServerConfig
 	int fiberPageSize = 4096;
 
 	EventProcessorConfig eventConfig;
+
+	/// Product name to use in error messages
+	string productName = "serve-d";
+
+	/// If set to non-zero, call GC.collect every n seconds and GC.minimize
+	/// every 5th call. Keeps track of cleaned up memory in trace logs.
+	int gcCollectSeconds = 30;
 }
 
 // dumps a performance/GC trace log to served_trace.log
@@ -119,7 +126,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		if (numHandlers == 0)
 		{
 			io.stderr.writeln(msg);
-			res.error = ResponseError(ErrorCode.methodNotFound);
+			res.error = ResponseError(ErrorCode.methodNotFound, "Request method " ~ msg.method ~ " not found");
 			return res;
 		}
 
@@ -158,13 +165,13 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			});
 		}
 
-		bool done;
-		bool found = eventProcessor.emitProtocolRaw!(protocolMethod, (name, symbol, arguments, uda) {
-			if (done)
-				return;
+		bool done, found;
+		try
+		{
+			found = eventProcessor.emitProtocolRaw!(protocolMethod, (name, symbol, arguments, uda) {
+				if (done)
+					return;
 
-			try
-			{
 				trace("Calling ", name);
 				alias RequestResultT = typeof(symbol(arguments.expand));
 
@@ -193,12 +200,14 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 					done = true;
 					processRequestObservers(msg, requestResult);
 				}
-			}
-			catch (MethodException e)
-			{
-				res.error = e.error;
-			}
-		}, false)(msg.method, msg.params);
+			}, false)(msg.method, msg.params);
+		}
+		catch (MethodException e)
+		{
+			res.result.nullify();
+			res.error = e.error;
+			return res;
+		}
 
 		assert(found);
 
@@ -216,6 +225,11 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 					combined ~= partial.array;
 				}
 				res.result = JSONValue(combined);
+			}
+			else
+			{
+				JSONValue[] emptyArr;
+				res.result = JSONValue(emptyArr);
 			}
 		}
 
@@ -303,7 +317,9 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				res.error = ResponseError(e);
 				res.error.code = ErrorCode.internalError;
 				rpc.window.showMessage(MessageType.error,
-						"A fatal internal error occured in serve-d handling this request but it will attempt to keep running: "
+						"A fatal internal error occured in "
+						~ serverConfig.productName
+						~ " handling this request but it will attempt to keep running: "
 						~ e.msg);
 			}
 			rpc.send(res);
@@ -325,7 +341,9 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			{
 				error("Attempting to recover from fatal issue: ", e);
 				rpc.window.showMessage(MessageType.error,
-						"A fatal internal error has occured in serve-d, but it will attempt to keep running: "
+						"A fatal internal error has occured in "
+						~ serverConfig.productName
+						~ ", but it will attempt to keep running: "
 						~ e.msg);
 			}
 		};
@@ -359,9 +377,42 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		rpc.call();
 		trace("RPC started");
 
-		int gcCollects, totalGcCollects;
-		StopWatch gcInterval;
-		gcInterval.start();
+		static if (serverConfig.gcCollectSeconds > 0)
+		{
+			int gcCollects, totalGcCollects;
+			StopWatch gcInterval;
+			gcInterval.start();
+
+			void collectGC()
+			{
+				import core.memory : GC;
+
+				auto before = GC.stats();
+				StopWatch gcSpeed;
+				gcSpeed.start();
+
+				GC.collect();
+
+				gcCollects++;
+				totalGcCollects++;
+				if (gcCollects > 5)
+				{
+					GC.minimize();
+					gcCollects = 0;
+				}
+
+				gcSpeed.stop();
+				auto after = GC.stats();
+
+				if (before != after)
+					tracef("GC run in %s. Freed %s bytes (%s bytes allocated, %s bytes available)", gcSpeed.peek,
+							cast(long) before.usedSize - cast(long) after.usedSize, after.usedSize, after.freeSize);
+				else
+					trace("GC run in ", gcSpeed.peek);
+
+				gcInterval.reset();
+			}
+		}
 
 		scope (exit)
 		{
@@ -411,34 +462,12 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			synchronized (fibersMutex)
 				fibers.call();
 
-			if (gcInterval.peek > 30.seconds)
+			static if (serverConfig.gcCollectSeconds > 0)
 			{
-				import core.memory : GC;
-
-				auto before = GC.stats();
-				StopWatch gcSpeed;
-				gcSpeed.start();
-
-				GC.collect();
-
-				gcCollects++;
-				totalGcCollects++;
-				if (gcCollects > 5)
+				if (gcInterval.peek > serverConfig.gcCollectSeconds.seconds)
 				{
-					GC.minimize();
-					gcCollects = 0;
+					collectGC();
 				}
-
-				gcSpeed.stop();
-				auto after = GC.stats();
-
-				if (before != after)
-					tracef("GC run in %s. Freed %s bytes (%s bytes allocated, %s bytes available)", gcSpeed.peek,
-							cast(long) before.usedSize - cast(long) after.usedSize, after.usedSize, after.freeSize);
-				else
-					trace("GC run in ", gcSpeed.peek);
-
-				gcInterval.reset();
 			}
 		}
 
