@@ -199,14 +199,17 @@ unittest
 
 struct RequestToken
 {
-	this(const(JSONValue)* val)
+	this(scope const(JSONValue)* val)
 	{
 		if (!val)
-		{
-			hasData = false;
-			return;
-		}
-		hasData = true;
+			this(JSONValue.init);
+		else
+			this(*val);
+	}
+
+	this(const(JSONValue) val)
+	{
+		hasData = val != JSONValue.init;
 		if (val.type == JSONType.string)
 		{
 			isString = true;
@@ -217,7 +220,7 @@ struct RequestToken
 			isString = false;
 			num = val.integer;
 		}
-		else
+		else if (hasData)
 			throw new Exception("Invalid ID");
 	}
 
@@ -267,6 +270,7 @@ struct RequestToken
 	}
 }
 
+///
 struct RequestMessage
 {
 	this(JSONValue val)
@@ -278,8 +282,12 @@ struct RequestMessage
 			params = *ptr;
 	}
 
+	///
 	RequestToken id;
+	///
 	string method;
+	/// Optional parameters to this method. Must be either null (omitted), array
+	/// (positional parameters) or object. (named parameters)
 	JSONValue params;
 
 	bool isCancelRequest()
@@ -287,6 +295,7 @@ struct RequestMessage
 		return method == "$/cancelRequest";
 	}
 
+	/// Converts this message to a JSON-RPC packet
 	JSONValue toJSON()
 	{
 		auto ret = JSONValue([
@@ -301,16 +310,28 @@ struct RequestMessage
 	}
 }
 
+///
 enum ErrorCode
 {
+	/// Invalid JSON was received by the server.
+	/// An error occurred on the server while parsing the JSON text.
 	parseError = -32700,
+	/// The JSON sent is not a valid Request object.
 	invalidRequest = -32600,
+	/// The method does not exist / is not available.
 	methodNotFound = -32601,
+	/// Invalid method parameter(s).
 	invalidParams = -32602,
+	/// Internal JSON-RPC error.
 	internalError = -32603,
+	/// Range start reserved for implementation-defined server-errors.
 	serverErrorStart = -32099,
+	/// Range end reserved for implementation-defined server-errors.
 	serverErrorEnd = -32000,
+	/// serve-d specific error: received method before server was fully
+	/// initialized.
 	serverNotInitialized = -32002,
+	///
 	unknownErrorCode = -32001
 }
 
@@ -322,10 +343,19 @@ enum MessageType
 	log
 }
 
+///
 struct ResponseError
 {
+	/// A Number that indicates the error type that occurred.
 	ErrorCode code;
+	/// A String providing a short description of the error.
+	/// The message SHOULD be limited to a concise single sentence.
 	string message;
+	/// A Primitive or Structured value that contains additional information
+	/// about the error.
+	/// This may be omitted.
+	/// The value of this member is defined by the Server (e.g. detailed error
+	/// information, nested errors etc.).
 	JSONValue data;
 
 	this(Throwable t)
@@ -359,6 +389,7 @@ class MethodException : Exception
 	ResponseError error;
 }
 
+///
 struct ResponseMessage
 {
 	this(RequestToken id, JSONValue result)
@@ -373,8 +404,11 @@ struct ResponseMessage
 		this.error = error;
 	}
 
+	///
 	RequestToken id;
+	///
 	Optional!JSONValue result;
+	///
 	Optional!ResponseError error;
 }
 
