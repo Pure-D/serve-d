@@ -35,8 +35,13 @@ jobs:
         env:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
 
-      - name: build dummy server
+      - name: build minimal server
         run: dub build --root=null_server
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '10.12'
+
+      - name: test minimal server
+        run: dub run --root=null_server_test
         env:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
 
