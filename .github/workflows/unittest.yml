@@ -28,27 +28,27 @@ jobs:
         run: dub test :lsp
         env:
           # shouldn't break other OSes
-          MACOSX_DEPLOYMENT_TARGET: '10.14'
+          MACOSX_DEPLOYMENT_TARGET: '10.15'
 
       - name: serverbase tests
         run: dub test :serverbase
         env:
-          MACOSX_DEPLOYMENT_TARGET: '10.14'
+          MACOSX_DEPLOYMENT_TARGET: '10.15'
 
       - name: build minimal server
         run: dub build --root=null_server
         env:
-          MACOSX_DEPLOYMENT_TARGET: '10.14'
+          MACOSX_DEPLOYMENT_TARGET: '10.15'
 
       - name: test minimal server
         run: dub run --root=null_server_test
         env:
-          MACOSX_DEPLOYMENT_TARGET: '10.14'
+          MACOSX_DEPLOYMENT_TARGET: '10.15'
 
       - name: Run tests
         run: dub test
         env:
-          MACOSX_DEPLOYMENT_TARGET: '10.14'
+          MACOSX_DEPLOYMENT_TARGET: '10.15'
 
       - name: cache dependency binaries
         uses: WebFreak001/dub-upgrade@v0.1.0
