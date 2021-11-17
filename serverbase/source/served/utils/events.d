@@ -173,13 +173,33 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 
 		T parseParam(T)()
 		{
+			import served.lsp.protocol;
+
 			try
 			{
-				return fromJSON!T(params);
+				if (params.type == JSONType.array)
+				{
+					// positional parameter support
+					// only supports passing a single argument
+					auto arr = params.array;
+					if (arr.length != 1)
+						throw new Exception("Mismatched parameter count");
+					return fromJSON!T(arr[0]);
+				}
+				else
+				{
+					// named parameter support
+					// only supports passing structs (not parsing names of D method arguments)
+					return fromJSON!T(params);
+				}
 			}
 			catch (Exception e)
 			{
-				throw new Exception("Failed converting input parameter " ~ params.toPrettyString ~ " to needed type `" ~ T.stringof ~ "`: " ~ e.msg);
+				ResponseError error;
+				error.code = ErrorCode.invalidParams;
+				error.message = "Failed converting input parameter " ~ params.toPrettyString ~ " to needed type `" ~ T.stringof ~ "`: " ~ e.msg;
+				error.data = JSONValue(e.toString);
+				throw new MethodException(error);
 			}
 		}
 
