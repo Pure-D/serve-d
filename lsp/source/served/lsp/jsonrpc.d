@@ -257,9 +257,20 @@ private:
 				else if (line.startsWith("Content-Length:"))
 					contentLength = line["Content-Length:".length .. $].strip.to!size_t;
 			}
-			while (inHeader);
-			assert(contentLength > 0);
+			while (inHeader && !stopped);
+
+			if (stopped)
+				break;
+
+			if (contentLength <= 0)
+			{
+				send(ResponseMessage(RequestToken.init, ResponseError(ErrorCode.invalidRequest, "Invalid/no content length specified")));
+				continue;
+			}
+
 			auto content = cast(string) reader.yieldData(contentLength);
+			if (stopped)
+				break;
 			assert(content.length == contentLength);
 			RequestMessage request;
 			bool validRequest = false;

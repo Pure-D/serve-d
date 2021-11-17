@@ -33,6 +33,11 @@ class StdFileReader : FileReader
 		}
 	}
 
+	override bool isReading()
+	{
+		return !file.eof;
+	}
+
 	File file;
 }
 
@@ -63,6 +68,8 @@ version (Windows) class WindowsStdinReader : FileReader
 		DWORD nbRead;
 		ubyte[4096] buffer;
 		running = true;
+		scope (exit)
+			running = false;
 		while (running)
 		{
 			switch (WaitForSingleObject(stdin, 1000))
@@ -96,6 +103,11 @@ version (Windows) class WindowsStdinReader : FileReader
 				break;
 			}
 		}
+	}
+
+	override bool isReading()
+	{
+		return running;
 	}
 }
 
@@ -150,6 +162,11 @@ version (Posix) class PosixStdinReader : FileReader
 			}
 		}
 	}
+
+	override bool isReading()
+	{
+		return !stdin.eof;
+	}
 }
 
 /// Base class for file readers which can read a file or standard handle line
@@ -166,7 +183,7 @@ abstract class FileReader : Thread
 	{
 		ptrdiff_t index;
 		string ret;
-		while (true)
+		while (isReading)
 		{
 			synchronized (mutex)
 			{
@@ -183,9 +200,13 @@ abstract class FileReader : Thread
 		return ret;
 	}
 
+	/// Yields until the specified length of data is available, then removes the
+	/// data from the incoming data stream atomically and returns a duplicate of
+	/// it.
+	/// Returns null if the file reader stops while reading.
 	ubyte[] yieldData(size_t length)
 	{
-		while (true)
+		while (isReading)
 		{
 			synchronized (mutex)
 			{
@@ -198,9 +219,11 @@ abstract class FileReader : Thread
 			}
 			Fiber.yield();
 		}
+		return null;
 	}
 
 	abstract void stop();
+	abstract bool isReading();
 
 protected:
 	abstract void run();
