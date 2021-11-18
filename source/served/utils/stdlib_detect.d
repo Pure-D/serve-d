@@ -4,7 +4,8 @@ import std.algorithm : countUntil, splitter, startsWith;
 import std.array : appender, replace;
 import std.ascii : isWhite;
 import std.conv : to;
-import std.path : buildNormalizedPath, buildPath, chainPath, dirName;
+import std.experimental.logger : warning;
+import std.path : buildNormalizedPath, baseName, buildPath, chainPath, dirName, stripExtension;
 import std.process : environment;
 import std.string : indexOf, startsWith, strip, stripLeft;
 import std.uni : sicmp;
@@ -13,9 +14,33 @@ import std.utf : decode, UseReplacementDchar;
 import fs = std.file;
 import io = std.stdio;
 
-string[] autoDetectStdlibPaths(string cwd = null)
+string[] autoDetectStdlibPaths(string cwd = null, string compilerPath = null)
 {
 	string[] ret;
+	if (compilerPath.length)
+	{
+		auto binName = compilerPath.baseName.stripExtension;
+		switch (binName)
+		{
+		case "dmd":
+			if (detectDMDStdlibPaths(cwd, ret))
+				return ret;
+			break;
+		case "ldc":
+		case "ldc2":
+			if (detectLDCStdlibPaths(cwd, ret))
+				return ret;
+			break;
+		case "gdc":
+		case "gcc":
+			warning("\"d.stdlibPath\" set to \"auto\", but gdc/gcc (as set by d.dubCompiler) is not supported for auto detection, falling back to dmd or ldc");
+			break;
+		default:
+			warning("\"d.stdlibPath\" set to \"auto\", but I don't know what the dubCompiler is by checking the filename, falling back to dmd or ldc");
+			break;
+		}
+	}
+
 	if (detectDMDStdlibPaths(cwd, ret) || detectLDCStdlibPaths(cwd, ret))
 	{
 		return ret;

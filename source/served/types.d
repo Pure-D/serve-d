@@ -149,7 +149,7 @@ struct Configuration
 			{
 				import served.utils.stdlib_detect;
 
-				return autoDetectStdlibPaths(cwd);
+				return autoDetectStdlibPaths(cwd, d.dubCompiler);
 			}
 			else
 				return [p.str.userPath];
