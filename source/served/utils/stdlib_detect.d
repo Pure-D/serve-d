@@ -23,12 +23,12 @@ string[] autoDetectStdlibPaths(string cwd = null, string compilerPath = null)
 		switch (binName)
 		{
 		case "dmd":
-			if (detectDMDStdlibPaths(cwd, ret))
+			if (detectDMDStdlibPaths(cwd, ret, compilerPath))
 				return ret;
 			break;
 		case "ldc":
 		case "ldc2":
-			if (detectLDCStdlibPaths(cwd, ret))
+			if (detectLDCStdlibPaths(cwd, ret, compilerPath))
 				return ret;
 			break;
 		case "gdc":
@@ -62,7 +62,7 @@ string[] autoDetectStdlibPaths(string cwd = null, string compilerPath = null)
 	}
 }
 
-bool detectDMDStdlibPaths(string cwd, out string[] ret)
+bool detectDMDStdlibPaths(string cwd, out string[] ret, string dmdPath = null)
 {
 	// https://dlang.org/dmd-linux.html#dmd-conf
 	// https://dlang.org/dmd-osx.html#dmd-conf
@@ -88,7 +88,9 @@ bool detectDMDStdlibPaths(string cwd, out string[] ret)
 			&& parseDmdConfImports(buildPath(home, confName), home, ret))
 		return true;
 
-	auto dmdPath = searchPathFor(dmdExe);
+	if (!dmdPath.length || !fs.exists(dmdPath))
+		dmdPath = searchPathFor(dmdExe);
+
 	if (dmdPath.length)
 	{
 		auto dmdDir = dirName(dmdPath);
@@ -141,7 +143,7 @@ bool detectDMDStdlibPaths(string cwd, out string[] ret)
 	}
 }
 
-bool detectLDCStdlibPaths(string cwd, out string[] ret)
+bool detectLDCStdlibPaths(string cwd, out string[] ret, string ldcPath = null)
 {
 	// https://github.com/ldc-developers/ldc/blob/829dc71114eaf7c769208f03eb9a614dafd789c3/driver/configfile.cpp
 
@@ -162,7 +164,9 @@ bool detectLDCStdlibPaths(string cwd, out string[] ret)
 		static immutable ldcExeAlt = "ldc";
 	}
 
-	auto ldcPath = searchPathFor(ldcExe);
+	if (!ldcPath.length || !fs.exists(ldcPath))
+		ldcPath = searchPathFor(ldcExe);
+
 	if (!ldcPath.length)
 		ldcPath = searchPathFor(ldcExeAlt);
 	auto ldcDir = ldcPath.length ? dirName(ldcPath) : null;
