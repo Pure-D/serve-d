@@ -5,7 +5,7 @@ import std.array : appender, replace;
 import std.ascii : isWhite;
 import std.conv : to;
 import std.experimental.logger : warning;
-import std.path : buildNormalizedPath, baseName, buildPath, chainPath, dirName, stripExtension;
+import std.path : buildNormalizedPath, baseName, buildPath, chainPath, dirName, stripExtension, isAbsolute;
 import std.process : environment;
 import std.string : indexOf, startsWith, strip, stripLeft;
 import std.uni : sicmp;
@@ -17,6 +17,10 @@ import io = std.stdio;
 string[] autoDetectStdlibPaths(string cwd = null, string compilerPath = null)
 {
 	string[] ret;
+
+	if (compilerPath.length && !isAbsolute(compilerPath))
+		compilerPath = searchPathFor(compilerPath);
+
 	if (compilerPath.length)
 	{
 		auto binName = compilerPath.baseName.stripExtension;
