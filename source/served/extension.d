@@ -412,6 +412,9 @@ InitializeResult initialize(InitializeParams params)
 {
 	import std.file : chdir;
 
+	if (params.trace == "verbose")
+		globalLogLevel = LogLevel.trace;
+
 	capabilities = params.capabilities;
 	trace("initialize params:");
 	prettyPrintStruct!trace(params);
@@ -987,6 +990,15 @@ JSONValue shutdown()
 }
 
 // === Protocol Notifications starting here ===
+
+@protocolNotification("$/setTrace")
+void setTrace(TraceParams params)
+{
+	if (params.value == "verbose")
+		globalLogLevel = LogLevel.trace;
+	else
+		globalLogLevel = LogLevel.info;
+}
 
 @protocolNotification("workspace/didChangeWorkspaceFolders")
 void didChangeWorkspaceFolders(DidChangeWorkspaceFoldersParams params)

@@ -1792,3 +1792,8 @@ struct WorkspaceFoldersChangeEvent
 	WorkspaceFolder[] added;
 	WorkspaceFolder[] removed;
 }
+
+struct TraceParams
+{
+	string value;
+}
