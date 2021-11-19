@@ -907,13 +907,9 @@ void startDCDServer(WorkspaceD.Instance instance, string workspaceUri)
 	try
 	{
 		auto dcd = instance.get!DCDComponent;
-		trace("findAndSelectPort 9166");
-		auto port = dcd.findAndSelectPort(cast(ushort) 9166).getYield;
-		trace("Setting port to ", port);
-		instance.config.set("dcd", "port", cast(int) port);
 		auto stdlibPath = proj.stdlibPath;
 		trace("startServer ", stdlibPath);
-		dcd.startServer(stdlibPath);
+		dcd.startServer(stdlibPath, false, true);
 		trace("refreshImports");
 		dcd.refreshImports();
 	}
