@@ -114,6 +114,7 @@ struct Configuration
 		bool singleTemplateConstraintIndent = false;
 		bool spaceBeforeAAColon = false;
 		bool keepLineBreaks = true;
+		bool singleIndent = true;
 	}
 
 	struct DScanner

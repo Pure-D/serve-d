@@ -71,6 +71,7 @@ string[] generateDfmtArgs(const ref UserConfiguration config, EolType overrideEo
 			"--single_template_constraint_indent", config.dfmt.singleTemplateConstraintIndent.to!string,
 			"--space_before_aa_colon", config.dfmt.spaceBeforeAAColon.to!string,
 			"--keep_line_breaks", config.dfmt.keepLineBreaks.to!string,
+			"--single_indent", config.dfmt.singleIndent.to!string,
 		];
 		//dfmt on
 	}
