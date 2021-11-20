@@ -1045,7 +1045,11 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 						detailDetail = " " ~ identifier.definition[paren .. $];
 				}
 			}
-
+			else
+			{
+				// otherwise show detail description if the definition is fully known (no space = proper type from DCD)
+				detailDescription = identifier.definition;
+			}
 
 			// handle special cases
 			if (identifier.type == "e")
