@@ -40,7 +40,9 @@ what you are doing.
 
 ## Using coc's
 
-A coc-settings.json files looking like this for dlang works well.
+First [download or build serve-d](README.md#Installation)
+
+A coc-settings.json files looking like this works well.
 
 ```js
 {
@@ -60,14 +62,3 @@ A coc-settings.json files looking like this for dlang works well.
 	"suggest.noselect": false
 }
 ```
-
-The PATH_TO_SERVE_D_EXECUTABLE if you are on linux is likly /home/USERNAME/.dub/packages/serve-d-SEMVER/serve-d/serve-d.
-
-```sh
-cd
-cd .dub
-dub fetch serve-d
-cd serve-d-NEWEST_SEMVER/serve-d/
-dub build --compiler=ldc --build-release-debug
-```
-Usally this does the trick.
