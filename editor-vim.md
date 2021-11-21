@@ -37,3 +37,37 @@ def Settings(**kwargs):
 Put this in a file called `.ycm_extra_conf.py` and save it in your
 project root or move it further up the folder hierarchy, if you know
 what you are doing.
+
+## Using coc's
+
+A coc-settings.json files looking like this for dlang works well.
+
+```js
+{
+	"languageserver": {
+		"d": {
+			"command": "PATH_TO_SERVE_D_EXECUTABLE/serve-d",
+			"filetypes": ["d"],
+			"trace.server": "on",
+			"rootPatterns": ["dub.json", "dub.sdl"],
+			"initializationOptions": {
+			},
+			"settings": {
+			}
+		}
+	},
+	"suggest.autoTrigger": "none",
+	"suggest.noselect": false
+}
+```
+
+The PATH_TO_SERVE_D_EXECUTABLE if you are on linux is likly /home/USERNAME/.dub/packages/serve-d-SEMVER/serve-d/serve-d.
+
+```sh
+cd
+cd .dub
+dub fetch serve-d
+cd serve-d-NEWEST_SEMVER/serve-d/
+dub build --compiler=ldc --build-release-debug
+```
+Usally this does the trick.
