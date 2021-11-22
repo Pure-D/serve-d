@@ -1037,8 +1037,8 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 			{
 				detailDescription = identifier.definition[0 .. definitionSpace];
 				
-				// if function, only show the parenthesis content
-				if (identifier.type == "f")
+				// if function or alias, only show the parenthesis content
+				if (identifier.type == "f" || identifier.type == "l")
 				{
 					auto paren = identifier.definition.indexOf('(');
 					if (paren != -1)
