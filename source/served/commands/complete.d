@@ -1053,7 +1053,7 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 				// enum definitions are the enum identifiers (not the type)
 				detailDescription = "enum";
 			}
-			else if ((identifier.type == "f" || identifier.type == "l") && dcdext)
+			else if ((identifier.type == "f" || (identifier.type == "l" || identifier.definition.indexOf(" ") != -1)) && dcdext)
 			{
 				CalltipsSupport funcParams = dcdext.extractCallParameters(
 					identifier.definition, cast(int) identifier.definition.length - 1, true);
