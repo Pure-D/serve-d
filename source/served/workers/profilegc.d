@@ -137,15 +137,17 @@ void setupProfileGCWatchers()
 	if (capabilities.workspace.didChangeWatchedFiles.dynamicRegistration)
 	{
 		rpc.sendRequest("client/registerCapability",
-			Registration(
-				"profilegc.watchfiles",
-				"workspace/didChangeWatchedFiles",
-				JSONValue([
-					"watchers": JSONValue([
-						FileSystemWatcher("**/profilegc.log").toJSON
+			RegistrationParams([
+				Registration(
+					"profilegc.watchfiles",
+					"workspace/didChangeWatchedFiles",
+					JSONValue([
+						"watchers": JSONValue([
+							FileSystemWatcher("**/profilegc.log").toJSON
+						])
 					])
-				])
-			)
+				)
+			])
 		);
 	}
 }
