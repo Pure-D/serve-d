@@ -4,7 +4,7 @@ import std.algorithm : countUntil, splitter, startsWith;
 import std.array : appender, replace;
 import std.ascii : isWhite;
 import std.conv : to;
-import std.experimental.logger : warning;
+import std.experimental.logger : warning, trace;
 import std.path : buildNormalizedPath, baseName, buildPath, chainPath, dirName, stripExtension, isAbsolute;
 import std.process : environment;
 import std.string : indexOf, startsWith, strip, stripLeft;
@@ -27,16 +27,19 @@ string[] autoDetectStdlibPaths(string cwd = null, string compilerPath = null)
 		switch (binName)
 		{
 		case "dmd":
+			trace("detecting dmd stdlib path from ", compilerPath);
 			if (detectDMDStdlibPaths(cwd, ret, compilerPath))
 				return ret;
 			break;
 		case "ldc":
 		case "ldc2":
+			trace("detecting ldc stdlib path from ", compilerPath);
 			if (detectLDCStdlibPaths(cwd, ret, compilerPath))
 				return ret;
 			break;
 		case "gdc":
 		case "gcc":
+			trace("detecting gdc stdlib path from ", compilerPath);
 			warning("\"d.stdlibPath\" set to \"auto\", but gdc/gcc (as set by d.dubCompiler) is not supported for auto detection, falling back to dmd or ldc");
 			break;
 		default:
@@ -45,12 +48,15 @@ string[] autoDetectStdlibPaths(string cwd = null, string compilerPath = null)
 		}
 	}
 
+	trace("falling back to global imports search");
 	if (detectDMDStdlibPaths(cwd, ret) || detectLDCStdlibPaths(cwd, ret))
 	{
+		trace("found stdlib paths in DMD or LDC: ", ret);
 		return ret;
 	}
 	else
 	{
+		trace("returning to default hardcoded fallback phobos paths");
 		version (Windows)
 			return [`C:\D\dmd2\src\druntime\import`, `C:\D\dmd2\src\phobos`];
 		else version (OSX)
@@ -299,6 +305,7 @@ bool parseDmdConfImports(R)(R confPath, scope const(char)[] confDirPath, out str
 
 	Region match, current;
 
+	trace("test dmd conf ", confPath);
 	foreach (line; io.File(confPath).byLine)
 	{
 		line = line.strip;
@@ -353,6 +360,7 @@ bool parseLdcConfImports(string confPath, scope const(char)[] binDirPath, out st
 		}
 	}
 
+	trace("test ldc conf ", confPath);
 	foreach (s; parseConfigFile(confPath))
 	{
 		if (s.type == Setting.Type.group && s.name == "default")
