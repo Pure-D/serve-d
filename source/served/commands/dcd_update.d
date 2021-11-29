@@ -18,6 +18,24 @@ import std.path : baseName, buildPath, chainPath, isAbsolute;
 import fs = std.file;
 import io = std.stdio;
 
+version (ARM)
+{
+	version = DCDFromSource;
+}
+version (Win32)
+{
+}
+else version (Win64)
+{
+}
+else version (linux)
+{
+}
+else version (OSX)
+{
+}
+else version = DCDFromSource;
+
 __gshared string dcdUpdateReason = null;
 __gshared bool dcdUpdating;
 @protocolNotification("served/updateDCD")

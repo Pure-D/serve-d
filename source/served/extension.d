@@ -67,25 +67,6 @@ alias members = AliasSeq!(
 );
 //dfmt on
 
-version (ARM)
-{
-	version = DCDFromSource;
-}
-
-version (Win32)
-{
-}
-else version (Win64)
-{
-}
-else version (linux)
-{
-}
-else version (OSX)
-{
-}
-else version = DCDFromSource;
-
 /// Set to true when shutdown is called
 __gshared bool shutdownRequested;
 
