@@ -549,7 +549,7 @@ void doGlobalStartup()
 			else
 			{
 				spawnFiber({
-					version (DCDFromSource)
+					static if (isDCDFromSource)
 						auto action = translate!"d.ext.compileProgram"("DCD");
 					else
 						auto action = translate!"d.ext.downloadProgram"("DCD");

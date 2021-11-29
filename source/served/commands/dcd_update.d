@@ -36,6 +36,11 @@ else version (OSX)
 }
 else version = DCDFromSource;
 
+version (DCDFromSource)
+	enum isDCDFromSource = true;
+else
+	enum isDCDFromSource = false;
+
 __gshared string dcdUpdateReason = null;
 __gshared bool dcdUpdating;
 @protocolNotification("served/updateDCD")
