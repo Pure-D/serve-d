@@ -779,6 +779,8 @@ struct TextDocumentPositionParams
 
 struct DocumentFilter
 {
+	mixin StrictOptionalSerializer;
+
 	Optional!string language;
 	Optional!string scheme;
 	Optional!string pattern;
@@ -1022,6 +1024,8 @@ struct CodeAction
 
 struct ClientCapabilities
 {
+	mixin StrictOptionalSerializer;
+
 	Optional!WorkspaceClientCapabilities workspace;
 	Optional!TextDocumentClientCapabilities textDocument;
 	JSONValue experimental;
@@ -1061,6 +1065,8 @@ struct CompletionOptions
 
 	struct CompletionItem
 	{
+		mixin StrictOptionalSerializer;
+
 		Optional!bool labelDetailsSupport;
 	}
 
@@ -1296,6 +1302,8 @@ struct DidCloseTextDocumentParams
 
 struct FileSystemWatcher
 {
+	mixin StrictOptionalSerializer;
+
 	string globPattern;
 	Optional!WatchKind kind;
 }
@@ -1420,6 +1428,8 @@ enum CompletionItemKind
 
 struct CompletionRegistrationOptions
 {
+	mixin StrictOptionalSerializer;
+
 	Optional!DocumentSelector documentSelector;
 	Optional!(string[]) triggerCharacters;
 	bool resolveProvider;
@@ -1427,6 +1437,8 @@ struct CompletionRegistrationOptions
 
 struct Hover
 {
+	mixin StrictOptionalSerializer;
+
 	ArrayOrSingle!MarkedString contents;
 	Optional!TextRange range;
 }
@@ -1504,6 +1516,8 @@ struct MarkupContent
 
 struct SignatureHelp
 {
+	mixin StrictOptionalSerializer;
+
 	SignatureInformation[] signatures;
 	Optional!int activeSignature;
 	Optional!int activeParameter;
@@ -1523,6 +1537,8 @@ struct SignatureHelp
 
 struct SignatureInformation
 {
+	mixin StrictOptionalSerializer;
+
 	string label;
 	Optional!MarkupContent documentation;
 	Optional!(ParameterInformation[]) parameters;
@@ -1530,12 +1546,16 @@ struct SignatureInformation
 
 struct ParameterInformation
 {
+	mixin StrictOptionalSerializer;
+
 	JSONValue label;
 	Optional!MarkupContent documentation;
 }
 
 struct SignatureHelpRegistrationOptions
 {
+	mixin StrictOptionalSerializer;
+
 	Optional!DocumentSelector documentSelector;
 	Optional!(string[]) triggerCharacters;
 }
@@ -1560,6 +1580,8 @@ struct DocumentHighlightParams
 
 struct DocumentHighlight
 {
+	mixin StrictOptionalSerializer;
+
 	TextRange range;
 	Optional!DocumentHighlightKind kind;
 }
@@ -1578,6 +1600,8 @@ struct DocumentSymbolParams
 
 struct SymbolInformation
 {
+	mixin StrictOptionalSerializer;
+
 	string name;
 	SymbolKind kind;
 	Location location;
@@ -1652,6 +1676,8 @@ struct CodeLensParams
 
 struct CodeLens
 {
+	mixin StrictOptionalSerializer;
+
 	TextRange range;
 	Optional!Command command;
 	JSONValue data;
@@ -1659,6 +1685,8 @@ struct CodeLens
 
 struct CodeLensRegistrationOptions
 {
+	mixin StrictOptionalSerializer;
+
 	Optional!DocumentSelector documentSelector;
 	bool resolveProvider;
 }
@@ -1676,6 +1704,8 @@ struct DocumentLink
 
 struct DocumentLinkRegistrationOptions
 {
+	mixin StrictOptionalSerializer;
+
 	Optional!DocumentSelector documentSelector;
 	bool resolveProvider;
 }
@@ -1708,6 +1738,8 @@ struct ColorPresentationParams
 
 struct ColorPresentation
 {
+	mixin StrictOptionalSerializer;
+
 	string label;
 	Optional!TextEdit textEdit;
 	Optional!(TextEdit[]) additionalTextEdits;
@@ -1743,6 +1775,8 @@ struct DocumentOnTypeFormattingParams
 
 struct DocumentOnTypeFormattingRegistrationOptions
 {
+	mixin StrictOptionalSerializer;
+
 	Optional!DocumentSelector documentSelector;
 	string firstTriggerCharacter;
 	Optional!(string[]) moreTriggerCharacter;
@@ -1757,6 +1791,8 @@ struct RenameParams
 
 struct ExecuteCommandParams
 {
+	mixin StrictOptionalSerializer;
+
 	string command;
 	Optional!(JSONValue[]) arguments;
 }
