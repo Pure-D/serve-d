@@ -1120,15 +1120,13 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 		joinAll({
 			if (config.d.enableStaticLinting)
 			{
-				if (document.getLanguageId == "diet")
-					return;
 				import served.linters.dscanner;
 
 				lint(document);
 				clearTimeout(dscannerChangeTimeout);
 			}
 		}, {
-			if (backend.has!DubComponent(workspaceRoot) && config.d.enableDubLinting)
+			if (config.d.enableDubLinting)
 			{
 				import served.linters.dub;
 

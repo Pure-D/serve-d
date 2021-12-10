@@ -34,6 +34,9 @@ enum DiagnosticSlot = 0;
 
 void lint(Document document)
 {
+	if (document.getLanguageId != "d")
+		return;
+
 	auto instance = activeInstance = backend.getBestInstance!DscannerComponent(
 			document.uri.uriToFile);
 	if (!instance)
