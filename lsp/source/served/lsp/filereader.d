@@ -123,16 +123,20 @@ version (Posix) class PosixStdinReader : FileReader
 	import core.sys.posix.sys.types;
 	import core.sys.posix.unistd;
 
+	bool running;
+
 	override void stop()
 	{
+		running = false;
 		stdin.close();
 	}
 
 	override void run()
 	{
+		running = true;
 
 		ubyte[4096] buffer;
-		while (!stdin.eof)
+		while (running)
 		{
 			fd_set rfds;
 			timeval tv;
@@ -149,23 +153,28 @@ version (Posix) class PosixStdinReader : FileReader
 				int err = errno;
 				if (err == EINTR)
 					continue;
+				running = false;
 				stderr.writeln("PosixStdinReader error ", err, " in select()");
 			}
 			else if (ret)
 			{
 				auto len = read(0, buffer.ptr, buffer.length);
 				if (len == -1)
+				{
+					running = false;
 					stderr.writeln("PosixStdinReader error ", errno, " in read()");
+				}
 				else
 					synchronized (mutex)
 						data ~= buffer[0 .. len];
 			}
+			Thread.sleep(1.msecs);
 		}
 	}
 
 	override bool isReading()
 	{
-		return !stdin.eof;
+		return running && !stdin.error && !stdin.eof;
 	}
 }
 
