@@ -136,7 +136,7 @@ version (Posix) class PosixStdinReader : FileReader
 		running = true;
 
 		ubyte[4096] buffer;
-		while (running && !stdin.error() && !stdin.eof))
+		while (running && !stdin.error() && !stdin.eof)
 		{
 			fd_set rfds;
 			timeval tv;
