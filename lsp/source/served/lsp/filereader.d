@@ -35,7 +35,7 @@ class StdFileReader : FileReader
 
 	override bool isReading()
 	{
-		return !file.eof;
+		return isRunning && !file.eof;
 	}
 
 	File file;
@@ -107,7 +107,7 @@ version (Windows) class WindowsStdinReader : FileReader
 
 	override bool isReading()
 	{
-		return running;
+		return isRunning && running;
 	}
 }
 
@@ -135,7 +135,7 @@ version (Posix) class PosixStdinReader : FileReader
 		scope (exit)
 			stdin.close();
 
-		while (!stdin.error)
+		while (!stdin.eof && !stdin.error)
 		{
 			fd_set rfds;
 			timeval tv;
@@ -181,7 +181,7 @@ version (Posix) class PosixStdinReader : FileReader
 
 	override bool isReading()
 	{
-		return !stdin.error;
+		return isRunning && !stdin.eof && !stdin.error;
 	}
 }
 
@@ -199,8 +199,9 @@ abstract class FileReader : Thread
 	{
 		ptrdiff_t index;
 		string ret;
-		while (isReading)
+		while (true)
 		{
+			bool hasData;
 			synchronized (mutex)
 			{
 				index = data.countUntil([cast(ubyte) '\r', cast(ubyte) '\n']);
@@ -210,7 +211,13 @@ abstract class FileReader : Thread
 					data = data[index + 2 .. $];
 					break;
 				}
+
+				hasData = data.length != 0;
 			}
+
+			if (!hasData && !isReading)
+				return ret.length ? ret : null;
+
 			Fiber.yield();
 		}
 		return ret;
@@ -222,8 +229,9 @@ abstract class FileReader : Thread
 	/// Returns null if the file reader stops while reading.
 	ubyte[] yieldData(size_t length)
 	{
-		while (isReading)
+		while (true)
 		{
+			bool hasData;
 			synchronized (mutex)
 			{
 				if (data.length >= length)
@@ -232,10 +240,15 @@ abstract class FileReader : Thread
 					data = data[length .. $];
 					return ret;
 				}
+
+				hasData = data.length != 0;
 			}
+
+			if (!hasData && !isReading)
+				return null;
+
 			Fiber.yield();
 		}
-		return null;
 	}
 
 	abstract void stop();
@@ -246,7 +259,6 @@ protected:
 
 	ubyte[] data;
 	Mutex mutex;
-	bool running;
 }
 
 /// Creates a new FileReader using the GC reading from stdin using a platform

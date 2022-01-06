@@ -245,7 +245,7 @@ private:
 
 	void run()
 	{
-		while (!stopped)
+		while (!stopped && reader.isReading)
 		{
 			bool inHeader = true;
 			size_t contentLength = 0;
@@ -269,7 +269,7 @@ private:
 			}
 
 			auto content = cast(string) reader.yieldData(contentLength);
-			if (stopped)
+			if (stopped || content is null)
 				break;
 			assert(content.length == contentLength);
 			RequestMessage request;
