@@ -35,7 +35,7 @@ class StdFileReader : FileReader
 
 	override bool isReading()
 	{
-		return running && !file.eof;
+		return isRunning && !file.eof;
 	}
 
 	File file;
@@ -56,7 +56,7 @@ version (Windows) class WindowsStdinReader : FileReader
 
 	override void stop()
 	{
-		running = false;
+		wantStop = true;
 	}
 
 	override void run()
@@ -66,7 +66,7 @@ version (Windows) class WindowsStdinReader : FileReader
 		DWORD nbRead;
 		ubyte[4096] buffer;
 
-		while (running)
+		while (!wantStop)
 		{
 			switch (WaitForSingleObject(stdin, 1000))
 			{
@@ -82,7 +82,6 @@ version (Windows) class WindowsStdinReader : FileReader
 				if (len == 0)
 				{
 					stderr.writeln("WindowsStdinReader EOF");
-					running = false;
 					return;
 				}
 				synchronized (mutex)
@@ -103,8 +102,10 @@ version (Windows) class WindowsStdinReader : FileReader
 
 	override bool isReading()
 	{
-		return running;
+		return isRunning;
 	}
+
+	private bool wantStop;
 }
 
 /// A file reader implementation using the POSIX select API using events. Reads
@@ -131,7 +132,7 @@ version (Posix) class PosixStdinReader : FileReader
 		scope (exit)
 			stdin.close();
 
-		while (!stdin.eof && !stdin.error)
+		while (!stdin.error && !stdin.eof)
 		{
 			fd_set rfds;
 			timeval tv;
@@ -177,7 +178,7 @@ version (Posix) class PosixStdinReader : FileReader
 
 	override bool isReading()
 	{
-		return running && !stdin.eof && !stdin.error;
+		return isRunning && !stdin.eof && !stdin.error;
 	}
 }
 
@@ -187,7 +188,7 @@ abstract class FileReader : Thread
 {
 	this()
 	{
-		super(&runImpl);
+		super(&run);
 		mutex = new Mutex();
 	}
 
@@ -253,17 +254,8 @@ abstract class FileReader : Thread
 protected:
 	abstract void run();
 
-	void runImpl()
-	{
-		running = true;
-		scope (exit)
-			running = false;
-		run();
-	}
-
 	ubyte[] data;
 	Mutex mutex;
-	bool running;
 }
 
 /// Creates a new FileReader using the GC reading from stdin using a platform

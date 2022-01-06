@@ -369,6 +369,8 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		input.start();
 		scope (exit)
 			input.stop();
+		for (int timeout = 10; timeout >= 0 && !input.isRunning; timeout--)
+			Thread.sleep(1.msecs);
 		trace("Started reading from stdin");
 
 		fibersMutex = new Mutex();

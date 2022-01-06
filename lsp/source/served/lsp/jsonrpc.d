@@ -245,6 +245,7 @@ private:
 
 	void run()
 	{
+		assert(reader.isReading, "must start jsonrpc after file reader!");
 		while (!stopped && reader.isReading)
 		{
 			bool inHeader = true;
