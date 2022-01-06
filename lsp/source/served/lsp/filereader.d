@@ -35,7 +35,7 @@ class StdFileReader : FileReader
 
 	override bool isReading()
 	{
-		return isRunning && !file.eof;
+		return running && !file.eof;
 	}
 
 	File file;
@@ -48,8 +48,6 @@ class StdFileReader : FileReader
 version (Windows) class WindowsStdinReader : FileReader
 {
 	import core.sys.windows.windows;
-
-	bool running;
 
 	this()
 	{
@@ -67,9 +65,7 @@ version (Windows) class WindowsStdinReader : FileReader
 		INPUT_RECORD inputRecord;
 		DWORD nbRead;
 		ubyte[4096] buffer;
-		running = true;
-		scope (exit)
-			running = false;
+
 		while (running)
 		{
 			switch (WaitForSingleObject(stdin, 1000))
@@ -107,7 +103,7 @@ version (Windows) class WindowsStdinReader : FileReader
 
 	override bool isReading()
 	{
-		return isRunning && running;
+		return running;
 	}
 }
 
@@ -181,7 +177,7 @@ version (Posix) class PosixStdinReader : FileReader
 
 	override bool isReading()
 	{
-		return isRunning && !stdin.eof && !stdin.error;
+		return running && !stdin.eof && !stdin.error;
 	}
 }
 
@@ -191,7 +187,7 @@ abstract class FileReader : Thread
 {
 	this()
 	{
-		super(&run);
+		super(&runImpl);
 		mutex = new Mutex();
 	}
 
@@ -257,8 +253,17 @@ abstract class FileReader : Thread
 protected:
 	abstract void run();
 
+	void runImpl()
+	{
+		running = true;
+		scope (exit)
+			running = false;
+		run();
+	}
+
 	ubyte[] data;
 	Mutex mutex;
+	bool running;
 }
 
 /// Creates a new FileReader using the GC reading from stdin using a platform
