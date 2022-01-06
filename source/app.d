@@ -48,13 +48,8 @@ void printVersion(io.File output = io.stdout)
 	import Compiler = std.compiler;
 	import OS = std.system;
 
-	static if (__traits(compiles, {
-			import workspaced.info : BundledDependencies, WorkspacedVersion = Version;
-		}))
-		import workspaced.info : BundledDependencies, WorkspacedVersion = Version;
-	else
-		import source.workspaced.info : BundledDependencies, WorkspacedVersion = Version;
-	import source.served.info;
+	import workspaced.info : BundledDependencies, WorkspacedVersion = Version;
+	import served.info;
 
 	output.writefln("serve-d v%(%s.%)%s with workspace-d v%(%s.%)", Version,
 			VersionSuffix.length ? text('-', VersionSuffix) : VersionSuffix, WorkspacedVersion);
