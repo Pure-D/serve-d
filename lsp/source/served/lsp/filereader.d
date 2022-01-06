@@ -132,7 +132,10 @@ version (Posix) class PosixStdinReader : FileReader
 	{
 
 		ubyte[4096] buffer;
-		while (!stdin.eof)
+		scope (exit)
+			stdin.close();
+
+		while (!stdin.error)
 		{
 			fd_set rfds;
 			timeval tv;
@@ -149,23 +152,36 @@ version (Posix) class PosixStdinReader : FileReader
 				int err = errno;
 				if (err == EINTR)
 					continue;
-				stderr.writeln("PosixStdinReader error ", err, " in select()");
+				stderr.writeln("[fatal] PosixStdinReader error ", err, " in select()");
+				break;
 			}
 			else if (ret)
 			{
 				auto len = read(0, buffer.ptr, buffer.length);
 				if (len == -1)
+				{
+					int err = errno;
+					if (err == EINTR)
+						continue;
 					stderr.writeln("PosixStdinReader error ", errno, " in read()");
+					break;
+				}
+				else if (len == 0)
+				{
+					break; // eof
+				}
 				else
+				{
 					synchronized (mutex)
 						data ~= buffer[0 .. len];
+				}
 			}
 		}
 	}
 
 	override bool isReading()
 	{
-		return !stdin.eof;
+		return !stdin.error;
 	}
 }
 
