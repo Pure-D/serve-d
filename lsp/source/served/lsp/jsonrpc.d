@@ -253,6 +253,9 @@ private:
 			do // dmd -O has an issue on mscoff where it forgets to emit a cmp here so this would break with while (inHeader)
 			{
 				string line = reader.yieldLine;
+				if (!reader.isReading)
+					stop(); // abort in header
+
 				if (!line.length && contentLength > 0)
 					inHeader = false;
 				else if (line.startsWith("Content-Length:"))
