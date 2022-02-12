@@ -18,28 +18,58 @@ import std.path : baseName, buildPath, chainPath, isAbsolute;
 import fs = std.file;
 import io = std.stdio;
 
-version (ARM)
+
+version (Win32)
+{
+	version (X86_64)
+	{
+		// wat
+	}
+	else version (X86)
+	{
+		version = RuntimeSourceCheck;
+		// check for WoW64
+		bool isDCDFromSource() const
+		{
+			// needed to check for 64 bit process compatibility on 32 bit binaries because of WoW64
+			import core.sys.windows.windows : GetNativeSystemInfo, SYSTEM_INFO,
+				PROCESSOR_ARCHITECTURE_INTEL;
+
+			SYSTEM_INFO sysInfo;
+			GetNativeSystemInfo(&sysInfo);
+			// only 64 bit releases
+			return sysInfo.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_AMD64
+				&& sysInfo.wProcessorArchitecture != PROCESSOR_ARCHITECTURE_IA64;
+		}
+	}
+	else version = DCDFromSource;
+}
+else version (X86_64)
+{
+	version (Win64)
+	{
+	}
+	else version (linux)
+	{
+	}
+	else version (OSX)
+	{
+	}
+	else version = DCDFromSource;
+}
+else
 {
 	version = DCDFromSource;
 }
-version (Win32)
-{
-}
-else version (Win64)
-{
-}
-else version (linux)
-{
-}
-else version (OSX)
-{
-}
-else version = DCDFromSource;
 
-version (DCDFromSource)
-	enum isDCDFromSource = true;
+version (RuntimeSourceCheck) {}
 else
-	enum isDCDFromSource = false;
+{
+	version (DCDFromSource)
+		enum isDCDFromSource = true;
+	else
+		enum isDCDFromSource = false;
+}
 
 __gshared string dcdUpdateReason = null;
 __gshared bool dcdUpdating;
@@ -82,33 +112,14 @@ void updateDCD()
 
 	bool success;
 
-	enum latestVersionBroken = false;
+	enum latestReleaseBinaryBroken = false;
 
 	// the latest version that has downloads available
 	enum bundledDCDVersion = "v0.13.6";
 
-	bool compileFromSource = false;
-	version (DCDFromSource)
-		compileFromSource = true;
-	else
-	{
-		version (Windows)
-		{
-			// needed to check for 64 bit process compatibility on 32 bit binaries because of WoW64
-			import core.sys.windows.windows : GetNativeSystemInfo, SYSTEM_INFO,
-				PROCESSOR_ARCHITECTURE_INTEL;
-
-			SYSTEM_INFO sysInfo;
-			GetNativeSystemInfo(&sysInfo);
-			if (sysInfo.wProcessorArchitecture == PROCESSOR_ARCHITECTURE_INTEL) // only 64 bit releases
-				compileFromSource = true;
-		}
-
-		if (!checkVersion(bundledDCDVersion, DCDComponent.latestKnownVersion))
-			compileFromSource = true;
-	}
-
-	static if (latestVersionBroken)
+	bool compileFromSource = isDCDFromSource || latestReleaseBinaryBroken;
+	if (!compileFromSource
+		&& !checkVersion(bundledDCDVersion, DCDComponent.latestKnownVersion))
 		compileFromSource = true;
 
 	string[] triedPaths;
