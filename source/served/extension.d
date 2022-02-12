@@ -549,10 +549,11 @@ void doGlobalStartup()
 			else
 			{
 				spawnFiber({
+					string action;
 					if (isDCDFromSource)
-						auto action = translate!"d.ext.compileProgram"("DCD");
+						action = translate!"d.ext.compileProgram"("DCD");
 					else
-						auto action = translate!"d.ext.downloadProgram"("DCD");
+						action = translate!"d.ext.downloadProgram"("DCD");
 
 					auto res = rpc.window.requestMessage(MessageType.error, outdatedMessage, [
 							action
