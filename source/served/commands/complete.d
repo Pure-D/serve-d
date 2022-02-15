@@ -635,6 +635,7 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 			completeDCD, completeDoc, completeSnippets);
 	const config = workspace(params.textDocument.uri).config;
 	DCDCompletions result = DCDCompletions.empty;
+	SnippetInfo snippetInfo;
 	joinAll({
 		if (completeDCD)
 			result = instance.get!DCDComponent.listCompletion(document.rawText, byteOff).getYield;
@@ -643,7 +644,9 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 			provideDocComplete(params, instance, document, completion, line, lineRange);
 	}, {
 		if (completeSnippets)
-			provideSnippetComplete(params, instance, document, config, completion, byteOff);
+			snippetInfo = provideSnippetComplete(params, instance, document, config, completion, byteOff);
+		else
+			snippetInfo = getSnippetInfo(instance, document, byteOff);
 	});
 
 	if (completeDCD && result != DCDCompletions.init)
@@ -651,7 +654,7 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 		if (result.type == DCDCompletions.Type.identifiers)
 		{
 			auto d = config.d;
-			completion ~= convertDCDIdentifiers(result.identifiers, d.argumentSnippets, dcdext);
+			completion ~= convertDCDIdentifiers(result.identifiers, d.argumentSnippets, dcdext, snippetInfo);
 		}
 		else if (result.type != DCDCompletions.Type.calltips)
 		{
@@ -751,12 +754,12 @@ private void provideDocComplete(TextDocumentPositionParams params, WorkspaceD.In
 	}
 }
 
-private void provideSnippetComplete(TextDocumentPositionParams params, WorkspaceD.Instance instance,
+private SnippetInfo provideSnippetComplete(TextDocumentPositionParams params, WorkspaceD.Instance instance,
 		ref Document document, ref const UserConfiguration config,
 		ref CompletionItem[] completion, int byteOff)
 {
 	if (byteOff > 0 && document.rawText[byteOff - 1 .. $].startsWith("."))
-		return; // no snippets after '.' character
+		return SnippetInfo.init; // no snippets after '.' character
 
 	auto snippets = instance.get!SnippetsComponent;
 	auto ret = snippets.getSnippetsYield(document.uri.uriToFile, document.rawText, byteOff);
@@ -772,6 +775,17 @@ private void provideSnippetComplete(TextDocumentPositionParams params, Workspace
 		item.data["params"] = toJSON(params);
 		completion ~= item;
 	}
+
+	return ret.info;
+}
+
+private SnippetInfo getSnippetInfo(WorkspaceD.Instance instance, ref Document document, int byteOff)
+{
+	if (byteOff > 0 && document.rawText[byteOff - 1 .. $].startsWith("."))
+		return SnippetInfo.init; // no snippets after '.' character
+
+	auto snippets = instance.get!SnippetsComponent;
+	return snippets.determineSnippetInfo(document.uri.uriToFile, document.rawText, byteOff);
 }
 
 private void addDocComplete(ref CompletionItem[] completion, CompletionItem doc, string prefix)
@@ -950,7 +964,8 @@ unittest
 	assert(!isInComment("int x;\n// line comment\n", 23, backend));
 }
 
-auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, DCDExtComponent dcdext)
+auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, DCDExtComponent dcdext,
+	SnippetInfo info = SnippetInfo.init)
 {
 	CompletionItem[] completion;
 	foreach (identifier; identifiers)
@@ -1076,7 +1091,8 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 			item.sortText = identifier.definition;
 
 			// TODO: only add arguments when this is a function call, eg not on template arguments
-			if (identifier.type == "f" && argumentSnippets)
+			if (identifier.type == "f" && argumentSnippets
+				&& info.level.among!(SnippetLevel.method, SnippetLevel.value))
 			{
 				item.insertTextFormat = InsertTextFormat.snippet;
 				string args;
