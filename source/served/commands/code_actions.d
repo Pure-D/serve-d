@@ -309,17 +309,25 @@ TextEdit[] implementMethods(ImplementMethodsParams params)
 	if (!toImplement.length)
 		return ret;
 
-	string formatCode(ImplementedMethod method)
+	string formatCode(ImplementedMethod method, bool needsIndent = false)
 	{
-		// cool! snippets handle indentation and new lines automatically so we just keep it as is
-		return method.code;
+		if (needsIndent)
+		{
+			// start/end of block where it's not intended
+			return "\t" ~ method.code.replace("\n", "\n\t");
+		}
+		else
+		{
+			// cool! snippets handle indentation and new lines automatically so we just keep it as is
+			return method.code;
+		}
 	}
 
 	auto existing = backend.best!DCDExtComponent(file).getInterfaceDetails(file,
 			codeText, cast(int) location);
-	if (existing == InterfaceDetails.init)
+	if (existing == InterfaceDetails.init || existing.isEmpty)
 	{
-		// insert at start (could not parse class properly)
+		// insert at start (could not parse class properly or class is empty)
 		auto brace = codeText.indexOf('{', location);
 		if (brace == -1)
 			brace = codeText.length;
@@ -327,7 +335,10 @@ TextEdit[] implementMethods(ImplementMethodsParams params)
 		auto pos = document.bytesToPosition(brace);
 		return [
 			TextEdit(TextRange(pos, pos),
-					eolStr ~ eolStr ~ toImplement.map!(a => formatCode(a)).join(eolStr ~ eolStr))
+					eolStr
+					~ toImplement
+						.map!(a => formatCode(a, true))
+						.join(eolStr ~ eolStr))
 		];
 	}
 	else if (existing.methods.length == 0)
@@ -335,8 +346,12 @@ TextEdit[] implementMethods(ImplementMethodsParams params)
 		// insert at end (no methods in class)
 		auto end = document.bytesToPosition(existing.blockRange[1] - 1);
 		return [
-			TextEdit(TextRange(end, end), eolStr ~ toImplement.map!(a => formatCode(a))
-					.join(eolStr ~ eolStr) ~ eolStr)
+			TextEdit(TextRange(end, end),
+				eolStr
+				~ toImplement
+					.map!(a => formatCode(a, true))
+					.join(eolStr ~ eolStr)
+				~ eolStr)
 		];
 	}
 	else
@@ -346,7 +361,12 @@ TextEdit[] implementMethods(ImplementMethodsParams params)
 		auto end = document.bytesToPosition(existing.methods[$ - 1].blockRange[1]);
 		return [
 			TextEdit(TextRange(end, end),
-					eolStr ~ eolStr ~ toImplement.map!(a => formatCode(a)).join(eolStr ~ eolStr) ~ eolStr)
+					eolStr
+					~ eolStr
+					~ toImplement
+						.map!(a => formatCode(a, false))
+						.join(eolStr ~ eolStr)
+					~ eolStr)
 		];
 	}
 }
