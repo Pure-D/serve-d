@@ -29,7 +29,7 @@ version (Win32)
 	{
 		version = RuntimeSourceCheck;
 		// check for WoW64
-		bool isDCDFromSource() const
+		bool isDCDFromSource()
 		{
 			// needed to check for 64 bit process compatibility on 32 bit binaries because of WoW64
 			import core.sys.windows.windows : GetNativeSystemInfo, SYSTEM_INFO,
