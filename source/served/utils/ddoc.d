@@ -139,8 +139,27 @@ string ddocToMarkdown(const Comment comment)
 /// Removes leading */+ characters from each line per section if the entire section only consists of them. Sections are separated with lines starting with ---
 private string preProcessContent(string content)
 {
+	bool hasLeadingStarOrPlus;
+	foreach (chunk; content.lineSplitter!(KeepTerminator.yes)
+			.chunkBy!(a => a.startsWith("---")))
+	{
+		foreach (line; chunk[1])
+		{
+			if (line.stripLeft.startsWith("*", "+"))
+			{
+				hasLeadingStarOrPlus = true;
+				break;
+			}
+		}
+
+		if (hasLeadingStarOrPlus)
+			break;
+	}
+
+	if (!hasLeadingStarOrPlus)
+		return content; // no leading * or + characters, no preprocessing needed.
+
 	auto newContent = appender!string();
-	// TODO: optimize to not allocate when not changing content
 	newContent.reserve(content.length);
 	foreach (chunk; content.lineSplitter!(KeepTerminator.yes)
 			.chunkBy!(a => a.startsWith("---")))
@@ -181,6 +200,30 @@ private string preProcessContent(string content)
 				newContent.put(line);
 	}
 	return newContent.data;
+}
+
+unittest
+{
+	string noChange = `Params:
+	a = this does things
+	b = this does too
+
+Examples:
+---
+foo(a, b);
+---
+`;
+	assert(preProcessContent(noChange) is noChange);
+
+	assert(preProcessContent(`* Params:
+*     a = this does things
+*     b = this does too
+*
+* cool.`) == `Params:
+    a = this does things
+    b = this does too
+
+cool.`);
 }
 
 /// Fixes code-d specific placeholders inserted during ddoc translation for better IDE integration.
