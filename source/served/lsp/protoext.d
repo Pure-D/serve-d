@@ -285,3 +285,20 @@ struct RescanTestsParams
 {
 	string uri = null;
 }
+
+/// Parameters for served/listArchTypes
+struct ListArchTypesParams
+{
+	/// If true, return ArchTypeInfo[] with meanings instead of string[]
+	bool withMeaning;
+}
+
+/// Returned by served/listArchTypes if request was sent with
+/// `withMeaning: true` request parameter.
+struct ArchTypeInfo
+{
+	/// The value to use with a switchArchType call / the value DUB uses.
+	string value;
+	/// If not null, show this string in the UI rather than value.
+	string label;
+}

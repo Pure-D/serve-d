@@ -184,13 +184,29 @@ Returns the current dub configuration or null if there is no dub in the active i
 
 #### Request `served/listArchTypes`
 
-**Parameter**: none
+**Parameter**: `ListArchTypesParams`
 
-**Returns**: `string[]`
+**Returns**: `string[] | ArchTypeInfo[]`
 
 Returns an empty array if there is no active instance or if it doesn't have dub.
 
 Otherwise returns the names of available architectures in dub. (e.g. x86 or x86_64)
+
+```ts
+interface ListArchTypesParams
+{
+	/** If true, return ArchTypeInfo[] with meanings instead of string[] */
+	withMeaning?: boolean;
+}
+
+interface ArchTypeInfo
+{
+	/** The value to use with a switchArchType call / the value DUB uses. */
+	value: string;
+	/** If not null, show this string in the UI rather than value. */
+	label: string | null;
+}
+```
 
 #### Request `served/switchArchType`
 

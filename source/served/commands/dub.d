@@ -1,6 +1,7 @@
 module served.commands.dub;
 
 import served.extension;
+import served.lsp.protoext;
 import served.types;
 import served.utils.progress;
 import served.utils.translate;
@@ -13,7 +14,7 @@ import painlessjson : toJSON;
 import core.time;
 
 import std.algorithm : among, canFind, count, endsWith, map, remove, startsWith;
-import std.array : array, replace;
+import std.array : array, replace, appender;
 import std.experimental.logger;
 import std.json : JSONValue;
 import std.path : baseName, buildPath, dirName, setExtension;
@@ -48,11 +49,32 @@ string getConfig()
 }
 
 @protocolMethod("served/listArchTypes")
-string[] listArchTypes()
+JSONValue listArchTypes(ListArchTypesParams params)
 {
+	auto ret = appender!(JSONValue[]);
 	if (!activeInstance || !activeInstance.has!DubComponent)
-		return null;
-	return activeInstance.get!DubComponent.archTypes;
+		return JSONValue(ret.data);
+
+	auto archTypes = activeInstance.get!DubComponent.extendedArchTypes;
+
+	if (params.withMeaning)
+	{
+		foreach (archType; archTypes)
+		{
+			ret ~= JSONValue([
+				"label": JSONValue(archType.label),
+				"value": JSONValue(archType.value)
+			]);
+		}
+	}
+	else
+	{
+		foreach (archType; archTypes)
+		{
+			ret ~= JSONValue(archType.value);
+		}
+	}
+	return JSONValue(ret.data);
 }
 
 @protocolMethod("served/switchArchType")
