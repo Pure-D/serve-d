@@ -7,13 +7,11 @@ Join the chat:
 
 [![Join on Discord](https://discordapp.com/api/guilds/242094594181955585/widget.png?style=shield)](https://discord.gg/Bstj9bx)
 
-[Microsoft language server protocol](https://github.com/Microsoft/language-server-protocol) implementation for [D](https://dlang.org) using [workspace-d](https://github.com/Pure-D/workspace-d).
+[Microsoft language server protocol](https://github.com/Microsoft/language-server-protocol) implementation for [D](https://dlang.org).
 
-This program is basically a combination of workspace-d and most of [code-d](https://github.com/Pure-D/code-d).
+This program is the heart of [code-d](https://github.com/Pure-D/code-d) and implements most IDE features in D.
 
-The purpose of this project is to give every editor the same capabilities and editing features as code-d with even less code required on the editor side than with workspace-d due to a more widely available protocol.
-
-This is pretty much another abstraction layer on top of workspace-d to simplify and speed up extension development as most of the editor extension can now be written in D.
+The purpose of this project is to give every editor the same capabilities and editing features as code-d through the widely available Microsoft Language Server Protocol (LSP).
 
 ## Special Thanks
 
@@ -45,6 +43,15 @@ _add LSP configurations using serve-d for other editors and PR them here!_
 * [vim](editor-vim.md)
 * [sublime text](editor-st.md)
 * [emacs](editor-emacs.md)
+
+### Project Layout
+
+- [`serve-d:http`](./http) - Downloads a file over HTTP with progress using WinHTTP on Windows and the dub requests library on other platforms.
+- [`serve-d:lsp`](./lsp) - LSP protocol types and RPC primitives
+- [`serve-d:serverbase`](./serverbase) - LSP server basics for quickly creating an LSP server for any language.
+- [`serve-d:dcd`](./dcd) - DCD client using direct communication (without spawning dcd-client) for lower latency
+- [`serve-d:workspace-d`](./workspace-d) - Implementation of core D functionality and source code processing using libdparse, dfmt, D-Scanner and DCD.
+- [`source/`](./source) - Maps LSP commands and state to serve-d:workspace-d functionality.
 
 ### Command Line options
 
