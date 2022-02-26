@@ -1,0 +1,11 @@
+{
+	"name": "empty-windows",
+	"configurations": [
+		{
+			"name": "empty-windows",
+			"platforms": [
+				"posix"
+			]
+		}
+	]
+}

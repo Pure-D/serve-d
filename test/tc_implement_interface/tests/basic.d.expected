@@ -1,0 +1,23 @@
+implement 28
+void virtualMethod
+// TODO: optional implementation
+override int abstractMethod
+!package string stringMethod
+string stringMethod
+Tuple!(int, string, Array!bool)[][] advancedMethod(int a, int b, string c)
+void normalMethod()
+int attributeSuffixMethod() nothrow @property @nogc
+!middleprivate1
+!middleprivate2
+extern (C) @property @nogc ref immutable int attributePrefixMethod() const
+!alreadyImplementedMethod
+deprecated("foo") void deprecatedMethod()
+!staticMethod
+protected void protectedMethod()
+!void barfoo
+void hello()
+int nothrowMethod() nothrow
+int nogcMethod() @nogc
+nothrow int prefixNothrowMethod()
+@nogc int prefixNogcMethod()
+void world()

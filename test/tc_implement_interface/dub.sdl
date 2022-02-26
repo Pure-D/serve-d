@@ -1,0 +1,3 @@
+name "test-implement-interface"
+
+dependency "serve-d:workspace-d" path="../.."

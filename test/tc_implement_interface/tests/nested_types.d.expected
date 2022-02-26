@@ -1,0 +1,6 @@
+implement 48
+!void foo
+!void bar
+void toImplement()
+CoolClass.Helper accessHelper()
+CoolClass.Helper2 accessHelper2()

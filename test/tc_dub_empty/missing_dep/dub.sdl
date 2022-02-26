@@ -1,0 +1,3 @@
+name "test-dub-missing-dep"
+
+dependency "workspace-d:nonexistant" version="*"

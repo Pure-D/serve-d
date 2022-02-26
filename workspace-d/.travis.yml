@@ -1,0 +1,8 @@
+language: d
+d:
+ - dmd
+ - ldc
+os:
+ - linux
+ - osx
+script: dub test --compiler=${DC} && cd test && bash runtests.sh ${DC}

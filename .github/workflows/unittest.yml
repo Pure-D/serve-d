@@ -24,6 +24,11 @@ jobs:
       - name: dub upgrade
         run: dub upgrade
 
+      - name: Run workspace-d tests
+        run: dub test :workspace-d
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '10.12'
+
       - name: LSP tests
         run: dub test :lsp
         env:
@@ -47,5 +52,11 @@ jobs:
 
       - name: Run tests
         run: dub test
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '10.12'
+
+      - name: Run standalone tests
+        run: ./test/runtests.sh
+        working-directory: ./test
         env:
           MACOSX_DEPLOYMENT_TARGET: '10.12'

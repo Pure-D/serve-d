@@ -1,0 +1,3 @@
+name "test-dub"
+
+dependency "serve-d:workspace-d" path="../.."

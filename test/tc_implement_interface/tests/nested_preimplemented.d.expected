@@ -1,0 +1,8 @@
+implement 52
+!string name()
+!string tagName()
+int numAttributes() @property
+string getAttribute(string name)
+return super.getAttribute(name);
+!dontImplement
+void addChild(Node n)

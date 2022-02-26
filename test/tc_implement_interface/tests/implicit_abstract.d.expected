@@ -1,0 +1,2 @@
+implement 40
+override int prop() @property

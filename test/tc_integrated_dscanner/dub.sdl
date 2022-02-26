@@ -1,0 +1,5 @@
+name "test-dscanner"
+
+stringImportPaths "source"
+
+dependency "serve-d:workspace-d" path="../.."
