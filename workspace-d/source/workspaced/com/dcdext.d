@@ -1593,7 +1593,7 @@ private:
 
 	FooBar.Something somefunc() { return Something.init; }
 	Something somefunc2() { return Something.init; }
-}};
+}}.replace("\r\n", "\n");
 
 unittest
 {
@@ -1868,7 +1868,7 @@ unittest
 	protected void protectedMethod();
 private:
 	void barfoo();
-}};
+}}.replace("\r\n", "\n");
 
 	scope backend = new WorkspaceD();
 	auto workspace = makeTemporaryTestingWorkspace;
@@ -1975,7 +1975,7 @@ class ImplB : MyInterface
 {
 	void foo() {}
 }
-};
+}.replace("\r\n", "\n");
 
 	scope backend = new WorkspaceD();
 	auto workspace = makeTemporaryTestingWorkspace;

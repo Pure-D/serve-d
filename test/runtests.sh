@@ -1,4 +1,5 @@
 #!/bin/bash
+set -euo pipefail
 
 RED="\033[31m"
 GREEN="\033[32m"
@@ -31,7 +32,7 @@ for testCase in $tests; do
 
 	if [ -f .needs_dcd ]; then
 		pushd ../data/dcd
-		dmd -I../../../workspace-d/source -run download_dcd.d
+		$DC -I../../../workspace-d/source -run download_dcd.d
 		popd
 		cp ../data/dcd/dcd-server* .
 		cp ../data/dcd/dcd-client* .

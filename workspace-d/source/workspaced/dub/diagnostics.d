@@ -72,7 +72,7 @@ unittest
 	if (foo(a == 4) == null)
 	{
 	}
-}};
+}}.replace("\r\n", "\n");
 
 	LexerConfig config;
 	RollbackAllocator rba;
