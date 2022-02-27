@@ -33,7 +33,7 @@ version (Win32)
 		{
 			// needed to check for 64 bit process compatibility on 32 bit binaries because of WoW64
 			import core.sys.windows.windows : GetNativeSystemInfo, SYSTEM_INFO,
-				PROCESSOR_ARCHITECTURE_INTEL;
+				PROCESSOR_ARCHITECTURE_AMD64, PROCESSOR_ARCHITECTURE_IA64;
 
 			SYSTEM_INFO sysInfo;
 			GetNativeSystemInfo(&sysInfo);
