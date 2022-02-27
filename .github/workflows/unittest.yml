@@ -56,7 +56,7 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
 
       - name: Run standalone tests
-        run: ./test/runtests.sh
+        run: ./runtests.sh
         working-directory: ./test
         env:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
