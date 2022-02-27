@@ -5,8 +5,6 @@ GREEN="\033[32m"
 YELLOW="\033[33m"
 NORMAL="\033[0m"
 
-DC="$1"
-
 if [ -z $DC ]; then
 	DC="dmd"
 fi
@@ -20,7 +18,7 @@ pushd ..
 dub build --build=release --compiler="${DC}"
 popd
 
-tests="${@:2}"
+tests="${@:1}"
 if [ -z "$tests" ]; then
 	tests=tc*
 fi
