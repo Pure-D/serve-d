@@ -10,7 +10,7 @@ import std.range;
 
 import served.utils.memory;
 
-version (Have_workspace_d)
+static if (__traits(compiles, { import workspaced.api : Future; }))
 {
 	import workspaced.api : Future;
 
