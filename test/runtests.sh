@@ -5,19 +5,19 @@ GREEN="\033[32m"
 YELLOW="\033[33m"
 NORMAL="\033[0m"
 
-COMPILER="$1"
+DC="$1"
 
-if [ -z $COMPILER ]; then
-	COMPILER="dmd"
+if [ -z $DC ]; then
+	DC="dmd"
 fi
 
 fail_count=0
 pass_count=0
 
-echo "Compiling serve-d in release mode with ${COMPILER}..."
+echo "Compiling serve-d in release mode with ${DC}..."
 
 pushd ..
-dub build --build=release --compiler="${COMPILER}"
+dub build --build=release --compiler="${DC}"
 popd
 
 tests="${@:2}"
@@ -25,7 +25,7 @@ if [ -z "$tests" ]; then
 	tests=tc*
 fi
 
-echo "Running tests with ${COMPILER}..."
+echo "Running tests with ${DC}..."
 
 for testCase in $tests; do
 	echo -e "${YELLOW}$testCase${NORMAL}"
@@ -40,7 +40,7 @@ for testCase in $tests; do
 	fi
 
 	dub upgrade >testout.txt 2>&1
-	dub --compiler="${COMPILER}" >>testout.txt 2>&1
+	dub --compiler="${DC}" >>testout.txt 2>&1
 	if [[ $? -eq 0 ]]; then
 		echo -e "${YELLOW}$testCase:${NORMAL} ... ${GREEN}Pass${NORMAL}";
 		let pass_count=pass_count+1
