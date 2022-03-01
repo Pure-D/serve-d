@@ -834,7 +834,7 @@ struct WorkspaceClientCapabilities
 {
 	mixin StrictOptionalSerializer;
 
-	bool applyEdit;
+	Optional!bool applyEdit;
 	Optional!WorkspaceEditClientCapabilities workspaceEdit;
 	Optional!DynamicRegistration didChangeConfiguration;
 	Optional!DynamicRegistration didChangeWatchedFiles;
