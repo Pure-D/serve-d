@@ -1153,8 +1153,30 @@ unittest
 		},
 		(code) {
 			auto defs = dscanner.listDefinitions("stdin", code, verbose).getBlocking();
-			assert(defs == expectedDefinitions);
+			assert(defs == expectedDefinitions, highlightDiff(defs, expectedDefinitions));
 		});
+}
+
+version (unittest) private string highlightDiff(T)(T[] a, T[] b)
+{
+	string ret;
+	if (a.length != b.length)
+		ret ~= text("length mismatch: ", a.length, " != ", b.length, "\n");
+	foreach (i; 0 .. min(a.length, b.length))
+	{
+		ret ~= text(a[i] == b[i] ? "\x1B[0m   " : "\x1B[33m ! ", a[i], a[i] == b[i] ? " == " : " != ", b[i], "\x1B[0m\n");
+	}
+	if (a.length < b.length)
+	{
+		foreach (i; a.length .. b.length)
+			ret ~= text("\x1B[31m + ", b[i], "\x1B[0m\n");
+	}
+	else
+	{
+		foreach (i; b.length .. a.length)
+			ret ~= text("\x1B[31m - ", a[i], "\x1B[0m\n");
+	}
+	return ret;
 }
 
 size_t safeStartLocation(T)(const T b)
