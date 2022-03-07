@@ -1159,10 +1159,10 @@ unittest
 
 size_t startLocation(const FunctionBody b)
 {
-	return b.tokens.length > 0 ? b.tokens[0].index : 0;
+	return (b && b.tokens.length > 0) ? b.tokens[0].index : 0;
 }
 
 size_t endLocation(const FunctionBody b)
 {
-	return b.tokens.length > 0 ? (b.tokens[$ - 1].index + b.tokens[$ - 1].tokenText.length) : 0;
+	return (b && b.tokens.length > 0) ? (b.tokens[$ - 1].index + b.tokens[$ - 1].tokenText.length) : 0;
 }
