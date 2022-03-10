@@ -605,8 +605,8 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 		if (commentToken.text.startsWith("///", "/**", "/++"))
 		{
 			trace("Providing comment completion");
-			int prefixLen = prefix[0] == '/' ? 3 : 1;
-			auto remaining = prefix[prefixLen .. $].stripLeft;
+			int prefixLen = (prefix.length > 0 && prefix[0] == '/') ? 3 : 1;
+			auto remaining = prefix[min($, prefixLen) .. $].stripLeft;
 
 			foreach (compl; import("ddocs.txt").lineSplitter)
 			{
