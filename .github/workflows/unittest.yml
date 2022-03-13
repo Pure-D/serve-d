@@ -21,6 +21,9 @@ jobs:
         with:
           compiler: ${{ matrix.dc }}
 
+      - name: Setup upterm session
+        uses: lhotari/action-upterm@v1
+
       - name: dub upgrade
         run: dub upgrade
 
