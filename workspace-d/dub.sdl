@@ -6,7 +6,7 @@ license "MIT"
 
 dependency "dfmt" version="0.14.2"
 dependency "inifiled" version="1.3.3"
-dependency "serve-d:dcd" version="*"
+dependency "serve-d:dcd" path=".."
 dependency "dub" version="1.28.0-beta.1"
 dependency "painlessjson" version="1.4.0"
 dependency "emsi_containers" version="0.8.0"
