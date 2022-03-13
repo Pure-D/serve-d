@@ -1183,12 +1183,12 @@ version (unittest) private string highlightDiff(T)(T[] a, T[] b)
 	return ret;
 }
 
-size_t safeStartLocation(T)(const T b)
+size_t safeStartLocation(const BaseNode b)
 {
 	return (b !is null && b.tokens.length > 0) ? b.tokens[0].index : 0;
 }
 
-size_t safeEndLocation(T)(const T b)
+size_t safeEndLocation(const BaseNode b)
 {
 	return (b !is null && b.tokens.length > 0) ? (b.tokens[$ - 1].index + b.tokens[$ - 1].tokenText.length) : 0;
 }
