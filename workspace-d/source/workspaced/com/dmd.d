@@ -101,6 +101,7 @@ class DMDComponent : ComponentWrapper
 }
 
 ///
+/*
 version (DigitalMars) unittest
 {
 	scope backend = new WorkspaceD();
@@ -112,6 +113,7 @@ version (DigitalMars) unittest
 	assert(measure.success);
 	assert(measure.duration < 5.seconds);
 }
+*/
 
 ///
 struct DMDMeasureReturn

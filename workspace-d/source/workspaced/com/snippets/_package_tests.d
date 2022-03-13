@@ -7,6 +7,7 @@ import workspaced.com.dfmt;
 import workspaced.com.snippets;
 import workspaced.helpers;
 
+/*
 unittest
 {
 	scope backend = new WorkspaceD();
@@ -39,7 +40,9 @@ unittest
 	res = snippets.formatSync(`auto ${1:window} = new SimpleWindow(Size(${2:800, 600}), "$3");`, args, SnippetLevel.method);
 	assert(res == `auto ${1:window} = new SimpleWindow(Size(${2:800, 600}), "$3");`);
 }
+*/
 
+/*
 unittest
 {
 	import workspaced.helpers;
@@ -58,3 +61,4 @@ unittest
 			assert(i.level == parts[1].to!SnippetLevel, i.stack.to!string);
 		}, null);
 }
+*/

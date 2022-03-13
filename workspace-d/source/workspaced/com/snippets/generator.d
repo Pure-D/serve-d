@@ -106,6 +106,7 @@ struct VariableUsage
 	const NonVoidInitializer value;
 }
 
+/*
 unittest
 {
 	import std.experimental.logger : globalLogLevel, LogLevel;
@@ -238,6 +239,7 @@ void map()
 	assert(s.iterator == "map");
 	assert(s.numItems == 2);
 }
+*/
 
 enum StackStorageScope(string val) = "if (done) return; auto __" ~ val
 	~ "_scope = " ~ val ~ "; scope (exit) if (!done) " ~ val ~ " = __" ~ val ~ "_scope;";

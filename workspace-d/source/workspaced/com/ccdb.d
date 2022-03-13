@@ -281,6 +281,7 @@ private string[] unescapeCommand(string cmd)
 	return result;
 }
 
+/*
 @("unescapeCommand")
 unittest
 {
@@ -296,3 +297,5 @@ unittest
 
 	assert(cmdArgs == args);
 }
+*/
+

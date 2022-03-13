@@ -410,6 +410,7 @@ package string orDubFetchFallback(string v, string path)
 	return v;
 }
 
+/*
 unittest
 {
 	assert("vbin".orDubFetchFallback(`/path/to/home/.dub/packages/dcd-0.13.1/dcd/bin/dcd-server`) == "0.13.1");
@@ -418,6 +419,7 @@ unittest
 	assert("vbin".orDubFetchFallback(`C:\path\to\appdata\dub\packages\dcd-0.13.1-beta.4\dcd\bin\dcd-server`) == "0.13.1-beta.4");
 	assert("vbin".orDubFetchFallback(`C:\path\to\appdata\dub\packages\dcd-master\dcd\bin\dcd-server`) == "vbin");
 }
+*/
 
 /// searches for a semver in the given string starting after a - character,
 /// returns everything until the end.
@@ -485,6 +487,7 @@ package string extractPathSemver(string s)
 	return null;
 }
 
+/*
 unittest
 {
 	assert(extractPathSemver("foo-v1.0.0") is null);
@@ -498,3 +501,5 @@ unittest
 	assert(extractPathSemver("foo-1.0.0x") is null);
 	assert(extractPathSemver("-1.0.0") == "1.0.0");
 }
+*/
+

@@ -204,6 +204,7 @@ private:
 	LexerConfig config;
 }
 
+/+
 unittest
 {
 	import std.conv : to;
@@ -392,6 +393,7 @@ import std.algorithm;
 	], "\t"));
 	//dfmt on
 }
++/
 
 /// Information about how to add an import
 struct ImportModification
@@ -543,6 +545,7 @@ string getIndentation(ubyte[] code, size_t index)
 	return "\n" ~ indent.stripLeft('\n');
 }
 
+/*
 unittest
 {
 	auto code = cast(ubyte[]) "void foo() {\n\tfoo();\n}";
@@ -557,6 +560,7 @@ unittest
 	indent = getIndentation(code, 9);
 	assert(indent == "\n", '"' ~ indent ~ '"');
 }
+*/
 
 class ImporterReaderVisitor : ASTVisitor
 {
@@ -663,6 +667,7 @@ class ImporterReaderVisitor : ASTVisitor
 	size_t innermostBlockStart;
 }
 
+/*
 unittest
 {
 	import std.conv;
@@ -740,3 +745,4 @@ unittest
 	assertEquals(mod.replacements[0].apply(code),
 			"module a;\n\nimport std.stdio;\n\nvoid foo() {\n\twriteln(\"hi\");\n}");
 }
+*/

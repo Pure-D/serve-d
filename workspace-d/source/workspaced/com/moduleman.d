@@ -307,6 +307,7 @@ class ModuleChangerVisitor : ASTVisitor
 	bool renameSubmodules, foundModule;
 }
 
+/+
 unittest
 {
 	scope backend = new WorkspaceD();
@@ -383,3 +384,4 @@ void main() {}`);
 	fetched = mod.describeModule("#!/usr/bin/rdmd\n");
 	assert(fetched == FileModuleInfo([], "", 16, 16, 16, 16));
 }
++/

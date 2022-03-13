@@ -278,6 +278,7 @@ void tryFetchProperty(T = string)(ref JSONValue json, ref T ret, string name)
 	}
 }
 
+/*
 unittest
 {
 	scope backend = new WorkspaceD();
@@ -309,3 +310,5 @@ void main()
 		DfmtInstruction(DfmtInstruction.Type.dfmtOn, 127, 12, 2, 10),
 	]);
 }
+*/
+

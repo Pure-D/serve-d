@@ -717,6 +717,7 @@ bool supportsUnixDomainSockets(string ver)
 	return checkVersion(ver, [0, 8, 0]);
 }
 
+/*
 unittest
 {
 	assert(supportsUnixDomainSockets("0.8.0-beta2+9ec55f40a26f6bb3ca95dc9232a239df6ed25c37"));
@@ -725,6 +726,7 @@ unittest
 	assert(supportsUnixDomainSockets("v0.9.8 c7ea7e081ed9ad2d85e9f981fd047d7fcdb2cf51"));
 	assert(supportsUnixDomainSockets("1.0.0"));
 }
+*/
 
 /// Returned by findDeclaration
 struct DCDDeclaration

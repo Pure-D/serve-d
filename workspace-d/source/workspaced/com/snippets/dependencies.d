@@ -112,6 +112,7 @@ class DependencyBasedSnippetProvider : SnippetProvider
 	}
 }
 
+/*
 unittest
 {
 	DependencySet set;
@@ -149,3 +150,4 @@ unittest
 	assert(set.hasAll([]));
 	assert(set.hasAll(["foo"]));
 }
+*/

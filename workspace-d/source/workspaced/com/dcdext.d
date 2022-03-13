@@ -1595,6 +1595,7 @@ private:
 	Something somefunc2() { return Something.init; }
 }}.replace("\r\n", "\n");
 
+/*
 unittest
 {
 	scope backend = new WorkspaceD();
@@ -1615,7 +1616,9 @@ unittest
 
 	// TODO: make insertCodeInContainer work properly?
 }
+*/
 
+/*
 unittest
 {
 	import std.conv;
@@ -1753,7 +1756,9 @@ unittest
 			127);
 	assert(extract == CalltipsSupport.init);
 }
+*/
 
+/*
 unittest
 {
 	scope backend = new WorkspaceD();
@@ -1847,7 +1852,9 @@ unittest
 	assert(info.details.methods[5].definitionRange == [504, 526]);
 	assert(info.details.methods[5].blockRange == [526, 552]);
 }
+*/
 
+/*
 unittest
 {
 	string testCode = q{package interface Foo0
@@ -1956,7 +1963,9 @@ private:
 	assert(!info.details.methods[11].needsImplementation);
 	assert(!info.details.methods[11].hasBody);
 }
+*/
 
+/*
 unittest
 {
 	string testCode = q{module hello;
@@ -1987,7 +1996,9 @@ class ImplB : MyInterface
 
 	assert(info.blockRange == [81, 85]);
 }
+*/
 
+/*
 unittest
 {
 	scope backend = new WorkspaceD();
@@ -2009,6 +2020,7 @@ unittest
 	assert(dcdext.formatDefinitionBlock("auto foo(T, V)(string, int)") == "auto foo(\n\tT,\n\tV\n)(\n\tstring,\n\tint\n)");
 	assert(dcdext.formatDefinitionBlock("auto foo(string, int f, ...)") == "auto foo(\n\tstring,\n\tint f,\n\t...\n)");
 }
+*/
 
 final class IfFinder : ASTVisitor
 {
@@ -2153,6 +2165,7 @@ final class IfFinder : ASTVisitor
 	}
 }
 
+/*
 unittest
 {
 	scope backend = new WorkspaceD();
@@ -2199,6 +2212,7 @@ unittest
 	Related(Related.Type.controlFlow, [131, 135]),
 ]);
 }
+*/
 
 final class SwitchFinder : ASTVisitor
 {
@@ -2278,6 +2292,7 @@ final class SwitchFinder : ASTVisitor
 	}
 }
 
+/*
 unittest
 {
 	scope backend = new WorkspaceD();
@@ -2312,6 +2327,7 @@ unittest
 	Related(Related.Type.controlFlow, [154, 161]),
 ]);
 }
+*/
 
 final class BreakFinder : ASTVisitor
 {
@@ -2526,6 +2542,7 @@ class ReverseReturnFinder : ASTVisitor
 	}
 }
 
+/*
 unittest
 {
 	scope backend = new WorkspaceD();
@@ -2603,6 +2620,7 @@ unittest
 	Related(Related.Type.controlFlow, [133, 139]),
 ]);
 }
+*/
 
 class ReturnFinder : ASTVisitor
 {
@@ -2677,6 +2695,7 @@ class ReturnFinder : ASTVisitor
 	}
 }
 
+/*
 unittest
 {
 	scope backend = new WorkspaceD();
@@ -2704,3 +2723,5 @@ unittest
 	Related(Related.Type.controlFlow, [79, 85]),
 ]);
 }
+*/
+

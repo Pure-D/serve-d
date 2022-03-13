@@ -284,6 +284,7 @@ LocationInfo getLocationInfo(scope const(char)[] code, int pos)
 	return current;
 }
 
+/*
 unittest
 {
 	auto info = getLocationInfo(" ", 0);
@@ -321,3 +322,4 @@ unittest
 	assert(info.itemScope == ["TableLayout", "TextWidget", "t"]);
 	assert(info.type == LocationType.Member);
 }
+*/

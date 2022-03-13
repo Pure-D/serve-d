@@ -191,6 +191,7 @@ out (v; v <= tokens.length)
 }
 
 ///
+/*
 unittest
 {
 	StringCache stringCache = StringCache(StringCache.defaultBucketCount);
@@ -234,6 +235,7 @@ void foo()
 
 	// assert(get(57) == tok!"comment");
 }
+*/
 
 bool isSomeString(const IdType type)
 {
@@ -395,6 +397,7 @@ BaseNode getIfElse(IfStatement ifStmt)
 	}
 }
 
+/*
 unittest
 {
 	StringCache stringCache = StringCache(StringCache.defaultBucketCount);
@@ -415,6 +418,7 @@ unittest
 	assert(getIfElse(p("if (x) {} else if (y) {} else {}")) !is null);
 	assert(cast(IfStatement)getIfElse(p("if (x) {} else if (y) {} else {}")) is null);
 }
+*/
 
 C[] substr(C)(C[] s, size_t[2] range)
 {

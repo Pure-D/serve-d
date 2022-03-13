@@ -66,6 +66,7 @@ class EqualComparisionFinder : ASTVisitor
 	EqualExpression result;
 }
 
+/*
 unittest
 {
 	string code = q{void main() {
@@ -85,3 +86,4 @@ unittest
 
 	assert(range == [31, 33]);
 }
+*/

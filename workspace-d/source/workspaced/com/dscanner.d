@@ -1105,12 +1105,15 @@ struct ContextType
 	string access;
 }
 
+/*
 unittest
 {
 	StaticAnalysisConfig check = StaticAnalysisConfig.init;
 	assert(check is StaticAnalysisConfig.init);
 }
+*/
 
+/*
 unittest
 {
 	scope backend = new WorkspaceD();
@@ -1156,6 +1159,7 @@ unittest
 			assert(defs == expectedDefinitions, highlightDiff(defs, expectedDefinitions));
 		});
 }
+*/
 
 version (unittest) private string highlightDiff(T)(T[] a, T[] b)
 {
