@@ -17,8 +17,6 @@ import dparse.lexer;
 
 import core.thread;
 
-import painlessjson;
-
 import workspaced.api;
 
 @component("dfmt")

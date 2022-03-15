@@ -18,8 +18,6 @@ import std.stdio;
 import std.string;
 import std.typecons;
 
-import painlessjson;
-
 import workspaced.api;
 import workspaced.helpers;
 import workspaced.com.dcd_version;

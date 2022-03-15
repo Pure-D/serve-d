@@ -7,8 +7,6 @@ import std.process;
 import std.string;
 import std.uni;
 
-import painlessjson;
-
 import workspaced.api;
 import workspaced.completion.dml;
 
