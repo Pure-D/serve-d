@@ -6,7 +6,7 @@ GREEN="\033[32m"
 YELLOW="\033[33m"
 NORMAL="\033[0m"
 
-if [ -z $DC ]; then
+if [ -z "${DC-}" ]; then
 	DC="dmd"
 fi
 
