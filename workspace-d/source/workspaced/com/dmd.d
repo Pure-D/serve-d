@@ -10,8 +10,6 @@ import std.path;
 import std.process;
 import std.random;
 
-import painlessjson;
-
 import workspaced.api;
 
 @component("dmd")
@@ -124,32 +122,4 @@ struct DMDMeasureReturn
 	string[] log;
 	/// how long compilation took (serialized to msecs float in json)
 	Duration duration;
-
-	/// Converts a json object to [DMDMeasureReturn]
-	static DMDMeasureReturn fromJSON(JSONValue value)
-	{
-		DMDMeasureReturn ret;
-		if (auto success = "success" in value)
-			ret.success = success.type == JSONType.true_;
-		if (auto crash = "crash" in value)
-			ret.crash = crash.type == JSONType.true_;
-		if (auto log = "log" in value)
-			ret.log = (*log).fromJSON!(string[]);
-		if (auto duration = "duration" in value)
-			ret.duration = (cast(long)(duration.floating * 10_000)).hnsecs;
-		return ret;
-	}
-
-	/// Converts this object to a [JSONValue]
-	JSONValue toJSON() const
-	{
-		//dfmt off
-		return JSONValue([
-			"success": JSONValue(success),
-			"crash": JSONValue(crash),
-			"log": log.toJSON,
-			"duration": JSONValue(duration.total!"hnsecs" / cast(double) 10_000)
-		]);
-		//dfmt on
-	}
 }

@@ -14,8 +14,6 @@ import std.regex;
 import std.stdio;
 import std.string;
 
-import painlessjson : toJSON, fromJSON;
-
 import workspaced.api;
 
 import dub.description;
@@ -465,7 +463,7 @@ class DubComponent : ComponentWrapper
 	bool setArchType(JSONValue request)
 	{
 		enforce(request.type == JSONType.object && "arch-type" in request, "arch-type not in request");
-		auto type = request["arch-type"].fromJSON!string;
+		auto type = request["arch-type"].str;
 
 		try
 		{
@@ -491,7 +489,7 @@ class DubComponent : ComponentWrapper
 	bool setBuildType(JSONValue request)
 	{
 		enforce(request.type == JSONType.object && "build-type" in request, "build-type not in request");
-		auto type = request["build-type"].fromJSON!string;
+		auto type = request["build-type"].str;
 		if (buildTypes.canFind(type))
 		{
 			_buildType = type;

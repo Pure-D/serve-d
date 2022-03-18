@@ -30,8 +30,6 @@ import dparse.rollback_allocator;
 import dsymbol.builtin.names;
 import dsymbol.modulecache : ASTAllocator, ModuleCache;
 
-import painlessjson;
-
 import workspaced.api;
 import workspaced.dparseext;
 import workspaced.helpers;
@@ -510,26 +508,6 @@ struct DScannerIssue
 	string key;
 	/// Resolved range for content that can be filled with a call to resolveRanges
 	ResolvedLocation[2] range;
-
-	/// Converts this object to a JSONValue
-	JSONValue _toJSON() const
-	{
-		JSONValue[] rangeObj = [
-			range[0].toJSON,
-			range[1].toJSON
-		];
-		//dfmt off
-		return JSONValue([
-			"file": JSONValue(file),
-			"line": JSONValue(line),
-			"column": JSONValue(column),
-			"type": JSONValue(type),
-			"description": JSONValue(description),
-			"key": JSONValue(key),
-			"range": JSONValue(rangeObj),
-		]);
-		//dfmt on
-	}
 }
 
 /// Describes a code location in exact byte offset, line number and column for a

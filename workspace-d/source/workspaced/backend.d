@@ -1,36 +1,90 @@
 module workspaced.backend;
 
-import painlessjson;
 import dparse.lexer : StringCache;
 
-import std.algorithm : canFind, max, min, remove, startsWith;
+import std.algorithm : canFind, map, max, min, remove, startsWith;
+import std.array : array;
 import std.conv;
 import std.file : exists, mkdir, mkdirRecurse, rmdirRecurse, tempDir, write;
 import std.json : JSONType, JSONValue;
 import std.parallelism : defaultPoolThreads, TaskPool;
 import std.path : buildNormalizedPath, buildPath;
 import std.range : chain;
-import std.traits : getUDAs;
+import sumtype : match, SumType, This;
+import std.traits : getUDAs, isSomeString;
 
 import workspaced.api;
 
 struct Configuration
 {
-	/// JSON containing base configuration formatted as {[component]:{key:value pairs}}
-	JSONValue base;
+	alias ValueT = SumType!(typeof(null), string, bool, long, double, This[], This[string]);
 
-	bool get(string component, string key, out JSONValue val) const
+	static T toType(T)(ValueT value)
 	{
-		JSONValue base = this.base;
-		if (base.type != JSONType.object)
-		{
-			JSONValue[string] tmp;
-			base = JSONValue(tmp);
-		}
-		auto com = component in base.object;
+		return value.match!(
+			(typeof(null) n) {
+				if (false) return T.init; // make return type T
+
+				static if (__traits(compiles, T.init is null) && T.init is null)
+					return T.init;
+				else
+					throw new Exception("Cannot convert null to type " ~ T.stringof);
+			},
+			(ValueT[] v) {
+				if (false) return T.init; // make return type T
+
+				static if (is(typeof(T.init[0])))
+				{
+					T ret;
+					ret.reserve(v.length);
+					foreach (i; v)
+						ret ~= toType!(typeof(T.init[0]))(i);
+					return ret;
+				}
+				else
+					throw new Exception("Cannot convert array to type " ~ T.stringof);
+			},
+			(ValueT[string] m) {
+				if (false) return T.init; // make return type T
+
+				static if (is(typeof(T.init[""])))
+				{
+					T ret;
+					foreach (k, v; m)
+						ret[k] = toType!(typeof(ret[k]))(v);
+					return ret;
+				}
+				else
+					throw new Exception("Cannot convert map to type " ~ T.stringof);
+			},
+			(s) {
+				if (false) return T.init; // make return type T
+
+				static if (is(T : typeof(s)))
+					return cast(T) s;
+				else static if (__traits(compiles, s.to!T))
+					return s.to!T;
+				else
+					throw new Exception("Cannot convert " ~ typeof(s).stringof
+						~ " to type " ~ T.stringof);
+			}
+		);
+	}
+
+	static struct Section
+	{
+		ValueT[string] values;
+	}
+
+	/// base configuration formatted as {[component]:{key:value pairs}}
+	Section[string] base;
+
+	bool get(string component, string key, out ValueT val) const
+	{
+		auto com = component in base;
 		if (!com)
 			return false;
-		auto v = key in *com;
+		auto v = key in com.values;
 		if (!v)
 			return false;
 		val = *v;
@@ -39,58 +93,49 @@ struct Configuration
 
 	T get(T)(string component, string key, T defaultValue = T.init) inout
 	{
-		JSONValue ret;
+		ValueT ret;
 		if (!get(component, key, ret))
 			return defaultValue;
-		return ret.fromJSON!T;
+		return toType!T(ret);
 	}
 
 	bool set(T)(string component, string key, T value)
 	{
-		if (base.type != JSONType.object)
+		if (auto com = component in base)
 		{
-			JSONValue[string] tmp;
-			base = JSONValue(tmp);
-		}
-		auto com = component in base.object;
-		if (!com)
-		{
-			JSONValue[string] val;
-			val[key] = value.toJSON;
-			base.object[component] = JSONValue(val);
+			com.values[key] = ValueT(value);
 		}
 		else
 		{
-			com.object[key] = value.toJSON;
+			ValueT[string] val;
+			val[key] = ValueT(value);
+			base[component] = Section(val);
 		}
 		return true;
 	}
 
 	/// Same as init but might make nicer code.
-	static immutable Configuration none = Configuration.init;
+	enum none = Configuration.init;
 
 	/// Loads unset keys from global, keeps existing keys
 	void loadBase(Configuration global)
 	{
-		if (global.base.type != JSONType.object)
-			return;
-
-		if (base.type != JSONType.object)
-			base = global.base.dupJson;
+		if (base is null)
+			base = global.base.dup;
 		else
 		{
-			foreach (component, config; global.base.object)
+			foreach (component, config; global.base)
 			{
-				auto existing = component in base.object;
-				if (!existing || config.type != JSONType.object)
-					base.object[component] = config.dupJson;
+				auto existing = component in base;
+				if (!existing)
+					base[component] = config.deepCopy;
 				else
 				{
-					foreach (key, value; config.object)
+					foreach (key, value; config.values)
 					{
-						auto existingValue = key in *existing;
+						auto existingValue = key in existing.values;
 						if (!existingValue)
-							(*existing)[key] = value.dupJson;
+							existing.values[key] = value.deepCopy;
 					}
 				}
 			}
@@ -98,17 +143,34 @@ struct Configuration
 	}
 }
 
-private JSONValue dupJson(JSONValue v)
+private T deepCopy(T)(T value)
 {
-	switch (v.type)
+	static if (is(T : typeof(null)) || __traits(isPOD, T))
+		return value;
+	else static if (is(T == Configuration.ValueT))
 	{
-	case JSONType.object:
-		return JSONValue(v.object.dup);
-	case JSONType.array:
-		return JSONValue(v.array.dup);
-	default:
-		return v;
+		return value.match!(v => deepCopy(v));
 	}
+	else static if (is(T : Configuration.Section))
+	{
+		return Configuration.Section(deepCopy(value.values));
+	}
+	else static if (is(T : Configuration.ValueT[]))
+	{
+		auto copy = new Configuration.ValueT[value.length];
+		foreach (i, ref v; copy)
+			v = deepCopy(value[i]);
+		return copy;
+	}
+	else static if (is(T : Configuration.ValueT[string]))
+	{
+		Configuration.ValueT[string] copy;
+		foreach (k, v; value)
+			copy[k] = deepCopy(v);
+		return copy;
+	}
+	else
+		return value.dup;
 }
 
 /// WorkspaceD instance holding plugins.

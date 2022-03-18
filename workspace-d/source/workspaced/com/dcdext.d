@@ -26,8 +26,6 @@ import workspaced.dparseext;
 import workspaced.visitors.classifier;
 import workspaced.visitors.methodfinder;
 
-import painlessjson : SerializeIgnore;
-
 public import workspaced.visitors.methodfinder : InterfaceDetails, FieldDetails,
 	MethodDetails, ArgumentInfo;
 
@@ -1235,7 +1233,7 @@ struct InterfaceTree
 	/// All inherited classes in lexical order.
 	InterfaceTree[] inherits;
 
-	@SerializeIgnore const(FieldDetails)[] availableVariables(bool onlyPublic = false) const
+	const(FieldDetails)[] availableVariables(bool onlyPublic = false) const
 	{
 		if (!inherits.length && !onlyPublic)
 			return details.fields;
