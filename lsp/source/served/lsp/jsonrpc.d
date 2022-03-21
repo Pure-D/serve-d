@@ -48,20 +48,30 @@ class RPCProcessor : Fiber
 	///   res = the response message to send.
 	void send(ResponseMessage res)
 	{
-		auto msg = JSONValue(["jsonrpc": JSONValue("2.0")]);
+		const(char)[][8] buf;
+		int len;
+		buf[len++] = `{"jsonrpc":"2.0"`;
 		if (res.id.hasData)
-			msg["id"] = res.id.toJSON;
+		{
+			buf[len++] = `,"id":`;
+			buf[len++] = res.id.toJSON.toString;
+		}
 
 		if (!res.result.isNull)
-			msg["result"] = res.result.get;
+		{
+			buf[len++] = `,"result":`;
+			buf[len++] = res.result.get.toString;
+		}
 
 		if (!res.error.isNull)
 		{
-			msg["error"] = res.error.toJSON;
-			stderr.writeln(msg["error"]);
+			buf[len++] = `,"error":`;
+			buf[len++] = res.error.toJSON.toString;
+			stderr.writeln(buf[len - 1]);
 		}
 
-		send(msg);
+		buf[len++] = `}`;
+		sendRawPacket(buf[0 .. len]);
 	}
 
 	/// Sends an RPC request (method call) to the other side. Doesn't do any additional processing.
@@ -69,7 +79,7 @@ class RPCProcessor : Fiber
 	///   req = The request to send
 	void send(RequestMessage req)
 	{
-		send(req.toJSON);
+		sendRawPacket(req.toJSON.toString);
 	}
 
 	/// Sends a raw JSON object to the other RPC side. 
@@ -81,10 +91,32 @@ class RPCProcessor : Fiber
 			throw new Exception("Sent objects must have a jsonrpc");
 		}
 		const content = raw.toString(JSONOptions.doNotEscapeSlashes);
+		sendRawPacket(content);
+	}
+
+	/// ditto
+	void sendRawPacket(scope const(char)[] rawJson)
+	{
+		sendRawPacket((&rawJson)[0 .. 1]);
+	}
+
+	/// ditto
+	void sendRawPacket(scope const(char)[][] parts)
+	{
 		// Log on client side instead! (vscode setting: "serve-d.trace.server": "verbose")
 		//trace(content);
-		string data = "Content-Length: " ~ content.length.to!string ~ "\r\n\r\n" ~ content;
-		writer.rawWrite(data);
+		size_t len = 0;
+		foreach (part; parts)
+			len += part.length;
+
+		{
+			scope w = writer.lockingBinaryWriter;
+			w.put("Content-Length: ");
+			w.put(len.to!string);
+			w.put("\r\n\r\n");
+			foreach (part; parts)
+				w.put(part);
+		}
 		writer.flush();
 	}
 
