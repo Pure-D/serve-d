@@ -63,12 +63,11 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 	else
 		import std.functional : forward;
 
+	import served.lsp.protocol;
+
 	import std.algorithm;
-	import std.json;
 	import std.meta;
 	import std.traits;
-
-	import painlessjson;
 
 	// duplicate method name check to avoid name clashes and unreadable error messages
 	private string[] findDuplicates(string[] fields)
@@ -116,7 +115,7 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 	///     arguments.
 	/// Returns: `true` if any method has been called, `false` otherwise.
 	bool emitProtocol(alias UDA, alias callback, bool returnFirst, Args...)(string method,
-			JSONValue params, Args availableExtraArgs)
+			string params, Args availableExtraArgs)
 	{
 		return iterateExtensionMethodsByUDA!(UDA, (name, symbol, uda) {
 			if (uda.method == method)
@@ -133,12 +132,12 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 					}
 					else static if (symbolArgs.length == 1)
 					{
-						return symbol(fromJSON!(symbolArgs[0])(params));
+						return symbol(params.deserializeJson!(symbolArgs[0]));
 					}
 					else static if (availableExtraArgs.length > 0
 						&& symbolArgs.length <= 1 + availableExtraArgs.length)
 					{
-						return symbol(fromJSON!(symbolArgs[0])(params), forward!(
+						return symbol(params.deserializeJson!(symbolArgs[0]), forward!(
 							availableExtraArgs[0 .. symbolArgs.length + -1]));
 					}
 					else
@@ -167,7 +166,7 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 	/// invocation, causing ref/out parameters to get lost however. Allows to
 	/// copy the arguments to other fibers for parallel processing.
 	bool emitProtocolRaw(alias UDA, alias callback, bool returnFirst)(string method,
-			JSONValue params)
+			string params)
 	{
 		import std.typecons : tuple;
 
@@ -177,20 +176,24 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 
 			try
 			{
-				if (params.type == JSONType.array)
+				if (params.length && params.ptr[0] == '[')
 				{
 					// positional parameter support
 					// only supports passing a single argument
-					auto arr = params.array;
-					if (arr.length != 1)
-						throw new Exception("Mismatched parameter count");
-					return fromJSON!T(arr[0]);
+					string got;
+					params.visitJsonArray!((item) {
+						if (!got.length)
+							got = item;
+						else
+							throw new Exception("Mismatched parameter count");
+					});
+					return got.deserializeJson!T;
 				}
 				else
 				{
 					// named parameter support
 					// only supports passing structs (not parsing names of D method arguments)
-					return fromJSON!T(params);
+					return params.deserializeJson!T;
 				}
 			}
 			catch (Exception e)
@@ -198,7 +201,7 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 				ResponseError error;
 				error.code = ErrorCode.invalidParams;
 				error.message = "Failed converting input parameter " ~ params.toPrettyString ~ " to needed type `" ~ T.stringof ~ "`: " ~ e.msg;
-				error.data = JSONValue(e.toString);
+				error.data = JsonValue(e.toString);
 				throw new MethodException(error);
 			}
 		}

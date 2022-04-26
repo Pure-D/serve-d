@@ -75,8 +75,6 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 	import served.utils.events;
 	import served.utils.fibermanager;
 
-	import painlessjson;
-
 	import std.datetime.stopwatch;
 	import std.experimental.logger;
 	import std.functional;
@@ -96,16 +94,16 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 	mixin EventProcessor!(ExtensionModule, serverConfig.eventConfig) eventProcessor;
 
 	/// Calls a method associated with the given request type in the 
-	ResponseMessage processRequest(RequestMessage msg)
+	ResponseMessageRaw processRequest(RequestMessageRaw msg)
 	{
 		debug(PerfTraceLog) mixin(traceStatistics(__FUNCTION__));
 
-		ResponseMessage res;
+		ResponseMessageRaw res;
 		res.id = msg.id;
 		if (msg.method == "initialize" && !serverInitializeCalled)
 		{
 			trace("Initializing");
-			res.result = ExtensionModule.initialize(msg.params.fromJSON!InitializeParams).toJSON;
+			res.resultJson = ExtensionModule.initialize(msg.paramsJson.deserializeJson!InitializeParams).serializeJson;
 			trace("Initialized");
 			serverInitializeCalled = true;
 			return res;
@@ -228,8 +226,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			}
 			else
 			{
-				JSONValue[] emptyArr;
-				res.result = JSONValue(emptyArr);
+				res.resultJson = `[]`;
 			}
 		}
 
@@ -251,7 +248,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		}, false)(msg.method, msg.params, result);
 	}
 
-	void processNotify(RequestMessage msg)
+	void processNotify(RequestMessageRaw msg)
 	{
 		debug(PerfTraceLog) mixin(traceStatistics(__FUNCTION__));
 
@@ -455,7 +452,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				auto msg = rpc.poll;
 				// Log on client side instead! (vscode setting: "serve-d.trace.server": "verbose")
 				//trace("Message: ", msg);
-				if (msg.id.hasData)
+				if (!msg.id.isNone)
 					pushFiber(gotRequest(msg));
 				else
 					pushFiber(gotNotify(msg));
