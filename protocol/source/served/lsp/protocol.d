@@ -1,313 +1,500 @@
 module served.lsp.protocol;
 
 import std.conv;
-import std.json;
 import std.meta;
 import std.traits;
 
-import painlessjson;
+import mir.serde;
 
-struct Optional(T)
+import mir.algebraic : MirVariant = Variant;
+public import mir.algebraic : isVariant, match;
+
+public import served.lsp.jsonops;
+
+struct Variant(T...)
 {
-	bool isNull = true;
-	T value;
-
-	this(T val)
+	static foreach (S; T)
 	{
-		value = val;
-		isNull = false;
+		static if (!is(S : NoneType)
+			&& is(S == struct)
+			&& !hasUDA!(S, serdeFallbackStruct)
+			&& !isVariant!S)
+			static assert(false, "included " ~ S.stringof ~ " in Variant, which is not a serdeFallbackStruct");
 	}
 
-	this(U)(U val)
-	{
-		value = val;
-		isNull = false;
-	}
-
-	this(typeof(null))
-	{
-		isNull = true;
-	}
-
-	void opAssign(typeof(null))
-	{
-		nullify();
-	}
-
-	void opAssign(T val)
-	{
-		isNull = false;
-		value = val;
-	}
-
-	void opAssign(U)(U val)
-	{
-		isNull = false;
-		value = val;
-	}
-
-	void nullify()
-	{
-		isNull = true;
-		value = T.init;
-	}
-
-	bool opCast(T : bool)() const
-	{
-		return !isNull;
-	}
-
-	string toString() const
-	{
-		if (isNull)
-			return "null(" ~ T.stringof ~ ")";
-		else
-			return value.to!string;
-	}
-
-	const JSONValue _toJSON()
-	{
-		import painlessjson : toJSON;
-
-		if (isNull)
-			return JSONValue(null);
-		else
-			return value.toJSON;
-	}
-
-	static Optional!T _fromJSON(JSONValue val)
-	{
-		Optional!T ret;
-		ret.isNull = false;
-		ret.value = val.fromJSON!T;
-		return ret;
-	}
-
-	ref inout(T) get() inout
-	{
-		return value;
-	}
-
+	MirVariant!T value;
 	alias value this;
-}
 
-mixin template StrictOptionalSerializer()
-{
-	const JSONValue _toJSON()
+	this(T)(T v)
 	{
-		JSONValue[string] ret = this.defaultToJSON.object;
-		foreach (member; __traits(allMembers, typeof(this)))
-			static if (is(typeof(__traits(getMember, this, member)) == Optional!T, T))
-			{
-				static if (hasUDA!(__traits(getMember, this, member), SerializedName))
-					string name = getUDAs!(__traits(getMember, this, member), SerializedName)[0].to;
-				else static if (hasUDA!(__traits(getMember, this, member), SerializedToName))
-					string name = getUDAs!(__traits(getMember, this, member), SerializedToName)[0].name;
-				else
-					string name = member;
+		value = typeof(value)(v);
+	}
 
-				if (__traits(getMember, this, member).isNull)
-					ret.remove(name);
-			}
-		return JSONValue(ret);
+	ref typeof(this) opAssign(T)(T rhs)
+	{
+		static if (is(T : typeof(this)))
+			value = rhs.value;
+		else
+			value = typeof(value)(rhs);
+		return this;
+	}
+
+	bool serdeIgnoreOut() const @property
+	{
+		return value.match!((v) {
+			static if (__traits(compiles, v.serdeIgnoreOut))
+				return v.serdeIgnoreOut;
+			else
+				return false;
+		});
 	}
 }
 
+static assert(isVariant!(Variant!(int, string)),
+	"isVariant suffers from D issue 21975, please upgrade compiler (fixed since frontend 2.100.0)");
+
+private enum getJsonKey(T, string member) = ({
+	enum keys = getUDAs!(__traits(getMember, T, member), serdeKeys);
+	static if (keys.length)
+	{
+		static assert(keys.length == 1);
+		assert(keys[0].keys.length == 1);
+		return keys[0].keys[0];
+	}
+	else
+	{
+		return member;
+	}
+})();
+
+enum getRequiredKeys(T) = ({
+	import std.algorithm : sort;
+	string[] ret;
+	static foreach (member; serdeFinalProxyDeserializableMembers!T)
+	{
+		static if (!hasUDA!(__traits(getMember, T, member), serdeOptional))
+			ret ~= getJsonKey!(T, member);
+	}
+	ret.sort!"a<b";
+	return ret;
+})();
+
+@serdeFallbackStruct
+@serdeProxy!JsonValue
+struct StructVariant(AllowedTypes...)
+{
+	import std.algorithm;
+	import std.array;
+
+	enum isAllowedType(T) = AllowedTypes.length == 0
+		|| staticIndexOf!(Unqual!T, AllowedTypes) != -1;
+
+	enum commonKeys = setIntersection(staticMap!(getRequiredKeys, AllowedTypes)).array;
+
+	static bool testValid(JsonValue value)
+	{
+		static if (AllowedTypes.length == 0)
+		{
+			return value.kind == JsonValue.Kind.object;
+		}
+		else
+		{
+			if (value.kind != JsonValue.Kind.object)
+				return false;
+
+			auto keys = value.get!(StringMap!JsonValue).keys;
+			static foreach (key; commonKeys)
+				if (!keys.canFind(key))
+					return false;
+
+			static foreach (T; AllowedTypes)
+				if (valueMatchesType!T(value))
+					return true;
+
+			return false;
+		}
+	}
+
+	static void enforceValid(JsonValue value)
+	{
+		import std.exception;
+
+		enforce(testValid(value), () {
+			if (value.kind != JsonValue.Kind.object)
+				return value.serializeJson ~ " is not an object";
+			
+			string reason;
+			auto keys = value.get!(StringMap!JsonValue).keys;
+			static foreach (key; commonKeys)
+				if (!keys.canFind(key))
+					reason ~= "\nrequired common key '" ~ key ~ "' is missing";
+			return value.serializeJson ~ " is not compatible with types " ~ AllowedTypes.stringof ~ reason;
+		});
+	}
+
+	static bool valueMatchesType(T)(JsonValue value)
+	in (value.kind == JsonValue.Kind.object)
+	{
+		enum requiredKeys = getRequiredKeys!T;
+		bool[requiredKeys.length] hasRequired;
+		auto keys = value.get!(StringMap!JsonValue).keys;
+		foreach (key; keys)
+		{
+			Switch: switch (key)
+			{
+				static foreach (member; serdeFinalProxyDeserializableMembers!T)
+				{
+				case getJsonKey!(T, member):
+					static if (!hasUDA!(__traits(getMember, T, member), serdeOptional))
+					{
+						enum idx = requiredKeys.countUntil(member);
+						hasRequired[idx] = true;
+					}
+					break Switch;
+				}
+				default:
+					break;
+			}
+		}
+
+		static foreach (i; 0 .. hasRequired.length)
+			if (!hasRequired[i])
+				return false;
+		return true;
+	}
+
+	static string mismatchMessage(T)(JsonValue value)
+	{
+		string reasons;
+		enum requiredKeys = getRequiredKeys!T;
+		bool[requiredKeys.length] hasRequired;
+		auto keys = value.get!(StringMap!JsonValue).keys;
+		foreach (key; keys)
+		{
+			Switch: switch (key)
+			{
+				static foreach (member; serdeFinalProxyDeserializableMembers!T)
+				{
+				case getJsonKey!(T, member):
+					static if (!hasUDA!(__traits(getMember, T, member), serdeOptional))
+					{
+						enum idx = requiredKeys.countUntil(member);
+						hasRequired[idx] = true;
+					}
+					break Switch;
+				}
+				default:
+					break;
+			}
+		}
+
+		static foreach (i; 0 .. hasRequired.length)
+			if (!hasRequired[i])
+				reasons ~= "missing required key " ~ requiredKeys[i] ~ "\n";
+		return reasons.length ? reasons[0 .. $ - 1] : null;
+	}
+
+	private JsonValue _value;
+	alias value this;
+	auto value() inout @property { return _value; }
+	auto value(JsonValue value) @property
+	{
+		enforceValid(value);
+		return _value = value;
+	}
+
+	this(JsonValue v)
+	{
+		value = v;
+	}
+
+	this(T)(T v)
+	if (isAllowedType!T)
+	{
+		value = v.toJsonValue;
+	}
+
+	ref typeof(this) opAssign(T)(T rhs)
+	{
+		static if (is(T : typeof(this)))
+			value = rhs.value;
+		else static if (is(T : JsonValue))
+			value = rhs;
+		else static if (isAllowedType!T)
+			value = rhs.toJsonValue;
+		else
+			static assert(false, "unsupported assignment of type " ~ T.stringof ~ " to " ~ typeof(this).stringof);
+		return this;
+	}
+
+	bool tryExtract(T)(out T val) const
+	if (isAllowedType!T)
+	{
+		if (!valueMatchesType!T(value))
+			return false;
+
+		val = value.jsonValueTo!T;
+		return true;
+	}
+
+	T extract(T)() const
+	if (isAllowedType!T)
+	{
+		if (!valueMatchesType!T(value))
+			throw new Exception(mismatchMessage!T(value));
+
+		return value.jsonValueTo!T;
+	}
+}
+
+///
+unittest
+{
+	@serdeIgnoreUnexpectedKeys
+	struct Named
+	{
+		string name;
+	}
+
+	@serdeIgnoreUnexpectedKeys
+	struct Person
+	{
+		string name;
+		int age;
+	}
+
+	@serdeIgnoreUnexpectedKeys
+	struct Place
+	{
+		string name;
+		double lat, lon;
+	}
+
+	StructVariant!(Named, Person, Place) var = Person("Bob", 32);
+
+	assert(var.serializeJson == `{"name":"Bob","age":32}`);
+
+	Named extractedNamed;
+	Person extractedPerson;
+	Place extractedPlace;
+	assert(var.tryExtract!Named(extractedNamed), var.mismatchMessage!Named(var.value));
+	assert(var.tryExtract!Person(extractedPerson), var.mismatchMessage!Person(var.value));
+	assert(!var.tryExtract!Place(extractedPlace), var.mismatchMessage!Place(var.value));
+
+	assert(extractedNamed.name == "Bob");
+	assert(extractedPerson == Person("Bob", 32));
+	assert(extractedPlace is Place.init);
+}
+
+/// For use with Variant to not serialize anything at all.
+struct NoneType
+{
+	enum serdeIgnoreOut = true;
+	void serialize(S)(ref S serializer) const { assert(false, "serialize called on NoneType"); }
+}
+
+alias Optional(T) = Variant!(NoneType, T);
+alias OptionalJsonValue = Optional!JsonValue;
+
+bool isNone(T)(T v)
+if (isVariant!T)
+{
+	return v.match!(
+		(NoneType none) => true,
+		_ => false
+	);
+}
+
+///
+auto deref(T)(scope return inout T v)
+if (isVariant!T)
+{
+	return v.match!(
+		(NoneType none) {
+			throw new Exception("Attempted to get unset " ~ T.stringof);
+			return assert(false); // changes return type to bottom_t
+		},
+		ret => ret
+	);
+}
+
+///
+bool expect(T, ST)(ST v)
+if (isVariant!ST)
+{
+	return v.match!(
+		(NoneType none) {
+			if (false) return T.init;
+			throw new Exception("Attempted to get unset Optional!" ~ T.stringof);
+		},
+		(T val) => val,
+		(v) {
+			if (false) return T.init;
+			throw new Exception("Attempted to get " ~ T.stringof ~ " from Variant of type " ~ typeof(v).stringof);
+		}
+	);
+}
+
+///
+void nullify(T)(ref Optional!T opt)
+{
+	opt = NoneType.init;
+}
+
+///
 Optional!T opt(T)(T val)
 {
 	return Optional!T(val);
 }
 
-struct ArrayOrSingle(T)
+unittest
 {
-	T[] value;
+	string[] tests = [
+		`{"hello":"world"}`,
+		`{"a":[1,"world",false,null]}`,
+		`null`,
+		`5`,
+		`"ok"`,
+		`["ok",[[[[[false]]]]]]`,
+		`true`,
+	];
 
-	this(T val)
+	foreach (v; tests)
 	{
-		value = [val];
+		assert(v.deserializeJson!JsonValue.serializeJson == v);
 	}
-
-	this(T[] val)
-	{
-		value = val;
-	}
-
-	void opAssign(T val)
-	{
-		value = [val];
-	}
-
-	void opAssign(T[] val)
-	{
-		value = val;
-	}
-
-	const JSONValue _toJSON()
-	{
-		if (value.length == 1)
-			return value[0].toJSON;
-		else
-			return value.toJSON;
-	}
-
-	static ArrayOrSingle!T _fromJSON(JSONValue val)
-	{
-		ArrayOrSingle!T ret;
-		if (val.type == JSONType.array)
-			ret.value = val.fromJSON!(T[]);
-		else
-			ret.value = [val.fromJSON!T];
-		return ret;
-	}
-
-	alias value this;
 }
 
-static assert(__traits(compiles, ArrayOrSingle!Location.init._toJSON()));
-static assert(__traits(compiles, ArrayOrSingle!Location._fromJSON(JSONValue.init)));
+@serdeIgnoreUnexpectedKeys:
+
+///
+alias ArrayOrSingle(T) = Variant!(T[], T);
+
+///
+@serdeFallbackStruct
+struct ValueSet(T)
+{
+	T[] valueSet;
+}
 
 unittest
 {
 	auto single = ArrayOrSingle!Location(Location("file:///foo.d", TextRange(4, 2, 4, 8)));
 	auto array = ArrayOrSingle!Location([Location("file:///foo.d", TextRange(4, 2, 4, 8)), Location("file:///bar.d", TextRange(14, 1, 14, 9))]);
-	assert(toJSON(single) == JSONValue([
-		"range": JSONValue([
-			"start": JSONValue(["line":JSONValue(4), "character":JSONValue(2)]),
-			"end": JSONValue(["line":JSONValue(4), "character":JSONValue(8)])
-		]),
-		"uri": JSONValue("file:///foo.d")
-	]));
-	assert(toJSON(array) == JSONValue([
-		JSONValue([
-			"range": JSONValue([
-				"start": JSONValue(["line":JSONValue(4), "character":JSONValue(2)]),
-				"end": JSONValue(["line":JSONValue(4), "character":JSONValue(8)])
-			]),
-			"uri": JSONValue("file:///foo.d")
-		]),
-		JSONValue([
-			"range": JSONValue([
-				"start": JSONValue(["line":JSONValue(14), "character":JSONValue(1)]),
-				"end": JSONValue(["line":JSONValue(14), "character":JSONValue(9)])
-			]),
-			"uri": JSONValue("file:///bar.d")
-		])
-	]));
-	assert(fromJSON!(ArrayOrSingle!Location)(toJSON(single)) == single, fromJSON!(ArrayOrSingle!Location)(toJSON(single)).value.to!string);
-	assert(fromJSON!(ArrayOrSingle!Location)(toJSON(array)) == array);
+
+	foreach (v; [single, array])
+	{
+		assert(deserializeJson!(ArrayOrSingle!Location)(v.serializeJson) == v);
+	}
 }
 
+///
+@serdeProxy!(typeof(RequestToken.value))
+@serdeFallbackStruct
 struct RequestToken
 {
-	this(scope const(JSONValue)* val)
+	Variant!(long, string) value;
+	alias value this;
+
+	this(T)(T v)
 	{
-		if (!val)
-			this(JSONValue.init);
+		value = typeof(value)(v);
+	}
+
+	ref typeof(this) opAssign(T)(T rhs)
+	{
+		static if (is(T : typeof(this)))
+			value = rhs.value;
 		else
-			this(*val);
-	}
-
-	this(const(JSONValue) val)
-	{
-		hasData = val != JSONValue.init;
-		if (val.type == JSONType.string)
-		{
-			isString = true;
-			str = val.str;
-		}
-		else if (val.type == JSONType.integer)
-		{
-			isString = false;
-			num = val.integer;
-		}
-		else if (hasData)
-			throw new Exception("Invalid ID");
-	}
-
-	union
-	{
-		string str;
-		long num;
-	}
-
-	bool hasData, isString;
-
-	JSONValue toJSON()
-	{
-		JSONValue ret = null;
-		if (!hasData)
-			return ret;
-		ret = isString ? JSONValue(str) : JSONValue(num);
-		return ret;
-	}
-
-	JSONValue _toJSON()()
-	{
-		pragma(msg, "Attempted painlesstraits.toJSON on RequestToken");
-	}
-
-	void _fromJSON()(JSONValue val)
-	{
-		pragma(msg, "Attempted painlesstraits.fromJSON on RequestToken");
-	}
-
-	string toString()
-	{
-		return hasData ? (isString ? str : num.to!string) : "none";
+			value = rhs;
+		return this;
 	}
 
 	static RequestToken random()
 	{
-		import std.uuid;
+		version (unittest)
+			char[16] buffer; // make sure uninitialized buffers are caught in tests
+		else
+			char[16] buffer = void;
 
-		JSONValue id = JSONValue(randomUUID.toString);
-		return RequestToken(&id);
+		randomSerialized(buffer);
+		return RequestToken(buffer[1 .. $ - 1].idup);
 	}
 
-	bool opEquals(RequestToken b) const
+	static void randomSerialized(char[] buffer)
+	in(buffer.length > 2)
 	{
-		return isString == b.isString && (isString ? str == b.str : num == b.num);
+		import std.random : uniform;
+
+		static immutable letters = `0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz`;
+
+		buffer[0] = '"';
+		for (int i = 1; i < buffer.length; i++)
+			buffer[i] = letters[uniform(0, $)];
+		buffer[$ - 1] = '"';
 	}
+
+	static RequestToken randomAndSerialized(char[] buffer)
+	{
+		randomSerialized(buffer);
+		return RequestToken(buffer[1 .. $ - 1].idup);
+	}
+}
+
+unittest
+{
+	assert(deserializeJson!RequestToken(`"hello"`) == RequestToken("hello"));
+	assert(deserializeJson!RequestToken(`4000`) == RequestToken(4000));
+
+	assert(`"hello"` == RequestToken("hello").serializeJson);
+	assert(`4000` == RequestToken(4000).serializeJson);
+
+	auto tok = RequestToken.random();
+	auto other = RequestToken.random();
+	assert(tok.value.get!string.length > 10);
+	assert(tok.value.get!string[0 .. 5] != tok.value.get!string[5 .. 10]);
+	assert(tok.value.get!string != other.value.get!string);
+
+	char[16] buf;
+	tok = RequestToken.randomAndSerialized(buf[]);
+	assert(buf[0] == '"');
+	assert(buf[$ - 1] == '"');
+	assert(buf[1 .. $ - 1] == tok.value.get!string);
+
+	other = "hello";
+	assert(other.get!string == "hello");
+
+	other = 6;
+	assert(other.get!long == 6);
 }
 
 ///
 struct RequestMessage
 {
-	this(JSONValue val)
-	{
-		id = RequestToken("id" in val);
-		method = val["method"].str;
-		auto ptr = "params" in val;
-		if (ptr)
-			params = *ptr;
-	}
-
 	///
-	RequestToken id;
+	@serdeOptional Optional!RequestToken id;
+	///
+	string jsonrpc = "2.0";
 	///
 	string method;
 	/// Optional parameters to this method. Must be either null (omitted), array
 	/// (positional parameters) or object. (named parameters)
-	JSONValue params;
+	@serdeOptional OptionalJsonValue params;
+}
 
-	bool isCancelRequest()
-	{
-		return method == "$/cancelRequest";
-	}
-
-	/// Converts this message to a JSON-RPC packet
-	JSONValue toJSON()
-	{
-		auto ret = JSONValue([
-				"jsonrpc": JSONValue("2.0"),
-				"method": JSONValue(method)
-				]);
-		if (!params.isNull)
-			ret["params"] = params;
-		if (id.hasData)
-			ret["id"] = id.toJSON;
-		return ret;
-	}
+///
+struct RequestMessageRaw
+{
+	///
+	@serdeOptional Optional!RequestToken id;
+	///
+	string jsonrpc = "2.0";
+	///
+	string method;
+	/// Optional parameters to this method. Must be either empty string
+	/// (omitted), or array (positional parameters) or object JSON string.
+	/// (named parameters)
+	string paramsJson;
 }
 
 ///
@@ -335,15 +522,9 @@ enum ErrorCode
 	unknownErrorCode = -32001
 }
 
-enum MessageType
-{
-	error = 1,
-	warning,
-	info,
-	log
-}
 
 ///
+@serdeFallbackStruct
 struct ResponseError
 {
 	/// A Number that indicates the error type that occurred.
@@ -356,13 +537,13 @@ struct ResponseError
 	/// This may be omitted.
 	/// The value of this member is defined by the Server (e.g. detailed error
 	/// information, nested errors etc.).
-	JSONValue data;
+	JsonValue data;
 
 	this(Throwable t)
 	{
 		code = ErrorCode.unknownErrorCode;
 		message = t.msg;
-		data = JSONValue(t.to!string);
+		data = JsonValue(t.to!string);
 	}
 
 	this(ErrorCode c)
@@ -392,7 +573,7 @@ class MethodException : Exception
 ///
 struct ResponseMessage
 {
-	this(RequestToken id, JSONValue result)
+	this(RequestToken id, JsonValue result)
 	{
 		this.id = id;
 		this.result = result;
@@ -404,15 +585,122 @@ struct ResponseMessage
 		this.error = error;
 	}
 
+	this(Optional!RequestToken id, JsonValue result)
+	{
+		this.id = id;
+		this.result = result;
+	}
+
+	this(Optional!RequestToken id, ResponseError error)
+	{
+		this.id = id;
+		this.error = error;
+	}
+
 	///
-	RequestToken id;
+	@serdeOptional Optional!RequestToken id;
 	///
-	Optional!JSONValue result;
+	@serdeOptional OptionalJsonValue result;
+	///
+	@serdeOptional Optional!ResponseError error;
+}
+
+///
+struct ResponseMessageRaw
+{
+	///
+	Optional!RequestToken id;
+	/// empty string/null if not set, otherwise JSON string of result
+	string resultJson;
 	///
 	Optional!ResponseError error;
 }
 
 alias DocumentUri = string;
+
+@serdeFallbackStruct
+struct ShowMessageParams
+{
+	MessageType type;
+	string message;
+}
+
+enum MessageType
+{
+	error = 1,
+	warning,
+	info,
+	log
+}
+
+@serdeFallbackStruct
+struct ShowMessageRequestClientCapabilities
+{
+	@serdeFallbackStruct
+	@serdeIgnoreUnexpectedKeys
+	static struct MessageActionItemCapabilities
+	{
+		@serdeOptional Optional!bool additionalPropertiesSupport;
+	}
+
+	@serdeOptional Optional!MessageActionItemCapabilities messageActionItem;
+}
+
+@serdeFallbackStruct
+struct ShowMessageRequestParams
+{
+	MessageType type;
+	string message;
+	@serdeOptional Optional!(MessageActionItem[]) actions;
+}
+
+@serdeFallbackStruct
+struct MessageActionItem
+{
+	string title;
+}
+
+@serdeFallbackStruct
+struct ShowDocumentClientCapabilities
+{
+	bool support;
+}
+
+@serdeFallbackStruct
+struct ShowDocumentParams
+{
+	DocumentUri uri;
+	@serdeOptional Optional!bool external;
+	@serdeOptional Optional!bool takeFocus;
+	@serdeOptional Optional!TextRange selection;
+}
+
+@serdeFallbackStruct
+struct ShowDocumentResult
+{
+	bool success;
+}
+
+@serdeFallbackStruct
+struct LogMessageParams
+{
+	MessageType type;
+	string message;
+}
+
+alias ProgressToken = Variant!(int, string);
+
+@serdeFallbackStruct
+struct WorkDoneProgressCreateParams
+{
+	ProgressToken token;
+}
+
+@serdeFallbackStruct
+struct WorkDoneProgressCancelParams
+{
+	ProgressToken token;
+}
 
 enum EolType
 {
@@ -434,6 +722,7 @@ string toString(EolType eol)
 	}
 }
 
+@serdeFallbackStruct
 struct Position
 {
 	/// Zero-based line & character offset (UTF-16 codepoints)
@@ -451,43 +740,39 @@ struct Position
 			return 1;
 		return 0;
 	}
+}
 
-	const JSONValue _toJSON()
+unittest
+{
+	foreach (v; [
+		Position.init,
+		Position(10),
+		Position(10, 10),
+		Position(uint.max - 1)
+	])
+		assert(deserializeJson!Position(v.serializeJson()) == v);
+}
+
+private struct SerializableTextRange
+{
+	Position start;
+	Position end;
+
+	this(Position start, Position end)
 	{
-		return JSONValue(["line": JSONValue(line), "character": JSONValue(character)]);
+		this.start = start;
+		this.end = end;
 	}
 
-	static Position _fromJSON(const JSONValue val)
+	this(TextRange r)
 	{
-		import std.exception : enforce;
-
-		enforce(val.type == JSONType.object);
-		auto line = val.object.get("line", JSONValue.init);
-		auto character = val.object.get("character", JSONValue.init);
-
-		uint iline, icharacter;
-
-		if (line.type == JSONType.integer)
-			iline = cast(uint)line.integer;
-		else if (line.type == JSONType.uinteger)
-			iline = cast(uint)line.uinteger;
-		else
-			throw new JSONException("Position['line'] is not an integer");
-
-		if (character.type == JSONType.integer)
-			icharacter = cast(uint)character.integer;
-		else if (character.type == JSONType.uinteger)
-			icharacter = cast(uint)character.uinteger;
-		else
-			throw new JSONException("Position['character'] is not an integer");
-
-		return Position(iline, icharacter);
+		start = r.start;
+		end = r.end;
 	}
 }
 
-static assert(__traits(compiles, Position.init._toJSON()));
-static assert(__traits(compiles, Position._fromJSON(JSONValue.init)));
-
+@serdeProxy!SerializableTextRange
+@serdeFallbackStruct
 struct TextRange
 {
 	union
@@ -569,47 +854,58 @@ struct TextRange
 		assert(test(TextRange(0, 0, 0, 1), TextRange(0, 0, uint.max, uint.max)));
 		assert(!test(TextRange(0, 0, 0, 1), TextRange(uint.max, uint.max, uint.max, uint.max)));
 	}
-
-	const JSONValue _toJSON()
-	{
-		import painlessjson : toJSON;
-
-		return JSONValue([
-			"start": start.toJSON,
-			"end": end.toJSON
-		]);
-	}
-
-	static TextRange _fromJSON(const JSONValue val)
-	{
-		import painlessjson : fromJSON;
-
-		return TextRange(val.object["start"].fromJSON!Position, val.object["end"].fromJSON!Position);
-	}
 }
 
-static assert(__traits(compiles, TextRange.init._toJSON()));
-static assert(__traits(compiles, TextRange._fromJSON(JSONValue.init)));
+unittest
+{
+	foreach (v; [
+		TextRange.init,
+		TextRange(10, 4, 20, 3),
+		TextRange(20, 2, 30, 1),
+		TextRange(0, 0, 0, 1),
+		TextRange(0, 0, uint.max, uint.max),
+		TextRange(uint.max, uint.max, uint.max, uint.max)
+	])
+		assert(deserializeJson!TextRange(serializeJson(v)) == v);
+}
 
+@serdeFallbackStruct
 struct Location
 {
 	DocumentUri uri;
 	TextRange range;
 }
 
-struct Diagnostic
+@serdeFallbackStruct
+struct LocationLink
 {
-	mixin StrictOptionalSerializer;
-
-	TextRange range;
-	Optional!DiagnosticSeverity severity;
-	Optional!JSONValue code;
-	Optional!string source;
-	string message;
-	Optional!(DiagnosticRelatedInformation[]) relatedInformation;
-	Optional!(DiagnosticTag[]) tags;
+	@serdeOptional Optional!TextRange originSelectionRange;
+	DocumentUri targetUri;
+	TextRange targetRange;
+	TextRange targetSelectionRange;
 }
 
+@serdeFallbackStruct
+struct Diagnostic
+{
+	TextRange range;
+	@serdeOptional Optional!DiagnosticSeverity severity;
+	@serdeOptional OptionalJsonValue code;
+	@serdeOptional Optional!CodeDescription codeDescription;
+	@serdeOptional Optional!string source;
+	string message;
+	@serdeOptional Optional!(DiagnosticRelatedInformation[]) relatedInformation;
+	@serdeOptional Optional!(DiagnosticTag[]) tags;
+	@serdeOptional OptionalJsonValue data;
+}
+
+@serdeFallbackStruct
+struct CodeDescription
+{
+	string href;
+}
+
+@serdeFallbackStruct
 struct DiagnosticRelatedInformation
 {
 	Location location;
@@ -630,111 +926,106 @@ enum DiagnosticTag
 	deprecated_
 }
 
+@serdeFallbackStruct
 struct Command
 {
 	string title;
 	string command;
-	JSONValue[] arguments;
+	JsonValue[] arguments;
 }
 
+alias ChangeAnnotationIdentifier = string;
+
+@serdeFallbackStruct
 struct TextEdit
 {
 	TextRange range;
 	string newText;
+	@serdeOptional Optional!ChangeAnnotationIdentifier annotationId;
 
-	this(TextRange range, string newText)
+	this(TextRange range, string newText, ChangeAnnotationIdentifier annotationId = null)
 	{
 		this.range = range;
 		this.newText = newText;
+		if (annotationId.length)
+			this.annotationId = annotationId;
 	}
 
-	this(Position[2] range, string newText)
+	this(Position[2] range, string newText, ChangeAnnotationIdentifier annotationId = null)
 	{
 		this.range = TextRange(range);
 		this.newText = newText;
-	}
-
-	const JSONValue _toJSON()
-	{
-		return JSONValue(["range": range._toJSON, "newText": JSONValue(newText)]);
-	}
-
-	static TextEdit _fromJSON(const JSONValue val)
-	{
-		TextEdit ret;
-		ret.range = TextRange._fromJSON(val["range"]);
-		ret.newText = val["newText"].str;
-		return ret;
+		if (annotationId.length)
+			this.annotationId = annotationId;
 	}
 }
-
-static assert(__traits(compiles, TextEdit.init._toJSON()));
-static assert(__traits(compiles, TextEdit._fromJSON(JSONValue.init)));
 
 unittest
 {
-	assert(toJSON(TextEdit([Position(0, 0), Position(4, 4)], "hello\nworld!")) == JSONValue([
-		"range": JSONValue([
-			"start": JSONValue(["line":JSONValue(0), "character":JSONValue(0)]),
-			"end": JSONValue(["line":JSONValue(4), "character":JSONValue(4)])
-		]),
-		"newText": JSONValue("hello\nworld!")
-	]));
-	assert(fromJSON!TextEdit(toJSON(TextEdit([Position(0, 0), Position(4, 4)], "hello\nworld!"))) == TextEdit([Position(0, 0), Position(4, 4)], "hello\nworld!"));
+	foreach (v; [
+		TextEdit([Position(0, 0), Position(4, 4)], "hello\nworld!")
+	])
+		assert(deserializeJson!TextEdit(serializeJson(v)) == v);
 }
 
+@serdeFallbackStruct
+struct ChangeAnnotation
+{
+	string label;
+	@serdeOptional Optional!bool needsConfirmation;
+	@serdeOptional Optional!string description;
+}
+
+@serdeFallbackStruct
 struct CreateFileOptions
 {
-	mixin StrictOptionalSerializer;
-
-	Optional!bool overwrite;
-	Optional!bool ignoreIfExists;
+	@serdeOptional Optional!bool overwrite;
+	@serdeOptional Optional!bool ignoreIfExists;
 }
 
+@serdeFallbackStruct
 struct CreateFile
 {
-	mixin StrictOptionalSerializer;
-
 	string uri;
-	Optional!CreateFileOptions options;
+	@serdeOptional Optional!CreateFileOptions options;
+	@serdeOptional Optional!ChangeAnnotationIdentifier annotationId;
 	string kind = "create";
 }
 
+@serdeFallbackStruct
 struct RenameFileOptions
 {
-	mixin StrictOptionalSerializer;
-
-	Optional!bool overwrite;
-	Optional!bool ignoreIfExists;
+	@serdeOptional Optional!bool overwrite;
+	@serdeOptional Optional!bool ignoreIfExists;
 }
 
+@serdeFallbackStruct
 struct RenameFile
 {
-	mixin StrictOptionalSerializer;
-
 	string oldUri;
 	string newUri;
-	Optional!RenameFileOptions options;
+	@serdeOptional Optional!RenameFileOptions options;
+	@serdeOptional Optional!ChangeAnnotationIdentifier annotationId;
 	string kind = "rename";
 }
 
+@serdeFallbackStruct
 struct DeleteFileOptions
 {
-	mixin StrictOptionalSerializer;
-
-	Optional!bool recursive;
-	Optional!bool ignoreIfNotExists;
+	@serdeOptional Optional!bool recursive;
+	@serdeOptional Optional!bool ignoreIfNotExists;
 }
 
+@serdeFallbackStruct
 struct DeleteFile
 {
-	mixin StrictOptionalSerializer;
-
 	string uri;
-	Optional!DeleteFileOptions options;
+	@serdeOptional Optional!DeleteFileOptions options;
+	@serdeOptional Optional!ChangeAnnotationIdentifier annotationId;
 	string kind = "delete";
 }
 
+@serdeFallbackStruct
 struct TextDocumentEdit
 {
 	VersionedTextDocumentIdentifier textDocument;
@@ -743,67 +1034,79 @@ struct TextDocumentEdit
 
 alias TextEditCollection = TextEdit[];
 
+@serdeFallbackStruct
 struct WorkspaceEdit
 {
-	mixin StrictOptionalSerializer;
-
 	TextEditCollection[DocumentUri] changes;
 
-	Optional!JSONValue documentChanges;
+	@serdeOptional Optional!(StructVariant!(TextDocumentEdit, CreateFile, RenameFile, DeleteFile)[]) documentChanges;
+	@serdeOptional Optional!(ChangeAnnotation[ChangeAnnotationIdentifier]) changeAnnotations;
 }
 
+@serdeFallbackStruct
 struct TextDocumentIdentifier
 {
 	DocumentUri uri;
 }
 
+@serdeFallbackStruct
 struct VersionedTextDocumentIdentifier
 {
 	DocumentUri uri;
-	@SerializedName("version") long version_;
+	@serdeKeys("version") long version_;
 }
 
+@serdeFallbackStruct
 struct TextDocumentItem
 {
 	DocumentUri uri;
 	string languageId;
-	@SerializedName("version") long version_;
+	@serdeKeys("version") long version_;
 	string text;
 }
 
+@serdeFallbackStruct
 struct TextDocumentPositionParams
 {
 	TextDocumentIdentifier textDocument;
 	Position position;
 }
 
+@serdeFallbackStruct
 struct DocumentFilter
 {
-	mixin StrictOptionalSerializer;
-
-	Optional!string language;
-	Optional!string scheme;
-	Optional!string pattern;
+	@serdeOptional Optional!string language;
+	@serdeOptional Optional!string scheme;
+	@serdeOptional Optional!string pattern;
 }
 
 alias DocumentSelector = DocumentFilter[];
 
+@serdeFallbackStruct
 struct InitializeParams
 {
-	int processId;
-	string rootPath;
+	Variant!(typeof(null), int) processId;
+	@serdeOptional string rootPath;
 	DocumentUri rootUri;
-	JSONValue initializationOptions;
+	@serdeOptional OptionalJsonValue initializationOptions;
 	ClientCapabilities capabilities;
-	string trace = "off";
-	WorkspaceFolder[] workspaceFolders;
+	@serdeOptional Optional!string trace;
+	@serdeOptional Variant!(NoneType, typeof(null), WorkspaceFolder[]) workspaceFolders;
+	@serdeOptional Optional!InitializeParamsClientInfo clientInfo;
+	@serdeOptional Optional!string locale;
 }
 
+@serdeFallbackStruct
+struct InitializeParamsClientInfo
+{
+	string name;
+	@serdeKeys("version") Optional!string version_;
+}
+
+@serdeFallbackStruct
 struct DynamicRegistration
 {
-	mixin StrictOptionalSerializer;
-
-	Optional!bool dynamicRegistration;
+	@serdeOptional Optional!bool dynamicRegistration;
 }
 
 enum ResourceOperationKind : string
@@ -821,214 +1124,162 @@ enum FailureHandlingKind : string
 	undo = "undo"
 }
 
+@serdeFallbackStruct
 struct WorkspaceEditClientCapabilities
 {
-	mixin StrictOptionalSerializer;
-
-	Optional!bool documentChanges;
-	Optional!(string[]) resourceOperations;
-	Optional!string failureHandling;
+	@serdeOptional Optional!bool documentChanges;
+	@serdeOptional Optional!(string[]) resourceOperations;
+	@serdeOptional Optional!string failureHandling;
+	@serdeOptional Optional!bool normalizesLineEndings;
+	@serdeOptional Optional!ChangeAnnotationWorkspaceEditClientCapabilities changeAnnotationSupport;
 }
 
+@serdeFallbackStruct
+struct ChangeAnnotationWorkspaceEditClientCapabilities
+{
+	@serdeOptional Optional!bool groupsOnLabel;
+}
+
+@serdeFallbackStruct
 struct WorkspaceClientCapabilities
 {
-	mixin StrictOptionalSerializer;
-
-	Optional!bool applyEdit;
-	Optional!WorkspaceEditClientCapabilities workspaceEdit;
-	Optional!DynamicRegistration didChangeConfiguration;
-	Optional!DynamicRegistration didChangeWatchedFiles;
-	Optional!DynamicRegistration symbol;
-	Optional!DynamicRegistration executeCommand;
-	Optional!bool workspaceFolders;
-	Optional!bool configuration;
+	@serdeOptional Optional!bool applyEdit;
+	@serdeOptional Optional!WorkspaceEditClientCapabilities workspaceEdit;
+	@serdeOptional Optional!DynamicRegistration didChangeConfiguration;
+	@serdeOptional Optional!DynamicRegistration didChangeWatchedFiles;
+	@serdeOptional Optional!DynamicRegistration symbol;
+	@serdeOptional Optional!DynamicRegistration executeCommand;
+	@serdeOptional Optional!bool workspaceFolders;
+	@serdeOptional Optional!bool configuration;
+	@serdeOptional Optional!SemanticTokensWorkspaceClientCapabilities semanticTokens;
+	@serdeOptional Optional!CodeLensWorkspaceClientCapabilities codeLens;
+	@serdeOptional Optional!FileOperationsCapabilities fileOperations;
 }
 
+@serdeFallbackStruct
+struct MonikerClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+}
+
+@serdeFallbackStruct
+struct MonikerOptions
+{
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct MonikerRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct MonikerParams
+{
+	TextDocumentIdentifier textDocument;
+	Position position;
+}
+
+enum UniquenessLevel : string
+{
+	document = "document",
+	project = "project",
+	group = "group",
+	scheme = "scheme",
+	global = "global"
+}
+
+enum MonikerKind : string
+{
+	import_ = "import",
+	export_ = "export",
+	local = "local"
+}
+
+@serdeFallbackStruct
+struct Moniker
+{
+	string scheme;
+	string identifier;
+	UniquenessLevel unique;
+	@serdeOptional Optional!MonikerKind kind;
+}
+
+@serdeFallbackStruct
+struct FileOperationsCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+	@serdeOptional Optional!bool didCreate;
+	@serdeOptional Optional!bool willCreate;
+	@serdeOptional Optional!bool didRename;
+	@serdeOptional Optional!bool willRename;
+	@serdeOptional Optional!bool didDelete;
+	@serdeOptional Optional!bool willDelete;
+}
+
+@serdeFallbackStruct
 struct TextDocumentClientCapabilities
 {
-	mixin StrictOptionalSerializer;
-
-	struct SyncInfo
-	{
-		mixin StrictOptionalSerializer;
-
-		Optional!bool dynamicRegistration;
-		Optional!bool willSave;
-		Optional!bool willSaveWaitUntil;
-		Optional!bool didSave;
-	}
-
-	struct CompletionInfo
-	{
-		mixin StrictOptionalSerializer;
-
-		struct CompletionItem
-		{
-			mixin StrictOptionalSerializer;
-
-			Optional!bool snippetSupport;
-			Optional!bool commitCharactersSupport;
-			//Optional!(MarkupKind[]) documentationFormat;
-			Optional!bool deprecatedSupport;
-			Optional!bool preselectSupport;
-			Optional!bool insertReplaceSupport;
-			Optional!bool labelDetailsSupport;
-		}
-
-		struct CompletionItemKindSet
-		{
-			mixin StrictOptionalSerializer;
-
-			// CompletionItemKind[]
-			Optional!(int[]) valueSet;
-		}
-
-		Optional!bool dynamicRegistration;
-		Optional!CompletionItem completionItem;
-		Optional!CompletionItemKindSet completionItemKind;
-		Optional!bool contextSupport;
-	}
-
-	struct SignatureHelpInfo
-	{
-		struct SignatureInformationInfo
-		{
-			struct ParameterInformationInfo
-			{
-				mixin StrictOptionalSerializer;
-
-				Optional!bool labelOffsetSupport;
-			}
-
-			mixin StrictOptionalSerializer;
-
-			// MarkupKind[]
-			Optional!(string[]) documentationFormat;
-			Optional!ParameterInformationInfo parameterInformation;
-		}
-
-		mixin StrictOptionalSerializer;
-
-		Optional!bool dynamicRegistration;
-		Optional!SignatureInformationInfo signatureInformation;
-
-		@SerializeIgnore bool supportsLabelOffset() @property
-		{
-			if (signatureInformation.isNull || signatureInformation.parameterInformation.isNull
-					|| signatureInformation.parameterInformation.labelOffsetSupport.isNull)
-				return false;
-			return signatureInformation.parameterInformation.labelOffsetSupport.get;
-		}
-	}
-
-	struct DocumentSymbolInfo
-	{
-		mixin StrictOptionalSerializer;
-
-		struct SymbolKindSet
-		{
-			mixin StrictOptionalSerializer;
-
-			// SymbolKind[]
-			Optional!(int[]) valueSet;
-		}
-
-		Optional!bool dynamicRegistration;
-		Optional!SymbolKindSet symbolKind;
-		Optional!bool hierarchicalDocumentSymbolSupport;
-	}
-
-	struct PublishDiagnosticsCap
-	{
-		mixin StrictOptionalSerializer;
-
-		Optional!bool relatedInformation;
-	}
-
-	struct CodeActionClientCapabilities
-	{
-		struct CodeActionLiteralSupport
-		{
-			struct CodeActionKinds
-			{
-				// CodeActionKind[]
-				string[] valueSet;
-			}
-
-			CodeActionKinds codeActionKind;
-		}
-
-		mixin StrictOptionalSerializer;
-
-		Optional!bool dynamicRegistration;
-		Optional!CodeActionLiteralSupport codeActionLiteralSupport;
-	}
-
-	Optional!SyncInfo synchronization;
-	Optional!CompletionInfo completion;
-	Optional!DynamicRegistration hover;
-	Optional!SignatureHelpInfo signatureHelp;
-	Optional!DynamicRegistration references;
-	Optional!DynamicRegistration documentHighlight;
-	Optional!DocumentSymbolInfo documentSymbol;
-	Optional!DynamicRegistration formatting;
-	Optional!DynamicRegistration rangeFormatting;
-	Optional!DynamicRegistration onTypeFormatting;
-	Optional!DynamicRegistration definition;
-	Optional!DynamicRegistration typeDefinition;
-	Optional!DynamicRegistration implementation;
-	Optional!CodeActionClientCapabilities codeAction;
-	Optional!DynamicRegistration codeLens;
-	Optional!DynamicRegistration documentLink;
-	Optional!DynamicRegistration colorProvider;
-	Optional!DynamicRegistration rename;
-	Optional!PublishDiagnosticsCap publishDiagnostics;
+	@serdeOptional Optional!TextDocumentSyncClientCapabilities synchronization;
+	@serdeOptional Optional!CompletionClientCapabilities completion;
+	@serdeOptional Optional!HoverClientCapabilities hover;
+	@serdeOptional Optional!SignatureHelpClientCapabilities signatureHelp;
+	@serdeOptional Optional!DeclarationClientCapabilities declaration;
+	@serdeOptional Optional!DefinitionClientCapabilities definition;
+	@serdeOptional Optional!TypeDefinitionClientCapabilities typeDefinition;
+	@serdeOptional Optional!ImplementationClientCapabilities implementation;
+	@serdeOptional Optional!ReferenceClientCapabilities references;
+	@serdeOptional Optional!DocumentHighlightClientCapabilities documentHighlight;
+	@serdeOptional Optional!DocumentSymbolClientCapabilities documentSymbol;
+	@serdeOptional Optional!CodeActionClientCapabilities codeAction;
+	@serdeOptional Optional!CodeLensClientCapabilities codeLens;
+	@serdeOptional Optional!DocumentLinkClientCapabilities documentLink;
+	@serdeOptional Optional!DocumentColorClientCapabilities colorProvider;
+	@serdeOptional Optional!DocumentFormattingClientCapabilities formatting;
+	@serdeOptional Optional!DocumentRangeFormattingClientCapabilities rangeFormatting;
+	@serdeOptional Optional!DocumentOnTypeFormattingClientCapabilities onTypeFormatting;
+	@serdeOptional Optional!RenameClientCapabilities rename;
+	@serdeOptional Optional!PublishDiagnosticsClientCapabilities publishDiagnostics;
+	@serdeOptional Optional!FoldingRangeClientCapabilities foldingRange;
+	@serdeOptional Optional!SelectionRangeClientCapabilities selectionRange;
+	@serdeOptional Optional!LinkedEditingRangeClientCapabilities linkedEditingRange;
+	@serdeOptional Optional!CallHierarchyClientCapabilities callHierarchy;
+	@serdeOptional Optional!SemanticTokensClientCapabilities semanticTokens;
+	@serdeOptional Optional!MonikerClientCapabilities moniker;
 }
 
-enum CodeActionKind : string
-{
-	empty = "",
-	quickfix = "quickfix",
-	refactor = "refactor",
-	refactorExtract = "refactor.extract",
-	refactorInline = "refactor.inline",
-	refactorRewrite = "refactor.rewrite",
-	refactorSource = "source",
-	sourceOrganizeImports = "source.organizeImports",
-}
-
-struct CodeAction
-{
-	mixin StrictOptionalSerializer;
-
-	this(Command command)
-	{
-		title = command.title;
-		this.command = command;
-	}
-
-	this(string title, WorkspaceEdit edit)
-	{
-		this.title = title;
-		this.edit = edit;
-	}
-
-	string title;
-	// CodeActionKind
-	Optional!string kind;
-	Optional!(Diagnostic[]) diagnostics;
-	Optional!bool isPreferred;
-	Optional!WorkspaceEdit edit;
-	Optional!Command command;
-}
-
+@serdeFallbackStruct
 struct ClientCapabilities
 {
-	mixin StrictOptionalSerializer;
+	@serdeOptional Optional!WorkspaceClientCapabilities workspace;
+	@serdeOptional Optional!TextDocumentClientCapabilities textDocument;
+	@serdeOptional Optional!WindowClientCapabilities window;
+	@serdeOptional Optional!GeneralClientCapabilities general;
+	@serdeOptional OptionalJsonValue experimental;
+}
 
-	Optional!WorkspaceClientCapabilities workspace;
-	Optional!TextDocumentClientCapabilities textDocument;
-	JSONValue experimental;
+@serdeFallbackStruct
+struct WindowClientCapabilities
+{
+	@serdeOptional Optional!bool workDoneProgress;
+	@serdeOptional Optional!ShowMessageRequestClientCapabilities showMessage;
+	@serdeOptional Optional!ShowDocumentClientCapabilities showDocument;
+}
+
+@serdeFallbackStruct
+struct GeneralClientCapabilities
+{
+	@serdeOptional Optional!RegularExpressionsClientCapabilities regularExpressions;
+	@serdeOptional Optional!MarkdownClientCapabilities markdown;
+}
+
+@serdeFallbackStruct
+struct RegularExpressionsClientCapabilities
+{
+	string engine;
+	@serdeKeys("version") Optional!string version_;
 }
 
 unittest
@@ -1038,18 +1289,90 @@ unittest
 			"configuration": true
 		}
 	}};
-	auto caps = json.parseJSON.fromJSON!ClientCapabilities;
-	assert(caps.workspace.configuration);
+	auto caps = json.deserializeJson!ClientCapabilities;
+	assert(caps.workspace.deref.configuration.deref);
 }
 
+@serdeFallbackStruct
 struct InitializeResult
 {
 	ServerCapabilities capabilities;
+	@serdeOptional Optional!ServerInfo serverInfo;
 }
 
+@serdeFallbackStruct
+struct ServerInfo
+{
+	string name;
+	@serdeKeys("version") Optional!string version_;
+}
+
+@serdeFallbackStruct
 struct InitializeError
 {
 	bool retry;
+}
+
+@serdeFallbackStruct
+struct CompletionClientCapabilities
+{
+	@serdeFallbackStruct
+	@serdeIgnoreUnexpectedKeys
+	static struct CompletionItemCapabilities
+	{
+		@serdeFallbackStruct
+		@serdeIgnoreUnexpectedKeys
+		static struct ResolveSupport
+		{
+			string[] properties;
+		}
+
+		@serdeOptional Optional!bool snippetSupport;
+		@serdeOptional Optional!bool commitCharactersSupport;
+		@serdeOptional Optional!(MarkupKind[]) documentationFormat;
+		@serdeOptional Optional!bool deprecatedSupport;
+		@serdeOptional Optional!bool preselectSupport;
+		@serdeOptional Optional!(ValueSet!CompletionItemTag) tagSupport;
+		@serdeOptional Optional!bool insertReplaceSupport;
+		@serdeOptional Optional!ResolveSupport resolveSupport;
+		@serdeOptional Optional!(ValueSet!InsertTextMode) insertTextModeSupport;
+	}
+
+	@serdeOptional Optional!bool dynamicRegistration;
+	@serdeOptional Optional!CompletionItemCapabilities completionItem;
+	@serdeOptional Optional!(ValueSet!CompletionItemKind) completionItemKind;
+	@serdeOptional Optional!bool contextSupport;
+}
+
+@serdeFallbackStruct
+struct CompletionOptions
+{
+	@serdeFallbackStruct
+	@serdeIgnoreUnexpectedKeys
+	struct CompletionItem
+	{
+		@serdeOptional Optional!bool labelDetailsSupport;
+	}
+
+	@serdeOptional Optional!bool resolveProvider;
+	@serdeOptional Optional!(string[]) triggerCharacters;
+	@serdeOptional Optional!(string[]) allCommitCharacters;
+	@serdeOptional Optional!CompletionItem completionItem;
+}
+
+@serdeFallbackStruct
+struct SaveOptions
+{
+	@serdeOptional Optional!bool includeText;
+}
+
+@serdeFallbackStruct
+struct TextDocumentSyncClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+	@serdeOptional Optional!bool willSave;
+	@serdeOptional Optional!bool willSaveWaitUntil;
+	@serdeOptional Optional!bool didSave;
 }
 
 enum TextDocumentSyncKind
@@ -1059,213 +1382,242 @@ enum TextDocumentSyncKind
 	incremental
 }
 
-struct CompletionOptions
-{
-	mixin StrictOptionalSerializer;
-
-	struct CompletionItem
-	{
-		mixin StrictOptionalSerializer;
-
-		Optional!bool labelDetailsSupport;
-	}
-
-	bool resolveProvider;
-	string[] triggerCharacters;
-	Optional!CompletionItem completionItem;
-}
-
-struct SignatureHelpOptions
-{
-	string[] triggerCharacters;
-}
-
-struct CodeLensOptions
-{
-	bool resolveProvider;
-}
-
-struct DocumentOnTypeFormattingOptions
-{
-	mixin StrictOptionalSerializer;
-
-	string firstTriggerCharacter;
-	Optional!(string[]) moreTriggerCharacter;
-}
-
-struct DocumentLinkOptions
-{
-	bool resolveProvider;
-}
-
-struct ColorProviderOptions
-{
-}
-
-struct ExecuteCommandOptions
-{
-	string[] commands;
-}
-
-struct SaveOptions
-{
-	bool includeText;
-}
-
+@serdeFallbackStruct
 struct TextDocumentSyncOptions
 {
-	bool openClose;
-	int change;
-	bool willSave;
-	bool willSaveWaitUntil;
-	SaveOptions save;
+	@serdeOptional Optional!bool openClose;
+	@serdeOptional Optional!TextDocumentSyncKind change;
+	@serdeOptional Optional!bool willSave;
+	@serdeOptional Optional!bool willSaveWaitUntil;
+	@serdeOptional Variant!(NoneType, bool, SaveOptions) save;
 }
 
+@serdeFallbackStruct
 struct ServerCapabilities
 {
-	mixin StrictOptionalSerializer;
+	@serdeOptional Variant!(NoneType, TextDocumentSyncOptions, TextDocumentSyncKind) textDocumentSync;
+	@serdeOptional Variant!(NoneType, CompletionOptions) completionProvider;
+	@serdeOptional Variant!(NoneType, bool, HoverOptions) hoverProvider;
+	@serdeOptional Variant!(NoneType, SignatureHelpOptions) signatureHelpProvider;
+	@serdeOptional Variant!(NoneType, bool, StructVariant!(DeclarationOptions, DeclarationRegistrationOptions)) declarationProvider;
+	@serdeOptional Variant!(NoneType, bool, DefinitionOptions) definitionProvider;
+	@serdeOptional Variant!(NoneType, bool, StructVariant!(TypeDefinitionOptions, TypeDefinitionRegistrationOptions)) typeDefinitionProvider;
+	@serdeOptional Variant!(NoneType, bool, StructVariant!(ImplementationOptions, ImplementationRegistrationOptions)) implementationProvider;
+	@serdeOptional Variant!(NoneType, bool, ReferenceOptions) referencesProvider;
+	@serdeOptional Variant!(NoneType, bool, DocumentHighlightOptions) documentHighlightProvider;
+	@serdeOptional Variant!(NoneType, bool, DocumentSymbolOptions) documentSymbolProvider;
+	@serdeOptional Variant!(NoneType, bool, CodeActionOptions) codeActionProvider;
+	@serdeOptional Variant!(NoneType, CodeLensOptions) codeLensProvider;
+	@serdeOptional Variant!(NoneType, DocumentLinkOptions) documentLinkProvider;
+	@serdeOptional Variant!(NoneType, bool, StructVariant!(DocumentColorOptions, DocumentColorRegistrationOptions)) colorProvider;
+	@serdeOptional Variant!(NoneType, bool, DocumentFormattingOptions) documentFormattingProvider;
+	@serdeOptional Variant!(NoneType, bool, DocumentRangeFormattingOptions) documentRangeFormattingProvider;
+	@serdeOptional Variant!(NoneType, DocumentOnTypeFormattingOptions) documentOnTypeFormattingProvider;
+	@serdeOptional Variant!(NoneType, bool, RenameOptions) renameProvider;
+	@serdeOptional Variant!(NoneType, bool, StructVariant!(FoldingRangeOptions, FoldingRangeRegistrationOptions)) foldingRangeProvider;
+	@serdeOptional Variant!(NoneType, ExecuteCommandOptions) executeCommandProvider;
+	@serdeOptional Variant!(NoneType, bool, StructVariant!(SelectionRangeOptions, SelectionRangeRegistrationOptions)) selectionRangeProvider;
+	@serdeOptional Variant!(NoneType, bool, StructVariant!(LinkedEditingRangeOptions, LinkedEditingRangeRegistrationOptions)) linkedEditingRangeProvider;
+	@serdeOptional Variant!(NoneType, bool, StructVariant!(CallHierarchyOptions, CallHierarchyRegistrationOptions)) callHierarchyProvider;
+	@serdeOptional Variant!(NoneType, StructVariant!(SemanticTokensOptions, SemanticTokensRegistrationOptions)) semanticTokensProvider;
+	@serdeOptional Variant!(NoneType, bool, StructVariant!(MonikerOptions, MonikerRegistrationOptions)) monikerProvider;
+	@serdeOptional Variant!(NoneType, bool, WorkspaceSymbolOptions) workspaceSymbolProvider;
 
-	JSONValue textDocumentSync;
-	bool hoverProvider;
-	Optional!CompletionOptions completionProvider;
-	Optional!SignatureHelpOptions signatureHelpProvider;
-	bool definitionProvider;
-	Optional!bool typeDefinitionProvider;
-	Optional!bool implementationProvider;
-	bool referencesProvider;
-	bool documentHighlightProvider;
-	bool documentSymbolProvider;
-	bool workspaceSymbolProvider;
-	bool codeActionProvider;
-	Optional!CodeLensOptions codeLensProvider;
-	bool documentFormattingProvider;
-	bool documentRangeFormattingProvider;
-	Optional!DocumentOnTypeFormattingOptions documentOnTypeFormattingProvider;
-	bool renameProvider;
-	Optional!DocumentLinkOptions documentLinkProvider;
-	Optional!ColorProviderOptions colorProvider;
-	Optional!ExecuteCommandOptions executeCommandProvider;
-	Optional!ServerWorkspaceCapabilities workspace;
-	JSONValue experimental;
+	@serdeOptional Optional!ServerWorkspaceCapabilities workspace;
+	@serdeOptional OptionalJsonValue experimental;
 }
 
+@serdeFallbackStruct
 struct ServerWorkspaceCapabilities
 {
-	mixin StrictOptionalSerializer;
-
-	struct WorkspaceFolders
-	{
-		mixin StrictOptionalSerializer;
-
-		Optional!bool supported;
-		Optional!bool changeNotifications;
-	}
-
-	Optional!WorkspaceFolders workspaceFolders;
+	@serdeOptional Optional!WorkspaceFoldersServerCapabilities workspaceFolders;
+	@serdeOptional Optional!WorkspaceFileOperationsCapabilities fileOperations;
 }
 
-struct ShowMessageParams
+@serdeFallbackStruct
+struct WorkspaceFoldersServerCapabilities
 {
-	MessageType type;
-	string message;
+	@serdeOptional Optional!bool supported;
+	@serdeOptional Variant!(NoneType, bool, string) changeNotifications;
 }
 
-struct ShowMessageRequestParams
+@serdeFallbackStruct
+struct WorkspaceFileOperationsCapabilities
 {
-	mixin StrictOptionalSerializer;
-
-	MessageType type;
-	string message;
-	Optional!(MessageActionItem[]) actions;
+	@serdeOptional Optional!FileOperationRegistrationOptions didCreate;
+	@serdeOptional Optional!FileOperationRegistrationOptions willCreate;
+	@serdeOptional Optional!FileOperationRegistrationOptions didRename;
+	@serdeOptional Optional!FileOperationRegistrationOptions willRename;
+	@serdeOptional Optional!FileOperationRegistrationOptions didDelete;
+	@serdeOptional Optional!FileOperationRegistrationOptions willDelete;
 }
 
-struct MessageActionItem
+@serdeFallbackStruct
+struct FileOperationRegistrationOptions
 {
-	string title;
+	FileOperationFilter[] filters;
 }
 
-struct LogMessageParams
+enum FileOperationPatternKind : string
 {
-	MessageType type;
-	string message;
+	file = "file",
+	folder = "folder"
 }
 
+@serdeFallbackStruct
+struct FileOperationPatternOptions
+{
+	@serdeOptional Optional!bool ignoreCase;
+}
+
+@serdeFallbackStruct
+struct FileOperationPattern
+{
+	string glob;
+	@serdeOptional Optional!FileOperationPatternKind matches;
+	@serdeOptional Optional!FileOperationPatternOptions options;
+}
+
+@serdeFallbackStruct
+struct FileOperationFilter
+{
+	FileOperationPattern pattern;
+	@serdeOptional Optional!string scheme;
+}
+
+@serdeFallbackStruct
+struct CreateFileParams
+{
+	FileCreate[] files;
+}
+
+@serdeFallbackStruct
+struct FileCreate
+{
+	string uri;
+}
+
+@serdeFallbackStruct
+struct RenameFileParams
+{
+	FileRename[] files;
+}
+
+@serdeFallbackStruct
+struct FileRename
+{
+	string oldUri;
+	string newUri;
+}
+
+@serdeFallbackStruct
+struct DeleteFileParams
+{
+	FileDelete[] files;
+}
+
+@serdeFallbackStruct
+struct FileDelete
+{
+	string uri;
+}
+
+@serdeFallbackStruct
 struct Registration
 {
 	string id;
 	string method;
-	JSONValue registerOptions;
+	@serdeOptional OptionalJsonValue registerOptions;
 }
 
+@serdeFallbackStruct
 struct RegistrationParams
 {
 	Registration[] registrations;
 }
 
-struct TextDocumentRegistrationOptions
-{
-	mixin StrictOptionalSerializer;
-
-	Optional!DocumentSelector documentSelector;
-}
-
+@serdeFallbackStruct
 struct Unregistration
 {
 	string id;
 	string method;
 }
 
+@serdeFallbackStruct
 struct UnregistrationParams
 {
 	Unregistration[] unregistrations;
 }
 
-struct DidChangeConfigurationParams
+mixin template TextDocumentRegistrationOptions()
 {
-	JSONValue settings;
+	@serdeOptional Optional!DocumentSelector documentSelector;
 }
 
+mixin template WorkDoneProgressOptions()
+{
+	@serdeOptional Optional!bool workDoneProgress;
+}
+
+mixin template StaticRegistrationOptions()
+{
+	@serdeOptional Optional!string id;
+}
+
+@serdeFallbackStruct
+struct DidChangeConfigurationClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+}
+
+@serdeFallbackStruct
+struct DidChangeConfigurationParams
+{
+	JsonValue settings;
+}
+
+@serdeFallbackStruct
 struct ConfigurationParams
 {
 	ConfigurationItem[] items;
 }
 
+@serdeFallbackStruct
 struct ConfigurationItem
 {
-	mixin StrictOptionalSerializer;
-
-	Optional!string scopeUri;
-	Optional!string section;
+	@serdeOptional Optional!string scopeUri;
+	@serdeOptional Optional!string section;
 }
 
+@serdeFallbackStruct
 struct DidOpenTextDocumentParams
 {
 	TextDocumentItem textDocument;
 }
 
+@serdeFallbackStruct
 struct DidChangeTextDocumentParams
 {
 	VersionedTextDocumentIdentifier textDocument;
 	TextDocumentContentChangeEvent[] contentChanges;
 }
 
+@serdeFallbackStruct
 struct TextDocumentContentChangeEvent
 {
-	mixin StrictOptionalSerializer;
-
-	Optional!TextRange range;
-	Optional!int rangeLength;
+	@serdeOptional Optional!TextRange range;
 	string text;
 }
 
+@serdeFallbackStruct
 struct TextDocumentChangeRegistrationOptions
 {
-	mixin StrictOptionalSerializer;
+	mixin TextDocumentRegistrationOptions;
 
-	Optional!DocumentSelector documentSelector;
 	TextDocumentSyncKind syncKind;
 }
 
+@serdeFallbackStruct
 struct WillSaveTextDocumentParams
 {
 	TextDocumentIdentifier textDocument;
@@ -1279,33 +1631,32 @@ enum TextDocumentSaveReason
 	focusOut
 }
 
-struct DidSaveTextDocumentParams
-{
-	mixin StrictOptionalSerializer;
-
-	TextDocumentIdentifier textDocument;
-	Optional!string text;
-}
-
+@serdeFallbackStruct
 struct TextDocumentSaveRegistrationOptions
 {
-	mixin StrictOptionalSerializer;
+	mixin TextDocumentRegistrationOptions;
 
-	Optional!DocumentSelector documentSelector;
-	bool includeText;
+	@serdeOptional Optional!bool includeText;
 }
 
+@serdeFallbackStruct
+struct DidSaveTextDocumentParams
+{
+	TextDocumentIdentifier textDocument;
+	@serdeOptional Optional!string text;
+}
+
+@serdeFallbackStruct
 struct DidCloseTextDocumentParams
 {
 	TextDocumentIdentifier textDocument;
 }
 
+@serdeFallbackStruct
 struct FileSystemWatcher
 {
-	mixin StrictOptionalSerializer;
-
 	string globPattern;
-	Optional!WatchKind kind;
+	@serdeOptional Optional!uint kind;
 }
 
 enum WatchKind
@@ -1315,11 +1666,25 @@ enum WatchKind
 	delete_ = 4
 }
 
+@serdeFallbackStruct
+struct DidChangeWatchedFilesClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+}
+
+@serdeFallbackStruct
+struct DidChangeWatchedFilesRegistrationOptions
+{
+	FileSystemWatcher[] watchers;
+}
+
+@serdeFallbackStruct
 struct DidChangeWatchedFilesParams
 {
 	FileEvent[] changes;
 }
 
+@serdeFallbackStruct
 struct FileEvent
 {
 	DocumentUri uri;
@@ -1333,12 +1698,82 @@ enum FileChangeType
 	deleted
 }
 
+@serdeFallbackStruct
+struct WorkspaceSymbolClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+	@serdeOptional Optional!(ValueSet!SymbolKind) symbolKind;
+	@serdeOptional Optional!(ValueSet!SymbolTag) tagSupport;
+}
+
+@serdeFallbackStruct
+struct WorkspaceSymbolOptions
+{
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct WorkspaceSymbolRegistrationOptions
+{
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct WorkspaceSymbolParams
+{
+	string query;
+}
+
+@serdeFallbackStruct
+struct PublishDiagnosticsClientCapabilities
+{
+	@serdeOptional Optional!bool relatedInformation;
+	@serdeOptional Optional!(ValueSet!SymbolTag) tagSupport;
+	@serdeOptional Optional!bool versionSupport;
+	@serdeOptional Optional!bool codeDescriptionSupport;
+	@serdeOptional Optional!bool dataSupport;
+}
+
+@serdeFallbackStruct
 struct PublishDiagnosticsParams
 {
 	DocumentUri uri;
 	Diagnostic[] diagnostics;
+	@serdeKeys("version") Optional!int version_;
 }
 
+@serdeFallbackStruct
+struct CompletionRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+
+	@serdeOptional Optional!(string[]) triggerCharacters;
+	bool resolveProvider;
+}
+
+@serdeFallbackStruct
+struct CompletionParams
+{
+	TextDocumentIdentifier textDocument;
+	Position position;
+	@serdeOptional Optional!CompletionContext context;
+}
+
+enum CompletionTriggerKind
+{
+	invoked = 1,
+	triggerCharacter = 2,
+	triggerForIncompleteCompletions = 3
+}
+
+@serdeFallbackStruct
+struct CompletionContext
+{
+	CompletionTriggerKind triggerKind;
+	@serdeOptional Optional!string triggerCharacter;
+}
+
+@serdeFallbackStruct
 struct CompletionList
 {
 	bool isIncomplete;
@@ -1351,50 +1786,131 @@ enum InsertTextFormat
 	snippet
 }
 
+enum CompletionItemTag
+{
+	deprecated_ = 1
+}
+
+@serdeFallbackStruct
+struct InsertReplaceEdit
+{
+	string newText;
+	TextRange insert;
+	TextRange replace;
+}
+
+unittest
+{
+	string s = `{"newText":"new text","insert":{"start":{"line":1,"character":2},"end":{"line":3,"character":4}},"replace":{"start":{"line":5,"character":6},"end":{"line":7,"character":8}}}`;
+	auto v = InsertReplaceEdit(
+		"new text",
+		TextRange(1, 2, 3, 4),
+		TextRange(5, 6, 7, 8)
+	);
+	assert(s.deserializeJson!InsertReplaceEdit == v);
+
+	Variant!(NoneType, InsertReplaceEdit) var = v;
+	assert(s.deserializeJson!(typeof(var)) == var);
+
+	Variant!(NoneType, StructVariant!(TextEdit, InsertReplaceEdit)) var2 = v;
+	assert(s.deserializeJson!(typeof(var2)) == var2);
+
+	struct Struct
+	{
+		Variant!(NoneType, StructVariant!(TextEdit, InsertReplaceEdit)) edit;
+	}
+
+	Struct str;
+	str.edit = v;
+	auto strS = `{"edit":` ~ s ~ `}`;
+	assert(str.serializeJson == strS);
+	assert(strS.deserializeJson!Struct == str, strS.deserializeJson!Struct.to!string ~ " !=\n" ~ str.to!string);
+}
+
+enum InsertTextMode
+{
+	asIs = 1,
+	adjustIndentation = 2
+}
+
+@serdeFallbackStruct
 struct CompletionItemLabelDetails
 {
-	mixin StrictOptionalSerializer;
-
 	/**
 	 * An optional string which is rendered less prominently directly after
 	 * {@link CompletionItemLabel.label label}, without any spacing. Should be
 	 * used for function signatures or type annotations.
 	 */
-	Optional!string detail;
+	@serdeOptional Optional!string detail;
 
 	/**
 	 * An optional string which is rendered less prominently after
 	 * {@link CompletionItemLabel.detail}. Should be used for fully qualified
 	 * names or file path.
 	 */
-	Optional!string description;
+	@serdeOptional Optional!string description;
 }
 
+@serdeFallbackStruct
 struct CompletionItem
 {
-	mixin StrictOptionalSerializer;
-
 	string label;
-	Optional!CompletionItemKind kind;
-	Optional!string detail;
-	Optional!MarkupContent documentation;
-	@SerializedName("deprecated") Optional!bool deprecated_;
-	Optional!bool preselect;
-	Optional!string sortText;
-	Optional!string filterText;
-	Optional!string insertText;
-	Optional!InsertTextFormat insertTextFormat;
-	Optional!TextEdit textEdit;
-	Optional!(TextEdit[]) additionalTextEdits;
-	Optional!(string[]) commitCharacters;
-	Optional!Command command;
-	JSONValue data;
-	Optional!CompletionItemLabelDetails labelDetails;
+	@serdeOptional Optional!CompletionItemLabelDetails labelDetails;
+	@serdeOptional Optional!CompletionItemKind kind;
+	@serdeOptional Optional!(CompletionItemTag[]) tags;
+	@serdeOptional Optional!string detail;
+	@serdeOptional Variant!(NoneType, string, MarkupContent) documentation;
+	@serdeOptional Optional!bool preselect;
+	@serdeOptional Optional!string sortText;
+	@serdeOptional Optional!string filterText;
+	@serdeOptional Optional!string insertText;
+	@serdeOptional Optional!InsertTextFormat insertTextFormat;
+	@serdeOptional Optional!InsertTextMode insertTextMode;
+	@serdeOptional Variant!(NoneType, StructVariant!(TextEdit, InsertReplaceEdit)) textEdit;
+	@serdeOptional Optional!(TextEdit[]) additionalTextEdits;
+	@serdeOptional Optional!(string[]) commitCharacters;
+	@serdeOptional Optional!Command command;
+	@serdeOptional OptionalJsonValue data;
 
 	string effectiveInsertText() const
 	{
-		return insertText.isNull ? label : insertText.get;
+		return insertText.isNone ? label : insertText.deref;
 	}
+}
+
+unittest
+{
+	CompletionItem[] values = [CompletionItem("hello")];
+	CompletionItem b = {
+		label: "b",
+		detail: "detail".opt
+	}; values ~= b;
+	CompletionItem c = {
+		label: "c",
+		documentation: MarkupContent("cool beans")
+	}; values ~= c;
+	CompletionItem d = {
+		label: "d",
+		textEdit: TextEdit(TextRange(1, 2, 3, 4), "new text")
+	}; values ~= d;
+	CompletionItem e = {
+		label: "e",
+		textEdit: InsertReplaceEdit("new text", TextRange(1, 2, 3, 4), TextRange(5, 6, 7, 8))
+	}; values ~= e;
+
+	string[] expected = [
+		`{"label":"hello"}`,
+		`{"label":"b","detail":"detail"}`,
+		`{"label":"c","documentation":{"kind":"plaintext","value":"cool beans"}}`,
+		`{"label":"d","textEdit":{"range":{"start":{"line":1,"character":2},"end":{"line":3,"character":4}},"newText":"new text"}}`,
+		`{"label":"e","textEdit":{"newText":"new text","insert":{"start":{"line":1,"character":2},"end":{"line":3,"character":4}},"replace":{"start":{"line":5,"character":6},"end":{"line":7,"character":8}}}}`,
+	];
+
+	foreach (i, v; values)
+		assert(v.serializeJson == expected[i], v.serializeJson ~ " !=\n" ~ expected[i]);
+
+	foreach (v; values)
+		assert(deserializeJson!CompletionItem(v.serializeJson) == v, v.to!string ~ " !=\n" ~ v.serializeJson.deserializeJson!CompletionItem.to!string);
 }
 
 enum CompletionItemKind
@@ -1426,51 +1942,45 @@ enum CompletionItemKind
 	typeParameter
 }
 
-struct CompletionRegistrationOptions
+@serdeFallbackStruct
+struct HoverClientCapabilities
 {
-	mixin StrictOptionalSerializer;
-
-	Optional!DocumentSelector documentSelector;
-	Optional!(string[]) triggerCharacters;
-	bool resolveProvider;
+	@serdeOptional Optional!bool dynamicRegistration;
+	@serdeOptional Optional!(MarkupKind[]) contentFormat;
 }
 
+@serdeFallbackStruct
+struct HoverOptions
+{
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct HoverRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct HoverParams
+{
+	TextDocumentIdentifier textDocument;
+	Position position;
+}
+
+@serdeFallbackStruct
 struct Hover
 {
-	mixin StrictOptionalSerializer;
-
-	ArrayOrSingle!MarkedString contents;
-	Optional!TextRange range;
+	Variant!MarkupContent contents;
+	@serdeOptional Optional!TextRange range;
 }
 
+@serdeFallbackStruct
 struct MarkedString
 {
 	string value;
 	string language;
-
-	const JSONValue _toJSON()
-	{
-		if (!language.length)
-			return JSONValue(value);
-		else
-			return JSONValue([
-					"value": JSONValue(value),
-					"language": JSONValue(language)
-					]);
-	}
-
-	static MarkedString fromJSON(JSONValue val)
-	{
-		MarkedString ret;
-		if (val.type == JSONType.string)
-			ret.value = val.str;
-		else
-		{
-			ret.value = val["value"].str;
-			ret.language = val["language"].str;
-		}
-		return ret;
-	}
 }
 
 enum MarkupKind : string
@@ -1479,6 +1989,7 @@ enum MarkupKind : string
 	markdown = "markdown"
 }
 
+@serdeFallbackStruct
 struct MarkupContent
 {
 	string kind;
@@ -1514,13 +2025,86 @@ struct MarkupContent
 	}
 }
 
+@serdeFallbackStruct
+struct MarkdownClientCapabilities
+{
+	string parser;
+	@serdeKeys("version") Optional!string version_;
+}
+
+@serdeFallbackStruct
+struct SignatureHelpClientCapabilities
+{
+	@serdeFallbackStruct
+	@serdeIgnoreUnexpectedKeys
+	static struct SignatureInformationCapabilities
+	{
+		@serdeFallbackStruct
+		@serdeIgnoreUnexpectedKeys
+		static struct ParameterInformationSupport
+		{
+			@serdeOptional Optional!bool labelOffsetSupport;
+		}
+
+		@serdeOptional Optional!(MarkupKind[]) documentationFormat;
+		@serdeOptional Optional!ParameterInformationSupport parameterInformation;
+		@serdeOptional Optional!bool activeParameterSupport;
+	}
+
+	@serdeOptional Optional!bool dynamicRegistration;
+	@serdeOptional Optional!SignatureInformationCapabilities signatureInformation;
+	@serdeOptional Optional!bool contextSupport;
+}
+
+@serdeFallbackStruct
+struct SignatureHelpOptions
+{
+	mixin WorkDoneProgressOptions;
+
+	@serdeOptional Optional!(string[]) triggerCharacters;
+	@serdeOptional Optional!(string[]) retriggerCharacters;
+}
+
+@serdeFallbackStruct
+struct SignatureHelpRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+
+	@serdeOptional Optional!(string[]) triggerCharacters;
+	@serdeOptional Optional!(string[]) retriggerCharacters;
+}
+
+@serdeFallbackStruct
+struct SignatureHelpParams
+{
+	TextDocumentIdentifier textDocument;
+	Position position;
+	@serdeOptional Optional!SignatureHelpContext context;
+}
+
+enum SignatureHelpTriggerKind
+{
+	invoked = 1,
+	triggerCharacter,
+	contentChange
+}
+
+@serdeFallbackStruct
+struct SignatureHelpContext
+{
+	SignatureHelpTriggerKind triggerKind;
+	@serdeOptional Optional!string triggerCharacter;
+	@serdeOptional Optional!bool isRetrigger;
+	@serdeOptional Optional!SignatureHelp activeSignatureHelp;
+}
+
+@serdeFallbackStruct
 struct SignatureHelp
 {
-	mixin StrictOptionalSerializer;
-
 	SignatureInformation[] signatures;
-	Optional!int activeSignature;
-	Optional!int activeParameter;
+	@serdeOptional Optional!uint activeSignature;
+	@serdeOptional Optional!uint activeParameter;
 
 	this(SignatureInformation[] signatures)
 	{
@@ -1533,33 +2117,162 @@ struct SignatureHelp
 		this.activeSignature = activeSignature;
 		this.activeParameter = activeParameter;
 	}
+
+	this(SignatureInformation[] signatures, uint activeSignature, uint activeParameter)
+	{
+		this.signatures = signatures;
+		this.activeSignature = activeSignature;
+		this.activeParameter = activeParameter;
+	}
 }
 
+@serdeFallbackStruct
 struct SignatureInformation
 {
-	mixin StrictOptionalSerializer;
-
 	string label;
-	Optional!MarkupContent documentation;
-	Optional!(ParameterInformation[]) parameters;
+	@serdeOptional Variant!(NoneType, string, MarkupContent) documentation;
+	@serdeOptional Optional!(ParameterInformation[]) parameters;
+	@serdeOptional Optional!uint activeParameter;
 }
 
+@serdeFallbackStruct
 struct ParameterInformation
 {
-	mixin StrictOptionalSerializer;
-
-	JSONValue label;
-	Optional!MarkupContent documentation;
+	Variant!(string, uint[2]) label;
+	@serdeOptional Variant!(NoneType, string, MarkupContent) documentation;
 }
 
-struct SignatureHelpRegistrationOptions
+@serdeFallbackStruct
+struct DeclarationClientCapabilities
 {
-	mixin StrictOptionalSerializer;
-
-	Optional!DocumentSelector documentSelector;
-	Optional!(string[]) triggerCharacters;
+	@serdeOptional Optional!bool dynamicRegistration;
+	@serdeOptional Optional!bool linkSupport;
 }
 
+@serdeFallbackStruct
+struct DeclarationOptions
+{
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct DeclarationRegistrationOptions
+{
+	mixin WorkDoneProgressOptions;
+	mixin TextDocumentRegistrationOptions;
+	mixin StaticRegistrationOptions;
+}
+
+@serdeFallbackStruct
+struct DeclarationParams
+{
+	TextDocumentIdentifier textDocument;
+	Position position;
+}
+
+@serdeFallbackStruct
+struct DefinitionClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+	@serdeOptional Optional!bool linkSupport;
+}
+
+@serdeFallbackStruct
+struct DefinitionOptions
+{
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct DefinitionRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct DefinitionParams
+{
+	TextDocumentIdentifier textDocument;
+	Position position;
+}
+
+@serdeFallbackStruct
+struct TypeDefinitionClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+	@serdeOptional Optional!bool linkSupport;
+}
+
+@serdeFallbackStruct
+struct TypeDefinitionOptions
+{
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct TypeDefinitionRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+	mixin StaticRegistrationOptions;
+}
+
+@serdeFallbackStruct
+struct TypeDefinitionParams
+{
+	TextDocumentIdentifier textDocument;
+	Position position;
+}
+
+@serdeFallbackStruct
+struct ImplementationClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+	@serdeOptional Optional!bool linkSupport;
+}
+
+@serdeFallbackStruct
+struct ImplementationOptions
+{
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct ImplementationRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+	mixin StaticRegistrationOptions;
+}
+
+@serdeFallbackStruct
+struct ImplementationParams
+{
+	TextDocumentIdentifier textDocument;
+	Position position;
+}
+
+@serdeFallbackStruct
+struct ReferenceClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+}
+
+@serdeFallbackStruct
+struct ReferenceOptions
+{
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct ReferenceRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
 struct ReferenceParams
 {
 	TextDocumentIdentifier textDocument;
@@ -1567,23 +2280,43 @@ struct ReferenceParams
 	ReferenceContext context;
 }
 
+@serdeFallbackStruct
 struct ReferenceContext
 {
 	bool includeDeclaration;
 }
 
+@serdeFallbackStruct
+struct DocumentHighlightClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+}
+
+@serdeFallbackStruct
+struct DocumentHighlightOptions
+{
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct DocumentHighlightRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
 struct DocumentHighlightParams
 {
 	TextDocumentIdentifier textDocument;
 	Position position;
 }
 
+@serdeFallbackStruct
 struct DocumentHighlight
 {
-	mixin StrictOptionalSerializer;
-
 	TextRange range;
-	Optional!DocumentHighlightKind kind;
+	@serdeOptional Optional!DocumentHighlightKind kind;
 }
 
 enum DocumentHighlightKind
@@ -1593,33 +2326,37 @@ enum DocumentHighlightKind
 	write
 }
 
+@serdeFallbackStruct
+struct DocumentSymbolClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+	@serdeOptional Optional!(ValueSet!SymbolKind) symbolKind;
+	@serdeOptional Optional!bool hierarchicalDocumentSymbolSupport;
+	@serdeOptional Optional!(ValueSet!SymbolTag) tagSupport;
+	@serdeOptional Optional!bool labelSupport;
+}
+
+@serdeFallbackStruct
+struct DocumentSymbolOptions
+{
+	mixin WorkDoneProgressOptions;
+
+	@serdeOptional Optional!string label;
+}
+
+@serdeFallbackStruct
+struct DocumentSymbolRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+
+	@serdeOptional Optional!string label;
+}
+
+@serdeFallbackStruct
 struct DocumentSymbolParams
 {
 	TextDocumentIdentifier textDocument;
-}
-
-struct SymbolInformation
-{
-	mixin StrictOptionalSerializer;
-
-	string name;
-	SymbolKind kind;
-	Location location;
-	Optional!string containerName;
-}
-
-struct DocumentSymbol
-{
-	mixin StrictOptionalSerializer;
-
-	string name;
-	Optional!string detail;
-	SymbolKind kind;
-	@SerializedName("deprecated") Optional!bool deprecated_;
-	TextRange range;
-	TextRange selectionRange;
-	DocumentSymbol[] children;
-	@SerializeIgnore string parent;
 }
 
 enum SymbolKind
@@ -1652,11 +2389,80 @@ enum SymbolKind
 	typeParameter
 }
 
-struct WorkspaceSymbolParams
+enum SymbolTag
 {
-	string query;
+	deprecated_ = 1
 }
 
+@serdeFallbackStruct
+struct DocumentSymbol
+{
+	string name;
+	@serdeOptional Optional!string detail;
+	SymbolKind kind;
+	@serdeOptional Optional!(SymbolTag[]) tags;
+	TextRange range;
+	TextRange selectionRange;
+	DocumentSymbol[] children;
+}
+
+@serdeFallbackStruct
+struct SymbolInformation
+{
+	string name;
+	SymbolKind kind;
+	@serdeOptional Optional!(SymbolTag[]) tags;
+	Location location;
+	@serdeOptional Optional!string containerName;
+}
+
+@serdeFallbackStruct
+struct CodeActionClientCapabilities
+{
+	@serdeFallbackStruct
+	@serdeIgnoreUnexpectedKeys
+	static struct CodeActionLiteralSupport
+	{
+		ValueSet!CodeActionKind codeActionKind;
+	}
+
+	@serdeFallbackStruct
+	@serdeIgnoreUnexpectedKeys
+	static struct ResolveSupport
+	{
+		string[] properties;
+	}
+
+
+	@serdeOptional Optional!bool dynamicRegistration;
+	@serdeOptional Optional!CodeActionLiteralSupport codeActionLiteralSupport;
+	@serdeOptional Optional!bool isPreferredSupport;
+	@serdeOptional Optional!bool disabledSupport;
+	@serdeOptional Optional!bool dataSupport;
+	@serdeOptional Optional!ResolveSupport resolveSupport;
+	@serdeOptional Optional!bool honorsChangeAnnotations;
+}
+
+@serdeFallbackStruct
+struct CodeActionOptions
+{
+	mixin WorkDoneProgressOptions;
+
+	@serdeOptional Optional!(CodeActionKind[]) codeActionKinds;
+	@serdeOptional Optional!bool resolveProvider;
+}
+
+@serdeFallbackStruct
+struct CodeActionRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+
+	@serdeOptional Optional!(CodeActionKind[]) codeActionKinds;
+	@serdeOptional Optional!bool resolveProvider;
+}
+
+@serdeFallbackStruct
 struct CodeActionParams
 {
 	TextDocumentIdentifier textDocument;
@@ -1664,63 +2470,173 @@ struct CodeActionParams
 	CodeActionContext context;
 }
 
+enum CodeActionKind : string
+{
+	empty = "",
+	quickfix = "quickfix",
+	refactor = "refactor",
+	refactorExtract = "refactor.extract",
+	refactorInline = "refactor.inline",
+	refactorRewrite = "refactor.rewrite",
+	source = "source",
+	sourceOrganizeImports = "source.organizeImports",
+}
+
+@serdeFallbackStruct
 struct CodeActionContext
 {
 	Diagnostic[] diagnostics;
+	@serdeOptional Optional!(CodeActionKind[]) only;
 }
 
+@serdeFallbackStruct
+struct CodeAction
+{
+	this(Command command)
+	{
+		title = command.title;
+		this.command = command;
+	}
+
+	this(string title, WorkspaceEdit edit)
+	{
+		this.title = title;
+		this.edit = edit;
+	}
+
+	@serdeFallbackStruct
+	@serdeIgnoreUnexpectedKeys
+	static struct Disabled
+	{
+		string reason;
+	}
+
+	string title;
+	@serdeOptional Optional!CodeActionKind kind;
+	@serdeOptional Optional!(Diagnostic[]) diagnostics;
+	@serdeOptional Optional!bool isPreferred;
+	@serdeOptional Optional!Disabled disabled;
+	@serdeOptional Optional!WorkspaceEdit edit;
+	@serdeOptional Optional!Command command;
+	@serdeOptional OptionalJsonValue data;
+}
+
+@serdeFallbackStruct
+struct CodeLensClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+}
+
+@serdeFallbackStruct
+struct CodeLensOptions
+{
+	mixin WorkDoneProgressOptions;
+
+	@serdeOptional Optional!bool resolveProvider;
+}
+
+@serdeFallbackStruct
+struct CodeLensRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+
+	@serdeOptional Optional!bool resolveProvider;
+}
+
+@serdeFallbackStruct
 struct CodeLensParams
 {
 	TextDocumentIdentifier textDocument;
 }
 
+@serdeFallbackStruct
 struct CodeLens
 {
-	mixin StrictOptionalSerializer;
-
 	TextRange range;
-	Optional!Command command;
-	JSONValue data;
+	@serdeOptional Optional!Command command;
+	@serdeOptional OptionalJsonValue data;
 }
 
-struct CodeLensRegistrationOptions
+@serdeFallbackStruct
+struct CodeLensWorkspaceClientCapabilities
 {
-	mixin StrictOptionalSerializer;
+	@serdeOptional Optional!bool refreshSupport;
+}
 
-	Optional!DocumentSelector documentSelector;
+@serdeFallbackStruct
+struct DocumentLinkClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+	@serdeOptional Optional!bool tooltipSupport;
+}
+
+@serdeFallbackStruct
+struct DocumentLinkOptions
+{
+	mixin WorkDoneProgressOptions;
+
 	bool resolveProvider;
 }
 
+@serdeFallbackStruct
+struct DocumentLinkRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+
+	bool resolveProvider;
+}
+
+@serdeFallbackStruct
 struct DocumentLinkParams
 {
 	TextDocumentIdentifier textDocument;
 }
 
+@serdeFallbackStruct
 struct DocumentLink
 {
 	TextRange range;
-	DocumentUri target;
+	@serdeOptional Optional!DocumentUri target;
+	@serdeOptional Optional!string tooltip;
+	@serdeOptional OptionalJsonValue data;
 }
 
-struct DocumentLinkRegistrationOptions
+@serdeFallbackStruct
+struct DocumentColorClientCapabilities
 {
-	mixin StrictOptionalSerializer;
-
-	Optional!DocumentSelector documentSelector;
-	bool resolveProvider;
+	@serdeOptional Optional!bool dynamicRegistration;
 }
 
+@serdeFallbackStruct
+struct DocumentColorOptions
+{
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct DocumentColorRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin StaticRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
 struct DocumentColorParams
 {
 	TextDocumentIdentifier textDocument;
 }
 
+@serdeFallbackStruct
 struct ColorInformation
 {
 	TextRange range;
 	Color color;
 }
 
+@serdeFallbackStruct
 struct Color
 {
 	double red = 0;
@@ -1729,6 +2645,7 @@ struct Color
 	double alpha = 1;
 }
 
+@serdeFallbackStruct
 struct ColorPresentationParams
 {
 	TextDocumentIdentifier textDocument;
@@ -1736,28 +2653,71 @@ struct ColorPresentationParams
 	TextRange range;
 }
 
+@serdeFallbackStruct
 struct ColorPresentation
 {
-	mixin StrictOptionalSerializer;
-
 	string label;
-	Optional!TextEdit textEdit;
-	Optional!(TextEdit[]) additionalTextEdits;
+	@serdeOptional Optional!TextEdit textEdit;
+	@serdeOptional Optional!(TextEdit[]) additionalTextEdits;
 }
 
+@serdeFallbackStruct
+struct DocumentFormattingClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+}
+
+@serdeFallbackStruct
+struct DocumentFormattingOptions
+{
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct DocumentFormattingRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
 struct DocumentFormattingParams
 {
 	TextDocumentIdentifier textDocument;
 	FormattingOptions options;
 }
 
+@serdeFallbackStruct
 struct FormattingOptions
 {
 	int tabSize;
 	bool insertSpaces;
-	JSONValue data;
+	@serdeOptional Optional!bool trimTrailingWhitespace;
+	@serdeOptional Optional!bool insertFinalNewline;
+	@serdeOptional Optional!bool trimFinalNewlines;
+	@serdeOptional OptionalJsonValue data;
 }
 
+@serdeFallbackStruct
+struct DocumentRangeFormattingClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+}
+
+@serdeFallbackStruct
+struct DocumentRangeFormattingOptions
+{
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct DocumentRangeFormattingRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
 struct DocumentRangeFormattingParams
 {
 	TextDocumentIdentifier textDocument;
@@ -1765,6 +2725,29 @@ struct DocumentRangeFormattingParams
 	FormattingOptions options;
 }
 
+@serdeFallbackStruct
+struct DocumentOnTypeFormattingClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+}
+
+@serdeFallbackStruct
+struct DocumentOnTypeFormattingOptions
+{
+	string firstTriggerCharacter;
+	@serdeOptional Optional!(string[]) moreTriggerCharacter;
+}
+
+@serdeFallbackStruct
+struct DocumentOnTypeFormattingRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+
+	string firstTriggerCharacter;
+	@serdeOptional Optional!(string[]) moreTriggerCharacter;
+}
+
+@serdeFallbackStruct
 struct DocumentOnTypeFormattingParams
 {
 	TextDocumentIdentifier textDocument;
@@ -1773,15 +2756,38 @@ struct DocumentOnTypeFormattingParams
 	FormattingOptions options;
 }
 
-struct DocumentOnTypeFormattingRegistrationOptions
+enum PrepareSupportDefaultBehavior
 {
-	mixin StrictOptionalSerializer;
-
-	Optional!DocumentSelector documentSelector;
-	string firstTriggerCharacter;
-	Optional!(string[]) moreTriggerCharacter;
+	identifier = 1
 }
 
+@serdeFallbackStruct
+struct RenameClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+	@serdeOptional Optional!bool prepareSupport;
+	@serdeOptional Optional!PrepareSupportDefaultBehavior prepareSupportDefaultBehavior;
+	@serdeOptional Optional!bool honorsChangeAnnotations;
+}
+
+@serdeFallbackStruct
+struct RenameOptions
+{
+	mixin WorkDoneProgressOptions;
+
+	@serdeOptional Optional!bool prepareProvider;
+}
+
+@serdeFallbackStruct
+struct RenameRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+
+	@serdeOptional Optional!bool prepareProvider;
+}
+
+@serdeFallbackStruct
 struct RenameParams
 {
 	TextDocumentIdentifier textDocument;
@@ -1789,46 +2795,419 @@ struct RenameParams
 	string newName;
 }
 
-struct ExecuteCommandParams
+@serdeFallbackStruct
+struct PrepareRenameParams
 {
-	mixin StrictOptionalSerializer;
-
-	string command;
-	Optional!(JSONValue[]) arguments;
+	TextDocumentIdentifier textDocument;
+	Position position;
 }
 
+@serdeFallbackStruct
+struct FoldingRangeClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+	@serdeOptional Optional!uint rangeLimit;
+	@serdeOptional Optional!bool lineFoldingOnly;
+}
+
+@serdeFallbackStruct
+struct FoldingRangeOptions
+{
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct FoldingRangeRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+	mixin StaticRegistrationOptions;
+}
+
+@serdeFallbackStruct
+struct FoldingRangeParams
+{
+	TextDocumentIdentifier textDocument;
+}
+
+enum FoldingRangeKind : string
+{
+	comment = "comment",
+	imports = "imports",
+	region = "region"
+}
+
+@serdeFallbackStruct
+struct FoldingRange
+{
+	uint startLine;
+	uint endLine;
+	@serdeOptional Optional!uint startCharacter;
+	@serdeOptional Optional!uint endCharacter;
+	@serdeOptional Optional!string kind;
+}
+
+@serdeFallbackStruct
+struct SelectionRangeClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+}
+
+@serdeFallbackStruct
+struct SelectionRangeOptions
+{
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct SelectionRangeRegistrationOptions
+{
+	mixin WorkDoneProgressOptions;
+	mixin TextDocumentRegistrationOptions;
+	mixin StaticRegistrationOptions;
+}
+
+@serdeFallbackStruct
+struct SelectionRangeParams
+{
+	TextDocumentIdentifier textDocument;
+	Position[] positions;
+}
+
+@serdeFallbackStruct
+struct SelectionRange
+{
+	TextRange range;
+	@serdeOptional OptionalJsonValue parent;
+}
+
+@serdeFallbackStruct
+struct CallHierarchyClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+}
+
+@serdeFallbackStruct
+struct CallHierarchyOptions
+{
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct CallHierarchyRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+	mixin StaticRegistrationOptions;
+}
+
+@serdeFallbackStruct
+struct CallHierarchyPrepareParams
+{
+	TextDocumentIdentifier textDocument;
+	Position position;
+}
+
+@serdeFallbackStruct
+struct CallHierarchyItem
+{
+	string name;
+	SymbolKind kind;
+	@serdeOptional Optional!(SymbolTag[]) tags;
+	@serdeOptional Optional!string detail;
+	DocumentUri uri;
+	TextRange range;
+	TextRange selectionRange;
+	@serdeOptional OptionalJsonValue data;
+}
+
+@serdeFallbackStruct
+struct CallHierarchyIncomingCallsParams
+{
+	CallHierarchyItem item;
+}
+
+@serdeFallbackStruct
+struct CallHierarchyIncomingCall
+{
+	CallHierarchyItem from;
+	TextRange[] fromRanges;
+}
+
+@serdeFallbackStruct
+struct CallHierarchyOutgoingCallsParams
+{
+	CallHierarchyItem item;
+}
+
+@serdeFallbackStruct
+struct CallHierarchyOutgoingCall
+{
+	CallHierarchyItem to;
+	TextRange[] fromRanges;
+}
+
+enum SemanticTokenTypes : string
+{
+	namespace = "namespace",
+	type = "type",
+	class_ = "class",
+	enum_ = "enum",
+	interface_ = "interface",
+	struct_ = "struct",
+	typeParameter = "typeParameter",
+	parameter = "parameter",
+	variable = "variable",
+	property = "property",
+	enumMember = "enumMember",
+	event = "event",
+	function_ = "function",
+	method = "method",
+	macro_ = "macro",
+	keyword = "keyword",
+	modifier = "modifier",
+	comment = "comment",
+	string = "string",
+	number = "number",
+	regexp = "regexp",
+	operator = "operator"
+}
+
+enum SemanticTokenModifiers : string
+{
+	declaration = "declaration",
+	definition = "definition",
+	readonly = "readonly",
+	static_ = "static",
+	deprecated_ = "deprecated",
+	abstract_ = "abstract",
+	async = "async",
+	modification = "modification",
+	documentation = "documentation",
+	defaultLibrary = "defaultLibrary"
+}
+
+enum TokenFormat : string
+{
+	relative = "relative"
+}
+
+@serdeFallbackStruct
+struct SemanticTokensLegend
+{
+	string[] tokenTypes;
+	string[] tokenmodifiers;
+}
+
+@serdeFallbackStruct
+struct SemanticTokensRange
+{
+}
+
+@serdeFallbackStruct
+struct SemanticTokensFull
+{
+	@serdeOptional Optional!bool delta;
+}
+
+
+@serdeFallbackStruct
+struct SemanticTokensClientCapabilities
+{
+	@serdeIgnoreUnexpectedKeys
+	static struct Requests
+	{
+		@serdeOptional Variant!(NoneType, bool, SemanticTokensRange) range;
+		@serdeOptional Variant!(NoneType, bool, SemanticTokensFull) full;
+	}
+
+	@serdeOptional Optional!bool dynamicRegistration;
+	Requests requests;
+	string[] tokenTypes;
+	string[] tokenModifiers;
+	TokenFormat[] formats;
+	@serdeOptional Optional!bool overlappingTokenSupport;
+	@serdeOptional Optional!bool multilineTokenSupport;
+}
+
+@serdeFallbackStruct
+struct SemanticTokensOptions
+{
+	mixin WorkDoneProgressOptions;
+
+	SemanticTokensLegend legend;
+	@serdeOptional Variant!(NoneType, bool, SemanticTokensRange) range;
+	@serdeOptional Variant!(NoneType, bool, SemanticTokensFull) full;
+}
+
+@serdeFallbackStruct
+struct SemanticTokensRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+	mixin StaticRegistrationOptions;
+
+	SemanticTokensLegend legend;
+	@serdeOptional Variant!(NoneType, bool, SemanticTokensRange) range;
+	@serdeOptional Variant!(NoneType, bool, SemanticTokensFull) full;
+}
+
+@serdeFallbackStruct
+struct SemanticTokensParams
+{
+	TextDocumentIdentifier textDocument;
+}
+
+@serdeFallbackStruct
+struct SemanticTokens
+{
+	@serdeOptional Optional!string resultId;
+	uint[] data;
+}
+
+@serdeFallbackStruct
+struct SemanticTokensPartialResult
+{
+	uint[] data;
+}
+
+@serdeFallbackStruct
+struct SemanticTokensDeltaParams
+{
+	TextDocumentIdentifier textDocument;
+	string previousResultId;
+}
+
+@serdeFallbackStruct
+struct SemanticTokensDelta
+{
+	string resultId;
+	SemanticTokensEdit[] edits;
+}
+
+@serdeFallbackStruct
+struct SemanticTokensEdit
+{
+	uint start;
+	uint deleteCount;
+	@serdeOptional Optional!(uint[]) data;
+}
+
+@serdeFallbackStruct
+struct SemanticTokensDeltaPartialResult
+{
+	SemanticTokensEdit[] edits;
+}
+
+@serdeFallbackStruct
+struct SemanticTokensRangeParams
+{
+	TextDocumentIdentifier textDocument;
+	TextRange range;
+}
+
+@serdeFallbackStruct
+struct SemanticTokensWorkspaceClientCapabilities
+{
+	@serdeOptional Optional!bool refreshSupport;
+}
+
+
+@serdeFallbackStruct
+struct LinkedEditingRangeClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+}
+
+@serdeFallbackStruct
+struct LinkedEditingRangeOptions
+{
+	mixin WorkDoneProgressOptions;
+}
+
+@serdeFallbackStruct
+struct LinkedEditingRangeRegistrationOptions
+{
+	mixin TextDocumentRegistrationOptions;
+	mixin WorkDoneProgressOptions;
+	mixin StaticRegistrationOptions;
+}
+
+@serdeFallbackStruct
+struct LinkedEditingRangeParams
+{
+	TextDocumentIdentifier textDocument;
+	Position position;
+}
+
+@serdeFallbackStruct
+struct LinkedEditingRanges
+{
+	TextRange[] ranges;
+	@serdeOptional Optional!string wordPattern;
+}
+
+@serdeFallbackStruct
+struct ExecuteCommandClientCapabilities
+{
+	@serdeOptional Optional!bool dynamicRegistration;
+}
+
+@serdeFallbackStruct
+struct ExecuteCommandOptions
+{
+	string[] commands;
+}
+
+@serdeFallbackStruct
 struct ExecuteCommandRegistrationOptions
 {
 	string[] commands;
 }
 
+@serdeFallbackStruct
+struct ExecuteCommandParams
+{
+	string command;
+	@serdeOptional Optional!(JsonValue[]) arguments;
+}
+
+@serdeFallbackStruct
 struct ApplyWorkspaceEditParams
 {
+	@serdeOptional Optional!string label;
 	WorkspaceEdit edit;
 }
 
+@serdeFallbackStruct
 struct ApplyWorkspaceEditResponse
 {
 	bool applied;
+	@serdeOptional Optional!string failureReason;
+	@serdeOptional Optional!uint failedChange;
 }
 
+@serdeFallbackStruct
 struct WorkspaceFolder
 {
 	string uri;
 	string name;
 }
 
+@serdeFallbackStruct
 struct DidChangeWorkspaceFoldersParams
 {
 	WorkspaceFoldersChangeEvent event;
 }
 
+@serdeFallbackStruct
 struct WorkspaceFoldersChangeEvent
 {
 	WorkspaceFolder[] added;
 	WorkspaceFolder[] removed;
 }
 
+@serdeFallbackStruct
 struct TraceParams
 {
 	string value;
