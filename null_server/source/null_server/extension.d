@@ -4,14 +4,13 @@ import served.lsp.protocol;
 import served.utils.events;
 
 import core.thread;
-import std.json;
 
 alias members = __traits(derivedMembers, null_server.extension);
 
 InitializeResult initialize(InitializeParams params)
 {
 	ServerCapabilities ret;
-	ret.experimental = JSONValue("initialized null server");
+	ret.experimental = JsonValue("initialized null server");
 	return InitializeResult(ret);
 }
 
@@ -46,11 +45,11 @@ TestResult testStruct(TestParams param)
 }
 
 @protocolMethod("dummy/testJson")
-JSONValue testJson(JSONValue param)
+JsonValue testJson(JsonValue param)
 {
-	return JSONValue([
+	return JsonValue([
 		"orig": param,
-		"extra": JSONValue("hello")
+		"extra": JsonValue("hello")
 	]);
 }
 

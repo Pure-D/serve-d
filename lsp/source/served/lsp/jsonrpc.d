@@ -3,8 +3,6 @@ module served.lsp.jsonrpc;
 import core.exception;
 import core.thread;
 
-import painlessjson;
-
 import std.container : DList, SList;
 import std.conv;
 import std.experimental.logger;
@@ -17,9 +15,6 @@ import served.lsp.filereader;
 import served.lsp.protocol;
 
 import tinyevent;
-
-alias RequestHandler = ResponseMessage delegate(RequestMessage);
-alias EventRequestHandler = void delegate(RequestMessage);
 
 /// Fiber which runs in the background, reading from a FileReader, and calling methods when requested over the RPC interface.
 class RPCProcessor : Fiber
@@ -48,20 +43,30 @@ class RPCProcessor : Fiber
 	///   res = the response message to send.
 	void send(ResponseMessage res)
 	{
-		auto msg = JSONValue(["jsonrpc": JSONValue("2.0")]);
-		if (res.id.hasData)
-			msg["id"] = res.id.toJSON;
-
-		if (!res.result.isNull)
-			msg["result"] = res.result.get;
-
-		if (!res.error.isNull)
+		const(char)[][8] buf;
+		int len;
+		buf[len++] = `{"jsonrpc":"2.0"`;
+		if (!res.id.isNone)
 		{
-			msg["error"] = res.error.toJSON;
-			stderr.writeln(msg["error"]);
+			buf[len++] = `,"id":`;
+			buf[len++] = res.id.serializeJson;
 		}
 
-		send(msg);
+		if (!res.result.isNone)
+		{
+			buf[len++] = `,"result":`;
+			buf[len++] = res.result.serializeJson;
+		}
+
+		if (!res.error.isNone)
+		{
+			buf[len++] = `,"error":`;
+			buf[len++] = res.error.serializeJson;
+			stderr.writeln(buf[len - 1]);
+		}
+
+		buf[len++] = `}`;
+		sendRawPacket(buf[0 .. len]);
 	}
 
 	/// Sends an RPC request (method call) to the other side. Doesn't do any additional processing.
@@ -69,11 +74,32 @@ class RPCProcessor : Fiber
 	///   req = The request to send
 	void send(RequestMessage req)
 	{
-		send(req.toJSON);
+		sendRawPacket(req.serializeJson);
+	}
+
+	/// ditto
+	void send(RequestMessageRaw req)
+	{
+		int i;
+		const(char)[][7] buffer;
+		buffer[i++] = `{"jsonrpc":"2.0","method":`;
+		buffer[i++] = req.method.serializeJson;
+		if (!req.id.isNone)
+		{
+			buffer[i++] = `,"id":`;
+			buffer[i++] = req.id.serializeJson;
+		}
+		if (req.paramsJson.length)
+		{
+			buffer[i++] = `,"params":`;
+			buffer[i++] = req.paramsJson;
+		}
+		buffer[i++] = `}`;
+		sendRawPacket(buffer[0 .. i]);
 	}
 
 	/// Sends a raw JSON object to the other RPC side. 
-	void send(JSONValue raw)
+	deprecated void send(JSONValue raw)
 	{
 		if (!("jsonrpc" in raw))
 		{
@@ -81,17 +107,39 @@ class RPCProcessor : Fiber
 			throw new Exception("Sent objects must have a jsonrpc");
 		}
 		const content = raw.toString(JSONOptions.doNotEscapeSlashes);
+		sendRawPacket(content);
+	}
+
+	/// ditto
+	void sendRawPacket(scope const(char)[] rawJson)
+	{
+		sendRawPacket((&rawJson)[0 .. 1]);
+	}
+
+	/// ditto
+	void sendRawPacket(scope const(char)[][] parts)
+	{
 		// Log on client side instead! (vscode setting: "serve-d.trace.server": "verbose")
 		//trace(content);
-		string data = "Content-Length: " ~ content.length.to!string ~ "\r\n\r\n" ~ content;
-		writer.rawWrite(data);
+		size_t len = 0;
+		foreach (part; parts)
+			len += part.length;
+
+		{
+			scope w = writer.lockingBinaryWriter;
+			w.put("Content-Length: ");
+			w.put(len.to!string);
+			w.put("\r\n\r\n");
+			foreach (part; parts)
+				w.put(part);
+		}
 		writer.flush();
 	}
 
 	/// Sends a notification with the given `method` name to the other RPC side without any parameters.
 	void notifyMethod(string method)
 	{
-		RequestMessage req;
+		RequestMessageRaw req;
 		req.method = method;
 		send(req);
 	}
@@ -99,16 +147,35 @@ class RPCProcessor : Fiber
 	/// Sends a notification with the given `method` name to the other RPC side with the given `value` parameter serialized to JSON.
 	void notifyMethod(T)(string method, T value)
 	{
-		notifyMethod(method, value.toJSON);
+		notifyMethodRaw(method, value.serializeJson);
 	}
 
 	/// ditto
-	void notifyMethod(string method, JSONValue value)
+	deprecated void notifyMethod(string method, JSONValue value)
+	{
+		notifyMethodRaw(method, value.toString);
+	}
+
+	/// ditto
+	void notifyMethod(string method, JsonValue value)
 	{
 		RequestMessage req;
 		req.method = method;
 		req.params = value;
 		send(req);
+	}
+
+	/// ditto
+	void notifyMethodRaw(string method, scope const(char)[] value)
+	{
+		const(char)[][5] parts = [
+			`{"jsonrpc":"2.0","method":`,
+			method.serializeJson,
+			`,"params":`,
+			value,
+			`}`
+		];
+		sendRawPacket(parts[]);
 	}
 
 	/// Sends a request with the given `method` name to the other RPC side without any parameters.
@@ -116,11 +183,17 @@ class RPCProcessor : Fiber
 	/// Returns: a RequestToken to use with $(LREF awaitResponse) to get the response. Can be ignored if the response isn't important.
 	RequestToken sendMethod(string method)
 	{
-		RequestMessage req;
-		req.id = RequestToken.random;
-		req.method = method;
-		send(req);
-		return req.id;
+		char[16] idBuffer = void;
+		auto id = RequestToken.randomAndSerialized(idBuffer);
+		const(char)[][5] parts = [
+			`{"jsonrpc":"2.0","id":`,
+			idBuffer[],
+			`,"method":`,
+			method.serializeJson,
+			`}`
+		];
+		sendRawPacket(parts[]);
+		return id;
 	}
 
 	/// Sends a request with the given `method` name to the other RPC side with the given `value` parameter serialized to JSON.
@@ -128,18 +201,37 @@ class RPCProcessor : Fiber
 	/// Returns: a RequestToken to use with $(LREF awaitResponse) to get the response. Can be ignored if the response isn't important.
 	RequestToken sendMethod(T)(string method, T value)
 	{
-		return sendMethod(method, value.toJSON);
+		return sendMethodRaw(method, value.serializeJson);
 	}
 
 	/// ditto
-	RequestToken sendMethod(string method, JSONValue value)
+	deprecated RequestToken sendMethod(string method, JSONValue value)
 	{
-		RequestMessage req;
-		req.id = RequestToken.random;
-		req.method = method;
-		req.params = value;
-		send(req);
-		return req.id;
+		return sendMethod(method, value.toJsonValue);
+	}
+
+	/// ditto
+	RequestToken sendMethod(string method, JsonValue value)
+	{
+		return sendMethodRaw(method, value.serializeJson);
+	}
+
+	/// ditto
+	RequestToken sendMethodRaw(string method, scope const(char)[] value)
+	{
+		char[16] idBuffer = void;
+		auto id = RequestToken.randomAndSerialized(idBuffer);
+		const(char)[][7] parts = [
+			`{"jsonrpc":"2.0","id":`,
+			idBuffer[],
+			`,"method":`,
+			method.serializeJson,
+			`,"params":`,
+			value,
+			`}`
+		];
+		sendRawPacket(parts[]);
+		return id;
 	}
 
 	/// Sends a request with the given `method` name to the other RPC side with the given `value` parameter serialized to JSON.
@@ -148,13 +240,19 @@ class RPCProcessor : Fiber
 	/// This is a small wrapper to call `awaitResponse(sendMethod(method, value))`
 	///
 	/// Returns: The response deserialized from the RPC.
-	ResponseMessage sendRequest(T)(string method, T value)
+	ResponseMessageRaw sendRequest(T)(string method, T value)
 	{
 		return awaitResponse(sendMethod(method, value));
 	}
 
 	/// ditto
-	ResponseMessage sendRequest(string method, JSONValue value)
+	deprecated ResponseMessageRaw sendRequest(string method, JSONValue value)
+	{
+		return awaitResponse(sendMethod(method, value));
+	}
+
+	/// ditto
+	ResponseMessageRaw sendRequest(string method, JsonValue value)
 	{
 		return awaitResponse(sendMethod(method, value));
 	}
@@ -165,11 +263,12 @@ class RPCProcessor : Fiber
 	///   args = the message parts to send
 	void log(MessageType type = MessageType.log, Args...)(Args args)
 	{
-		send(JSONValue([
-					"jsonrpc": JSONValue("2.0"),
-					"method": JSONValue("window/logMessage"),
-					"params": LogMessageParams(type, text(args)).toJSON
-				]));
+		string[3] parts = [
+			`{"jsonrpc":"2.0","method":"window/logMessage","params":`,
+			LogMessageParams(type, text(args)).serializeJson,
+			`}`
+		];
+		sendRawPacket(parts);
 	}
 
 	/// Returns: `true` if there has been any messages been sent to us from the other RPC side, otherwise `false`.
@@ -180,7 +279,7 @@ class RPCProcessor : Fiber
 
 	/// Returns: the first message from the message queue. Removes it from the message queue so it will no longer be processed.
 	/// Throws: Exception if $(LREF hasData) is false.
-	RequestMessage poll()
+	RequestMessageRaw poll()
 	{
 		if (!hasData)
 			throw new Exception("No Data");
@@ -198,7 +297,7 @@ class RPCProcessor : Fiber
 	/// Waits for a response message to a request from the other RPC side.
 	/// If this is called after the response has already been sent and processed by yielding after sending the request, this will yield forever and use up memory.
 	/// So it is important, if you are going to await a response, to do it immediately when sending any request.
-	ResponseMessage awaitResponse(RequestToken tok)
+	ResponseMessageRaw awaitResponse(RequestToken tok)
 	{
 		size_t i;
 		bool found = false;
@@ -223,7 +322,7 @@ class RPCProcessor : Fiber
 	}
 
 private:
-	void onData(RequestMessage req)
+	void onData(RequestMessageRaw req)
 	{
 		messageQueue.insertBack(req);
 	}
@@ -231,14 +330,14 @@ private:
 	FileReader reader;
 	File writer;
 	bool stopped;
-	DList!RequestMessage messageQueue;
+	DList!RequestMessageRaw messageQueue;
 
 	struct RequestWait
 	{
 		RequestToken token;
 		bool got = false;
 		bool handled = false;
-		ResponseMessage ret;
+		ResponseMessageRaw ret;
 	}
 
 	RequestWait[] responseTokens;
@@ -272,33 +371,32 @@ private:
 				continue;
 			}
 
-			auto content = cast(string) reader.yieldData(contentLength);
+			auto content = cast(const(char)[]) reader.yieldData(contentLength);
 			if (stopped || content is null)
 				break;
 			assert(content.length == contentLength);
-			RequestMessage request;
-			RequestMessage[] extraRequests;
+			RequestMessageRaw request;
+			RequestMessageRaw[] extraRequests;
 			try
 			{
-				auto json = parseJSON(content);
-				if (json.type == JSONType.array)
+				if (content.length && content[0] == '[')
 				{
-					auto arr = json.array;
-					if (arr.length == 0)
-						send(ResponseMessage(RequestToken.init, ResponseError(ErrorCode.invalidRequest, "Empty batch request")));
+					int count;
+					content.visitJsonArray!((item) {
+						count++;
 
-					foreach (subRequest; arr)
-					{
-						auto res = handleRequestImpl(subRequest);
-						if (request == RequestMessage.init)
+						auto res = handleRequestImpl(item);
+						if (request == RequestMessageRaw.init)
 							request = res;
-						else if (res != RequestMessage.init)
+						else if (res != RequestMessageRaw.init)
 							extraRequests ~= res;
-					}
+					});
+					if (count == 0)
+						send(ResponseMessage(RequestToken.init, ResponseError(ErrorCode.invalidRequest, "Empty batch request")));
 				}
-				else if (json.type == JSONType.object)
+				else if (content.length && content[0] == '{')
 				{
-					request = handleRequestImpl(json);
+					request = handleRequestImpl(content);
 				}
 				else
 				{
@@ -315,7 +413,7 @@ private:
 					auto endIdx = content.indexOf(",", idx);
 					RequestToken fallback;
 					if (!content.startsWith("[") && idx != -1 && endIdx != -1)
-						fallback = RequestToken(parseJSON(content[idx .. endIdx].strip));
+						fallback = deserializeJson!RequestToken(content[idx .. endIdx].strip);
 					send(ResponseMessage(fallback, ResponseError(ErrorCode.parseError)));
 				}
 				catch (Exception e)
@@ -325,7 +423,7 @@ private:
 				}
 			}
 
-			if (request != RequestMessage.init)
+			if (request != RequestMessageRaw.init)
 			{
 				onData(request);
 				Fiber.yield();
@@ -339,25 +437,28 @@ private:
 		}
 	}
 
-	RequestMessage handleRequestImpl(JSONValue json)
+	RequestMessageRaw handleRequestImpl(scope const(char)[] json)
 	{
-		auto id = "id" in json;
+		if (!json.length || json.ptr[0] != '{' || json.ptr[json.length - 1] != '}')
+			throw new Exception("malformed request JSON, must be object");
+		auto slices = json.parseKeySlices!("id", "result", "error", "method", "params");
+		auto id = slices.id;
 		bool isResponse = false;
-		if (id)
+		if (id.length)
 		{
-			auto tok = RequestToken(id);
+			auto tok = RequestToken(id.deserializeJson!RequestToken);
 			foreach (ref waiting; responseTokens)
 			{
 				if (!waiting.got && waiting.token == tok)
 				{
 					waiting.got = true;
 					waiting.ret.id = tok;
-					auto res = "result" in json;
-					auto err = "error" in json;
-					if (res)
-						waiting.ret.result = *res;
-					if (err)
-						waiting.ret.error = (*err).fromJSON!ResponseError;
+					auto res = slices.result;
+					auto err = slices.error;
+					if (res.length)
+						waiting.ret.resultJson = res.idup;
+					if (err.length)
+						waiting.ret.error = err.deserializeJson!ResponseError;
 					isResponse = true;
 					break;
 				}
@@ -365,10 +466,17 @@ private:
 		}
 		if (!isResponse)
 		{
-			RequestMessage request = RequestMessage(json);
-			if (request.params != JSONValue.init
-				&& request.params.type != JSONType.object
-				&& request.params.type != JSONType.array)
+			RequestMessageRaw request;
+			if (slices.id.length)
+				request.id = slices.id.deserializeJson!RequestToken;
+			if (slices.method.length)
+				request.method = slices.method.deserializeJson!string;
+			if (slices.params.length)
+				request.paramsJson = slices.params.idup;
+
+			if (request.paramsJson.length
+				&& request.paramsJson.ptr[0] != '['
+				&& request.paramsJson.ptr[0] != '{')
 			{
 				send(ResponseMessage(request.id,
 					ResponseError(ErrorCode.invalidParams,
@@ -381,7 +489,7 @@ private:
 				return request;
 			}
 		}
-		return RequestMessage.init;
+		return RequestMessageRaw.init;
 	}
 }
 
@@ -407,9 +515,9 @@ struct WindowFunctions
 	{
 		auto res = rpc.sendRequest("window/showMessageRequest",
 				ShowMessageRequestParams(type, message, actions.opt));
-		if (res.result == JSONValue.init)
+		if (!res.resultJson.length)
 			return MessageActionItem(null);
-		return res.result.fromJSON!MessageActionItem;
+		return res.resultJson.deserializeJson!MessageActionItem;
 	}
 
 	/// ditto

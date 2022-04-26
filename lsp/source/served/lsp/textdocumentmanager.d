@@ -9,8 +9,6 @@ import std.utf : codeLength, decode, UseReplacementDchar;
 import served.lsp.jsonrpc;
 import served.lsp.protocol;
 
-import painlessjson;
-
 /// in-memory representation of a file at any given URI. Not thread-safe.
 struct Document
 {
@@ -539,17 +537,18 @@ struct TextDocumentManager
 	///   msg = The request sent by a client. This method only processes
 	///     `textDocument/` messages which are relevant to file modification.
 	/// Returns: `true` if the given method was handled, `false` otherwise.
-	bool process(RequestMessage msg)
+	bool process(RequestMessageRaw msg)
 	{
 		if (msg.method == "textDocument/didOpen")
 		{
-			auto params = msg.params.fromJSON!DidOpenTextDocumentParams;
+			auto params = msg.paramsJson.deserializeJson!DidOpenTextDocumentParams;
 			documentStore ~= Document(params.textDocument);
 			return true;
 		}
 		else if (msg.method == "textDocument/didClose")
 		{
-			auto targetUri = msg.params["textDocument"]["uri"].str;
+			auto params = msg.paramsJson.deserializeJson!DidCloseTextDocumentParams;
+			auto targetUri = params.textDocument.uri;
 			if (!unloadDocument(targetUri))
 			{
 				warning("Received didClose notification for URI not in system: ", targetUri);
@@ -559,23 +558,18 @@ struct TextDocumentManager
 		}
 		else if (msg.method == "textDocument/didChange")
 		{
-			auto targetUri = msg.params["textDocument"]["uri"].str;
+			auto params = msg.paramsJson.deserializeJson!DidChangeTextDocumentParams;
+			auto targetUri = params.textDocument.uri;
 			auto idx = documentStore.countUntil!(a => a.uri == targetUri);
 			if (idx >= 0)
 			{
-				documentStore[idx].version_ = msg.params["textDocument"]["version"].integer;
-				foreach (change; msg.params["contentChanges"].array)
+				documentStore[idx].version_ = params.textDocument.version_;
+				foreach (change; params.contentChanges)
 				{
-					if (auto rangePtr = "range" in change)
-					{
-						auto range = *rangePtr;
-						TextRange textRange = cast(Position[2])[
-							range["start"].fromJSON!Position, range["end"].fromJSON!Position
-						];
-						documentStore[idx].applyChange(textRange, change["text"].str);
-					}
+					if (!change.range.isNone)
+						documentStore[idx].applyChange(change.range.deref, change.text);
 					else
-						documentStore[idx].setContent(change["text"].str);
+						documentStore[idx].setContent(change.text);
 				}
 			}
 			return true;
