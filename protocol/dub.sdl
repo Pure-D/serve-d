@@ -1,0 +1,3 @@
+name "protocol"
+
+dependency "mir-ion" version="~>1.0.29"
