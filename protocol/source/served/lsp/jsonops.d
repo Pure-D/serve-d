@@ -31,6 +31,24 @@ T deserializeJson(T)(scope const(char)[] text)
 	return deserializeDynamicJson!T(text);
 }
 
+unittest
+{
+	string[] tests = [
+		`{"hello":"world"}`,
+		`{"a":[1,"world",false,null]}`,
+		`null`,
+		`5`,
+		`"ok"`,
+		`["ok",[[[[[false]]]]]]`,
+		`true`,
+	];
+
+	foreach (v; tests)
+	{
+		assert(v.deserializeJson!JsonValue.serializeJson == v);
+	}
+}
+
 T jsonValueTo(T)(scope JsonValue value)
 {
 	return value.serializeJson.deserializeJson!T;

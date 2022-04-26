@@ -11,6 +11,9 @@ public import mir.algebraic : isVariant, match;
 
 public import served.lsp.jsonops;
 
+version (unittest)
+	import std.exception;
+
 struct Variant(T...)
 {
 	static foreach (S; T)
@@ -117,19 +120,18 @@ struct StructVariant(AllowedTypes...)
 
 	static void enforceValid(JsonValue value)
 	{
-		import std.exception;
-
-		enforce(testValid(value), () {
-			if (value.kind != JsonValue.Kind.object)
-				return value.serializeJson ~ " is not an object";
-			
-			string reason;
-			auto keys = value.get!(StringMap!JsonValue).keys;
-			static foreach (key; commonKeys)
-				if (!keys.canFind(key))
-					reason ~= "\nrequired common key '" ~ key ~ "' is missing";
-			return value.serializeJson ~ " is not compatible with types " ~ AllowedTypes.stringof ~ reason;
-		});
+		if (!testValid(value))
+			throw new Exception({
+				if (value.kind != JsonValue.Kind.object)
+					return value.serializeJson ~ " is not an object";
+				
+				string reason;
+				auto keys = value.get!(StringMap!JsonValue).keys;
+				static foreach (key; commonKeys)
+					if (!keys.canFind(key))
+						reason ~= "\nrequired common key '" ~ key ~ "' is missing";
+				return value.serializeJson ~ " is not compatible with types " ~ AllowedTypes.stringof ~ reason;
+			} ());
 	}
 
 	static bool valueMatchesType(T)(JsonValue value)
@@ -281,9 +283,81 @@ unittest
 	assert(var.tryExtract!Person(extractedPerson), var.mismatchMessage!Person(var.value));
 	assert(!var.tryExtract!Place(extractedPlace), var.mismatchMessage!Place(var.value));
 
+	try
+	{
+		var.extract!Place();
+		assert(false);
+	}
+	catch (Exception e)
+	{
+		assert(e.msg == "missing required key lat\nmissing required key lon", e.msg);
+	}
+
 	assert(extractedNamed.name == "Bob");
 	assert(extractedPerson == Person("Bob", 32));
 	assert(extractedPlace is Place.init);
+
+	var = JsonValue(["name": JsonValue("new name")]);
+	assert(var.extract!Named.name == "new name");
+	assert(!var.tryExtract!Person(extractedPerson));
+	assert(!var.tryExtract!Place(extractedPlace));
+
+	assert(!var.testValid(JsonValue(["nam": JsonValue("name")])));
+
+	assert(var.extract!Named.name == "new name");
+	assertThrown({
+		var = JsonValue(["nam": JsonValue("name")]);
+	}());
+	assert(var.extract!Named.name == "new name");
+
+	assertThrown({
+		var = JsonValue("hello");
+	}());
+}
+
+unittest
+{
+	@serdeIgnoreUnexpectedKeys
+	struct Person
+	{
+		string name;
+		int age;
+	}
+
+	@serdeIgnoreUnexpectedKeys
+	struct Place
+	{
+		string name;
+		double lat, lon;
+	}
+
+	StructVariant!(Person, Place) var = Person("Bob", 32);
+
+	assert(var.serializeJson == `{"name":"Bob","age":32}`);
+
+	Person extractedPerson;
+	Place extractedPlace;
+	assert(var.tryExtract!Person(extractedPerson), var.mismatchMessage!Person(var.value));
+	assert(!var.tryExtract!Place(extractedPlace), var.mismatchMessage!Place(var.value));
+
+	assert(extractedPerson == Person("Bob", 32));
+	assert(extractedPlace is Place.init);
+
+	var = JsonValue(["name": JsonValue("new name"), "lat": JsonValue(0), "lon": JsonValue(1.5f)]);
+
+	assert(!var.tryExtract!Person(extractedPerson), var.mismatchMessage!Person(var.value));
+	assert(var.tryExtract!Place(extractedPlace), var.mismatchMessage!Place(var.value));
+
+	assert(extractedPerson is Person.init);
+	assert(extractedPlace == Place("new name", 0, 1.5));
+
+	assertThrown({
+		var = JsonValue(["name": JsonValue("broken name")]);
+	}());
+	assert(var.extract!Place.name == "new name");
+
+	var = JsonValue(["name": JsonValue("Alice"), "age": JsonValue(64)]);
+	assert(var.extract!Person == Person("Alice", 64));
 }
 
 /// For use with Variant to not serialize anything at all.
@@ -319,7 +393,7 @@ if (isVariant!T)
 }
 
 ///
-bool expect(T, ST)(ST v)
+T expect(T, ST)(ST v)
 if (isVariant!ST)
 {
 	return v.match!(
@@ -336,9 +410,10 @@ if (isVariant!ST)
 }
 
 ///
-void nullify(T)(ref Optional!T opt)
+void nullify(T)(scope return ref T v)
+if (isVariant!T)
 {
-	opt = NoneType.init;
+	v = NoneType.init;
 }
 
 ///
@@ -349,20 +424,45 @@ Optional!T opt(T)(T val)
 
 unittest
 {
-	string[] tests = [
-		`{"hello":"world"}`,
-		`{"a":[1,"world",false,null]}`,
-		`null`,
-		`5`,
-		`"ok"`,
-		`["ok",[[[[[false]]]]]]`,
-		`true`,
-	];
+	Optional!int optInt;
+	Optional!string optString1;
+	Optional!string optString2;
 
-	foreach (v; tests)
-	{
-		assert(v.deserializeJson!JsonValue.serializeJson == v);
-	}
+	assert(optInt.isNone);
+	assert(optString1.isNone);
+	assert(optString2.isNone);
+
+	optInt = 4;
+	optString1 = null;
+	optString2 = "hello";
+
+	assert(!optInt.isNone);
+	assert(!optString1.isNone);
+	assert(!optString2.isNone);
+
+	assert(optInt.deref == 4);
+	assert(optString1.deref == null);
+	assert(optString2.deref == "hello");
+
+	assert(optInt.expect!int == 4);
+	assert(optString1.expect!string == null);
+	assert(optString2.expect!string == "hello");
+
+	assertThrown(optInt.expect!string);
+	assertThrown(optString1.expect!int);
+
+	optInt.nullify();
+	optString1.nullify();
+	optString2.nullify();
+
+	assert(optInt.isNone);
+	assert(optString1.isNone);
+	assert(optString2.isNone);
+
+	assertThrown(optInt.deref);
+	assertThrown(optInt.expect!int);
+	assertThrown(optString1.deref);
+	assertThrown(optString1.expect!string);
 }
 
 @serdeIgnoreUnexpectedKeys:
@@ -543,7 +643,7 @@ struct ResponseError
 	{
 		code = ErrorCode.unknownErrorCode;
 		message = t.msg;
-		data = JsonValue(t.to!string);
+		data = JsonValue(t.toString);
 	}
 
 	this(ErrorCode c)
