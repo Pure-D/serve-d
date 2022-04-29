@@ -20,6 +20,19 @@ struct Document
 	long version_;
 	private char[] text;
 
+	/// Returns the language ID or guesses it given the filename's extension.
+	/// Returns null if none is set and can't be guessed.
+	///
+	/// Guessing Map:
+	/// * `.d|.di` = `"d"`
+	/// * `.dpp` = `"dpp"`
+	/// * `.c` = `"c"`
+	/// * `.cpp` = `"cpp"`
+	/// * `.ds|.dscript` = `"dscript"`
+	/// * `.dml` = `"dml"`
+	/// * `.sdl` = `"sdl"`
+	/// * `.dt` = `"diet"`
+	/// * `.json` = `"json"`
 	string getLanguageId() const @property @trusted @nogc nothrow
 	{
 		if (!languageId.length)
@@ -28,10 +41,14 @@ struct Document
 			import std.uni : sicmp;
 
 			const ext = uri.extension;
-			if (ext.sicmp(".d") == 0)
+			if (ext.sicmp(".d") == 0 || ext.sicmp(".di") == 0)
 				return "d";
 			else if (ext.sicmp(".dpp") == 0)
 				return "dpp";
+			else if (ext.sicmp(".c") == 0)
+				return "c";
+			else if (ext.sicmp(".cpp") == 0)
+				return "cpp";
 			else if (ext.sicmp(".ds") == 0 || ext.sicmp(".dscript") == 0)
 				return "dscript";
 			else if (ext.sicmp(".dml") == 0)
@@ -40,6 +57,8 @@ struct Document
 				return "sdl";
 			else if (ext.sicmp(".dt") == 0)
 				return "diet";
+			else if (ext.sicmp(".json") == 0)
+				return "json";
 			else
 				return null;
 		}
@@ -47,14 +66,35 @@ struct Document
 		return languageId;
 	}
 
-	/// Creates a new D document at the given document URI, with version 0 and
-	/// no text.
+	///
+	unittest
+	{
+		Document d;
+		assert(d.getLanguageId == null);
+		d.uri = "file:///home/project/app.d";
+		assert(d.getLanguageId == "d");
+		d.languageId = "cpp";
+		assert(d.getLanguageId == "cpp");
+	}
+
+	/// Creates a new document at the given document URI, with version 0 and
+	/// no text and guessed language ID. See $(LREF getLanguageId)
 	this(DocumentUri uri)
 	{
 		this.uri = uri;
-		languageId = "d";
+		languageId = getLanguageId;
 		version_ = 0;
 		text = null;
+	}
+
+	///
+	unittest
+	{
+		auto doc = Document("file:///home/projects/app.d");
+		assert(doc.uri == "file:///home/projects/app.d");
+		assert(doc.languageId == "d");
+		assert(doc.version_ == 0);
+		assert(!doc.rawText.length);
 	}
 
 	/// Creates a new document at the given document URI, with the given version
@@ -67,6 +107,19 @@ struct Document
 		text = doc.text.dup;
 	}
 
+	///
+	unittest
+	{
+		// e.g. received from LSP client
+		TextDocumentItem item = {
+			uri: "file:///home/projects/app.c",
+			languageId: "cpp",
+			version_: 0,
+			text: "#include <stdio>",
+		};
+		auto doc = Document(item);
+	}
+
 	/// Creates a document with no URI and no language ID and copies the content
 	/// into the text buffer using $(LREF setContent).
 	static Document nullDocument(scope const(char)[] content)
@@ -76,11 +129,26 @@ struct Document
 		return ret;
 	}
 
-	immutable(Document) clone()
+	///
+	unittest
 	{
-		Document ret = this;
+		auto doc = Document.nullDocument(`import std.stdio;`);
+		assert(!doc.languageId.length);
+		assert(doc.version_ == 0);
+		assert(!doc.uri.length);
+		assert(doc.rawText == "import std.stdio;");
+	}
+
+	/// Returns a copy of this document with the text memory duplicated.
+	/// May safely be cast to immutable.
+	Document clone() const
+	{
+		Document ret;
+		ret.uri = uri;
+		ret.version_ = version_;
+		ret.languageId = languageId;
 		ret.text = text.dup;
-		return cast(immutable) ret;
+		return ret;
 	}
 
 	version (unittest) private static Document nullDocumentOwnMemory(char[] content)
@@ -93,17 +161,21 @@ struct Document
 	/// Returns a read-only view of the text. The text may however be changed
 	/// by other operations, so this slice should be used directly and not after
 	/// any context yield or API call potentially modifying the data.
+	///
+	/// If used on an immutable Document, the text cannot be changed and thus
+	/// returns a full string instead of a const(char)[] slice.
 	const(char)[] rawText() const
 	{
 		return cast(const(char)[]) text;
 	}
 
+	/// ditto
 	string rawText() immutable
 	{
 		return text;
 	}
 
-	///
+	/// Returns the text length.
 	size_t length() const @property
 	{
 		return text.length;
@@ -114,7 +186,7 @@ struct Document
 	///
 	/// Should not be called as an API unless managing some kind of virtual
 	/// document manually.
-	void setContent(scope const(char)[] newContent)
+	ref typeof(this) setContent(scope const(char)[] newContent) return
 	{
 		if (newContent.length <= text.length)
 		{
@@ -128,6 +200,7 @@ struct Document
 			text = text.assumeSafeAppend;
 			text[0 .. $] = newContent;
 		}
+		return this;
 	}
 
 	///
@@ -373,7 +446,16 @@ struct Document
 	}
 
 	/// Returns the text of a line at the given position.
+	///
+	/// The overload taking in a position just calls the overload taking a line
+	/// with the line being the position's line.
 	string lineAt(Position position) const
+	{
+		return lineAt(position.line);
+	}
+
+	/// ditto
+	string lineAt(Position position) immutable
 	{
 		return lineAt(position.line);
 	}
@@ -384,21 +466,57 @@ struct Document
 		return lineAtScope(line).idup;
 	}
 
-	/// Returns the line text which is only in this scope if text isn't modified
-	/// See_Also: $(LREF lineAt)
-	scope const(char)[] lineAtScope(Position position) const
+	/// ditto
+	string lineAt(uint line) immutable
+	{
+		return lineAtScope(line);
+	}
+
+	///
+	unittest
+	{
+		Document d = Document("file:///home/projects/app.d");
+		d.setContent("im");
+
+		immutable d2 = cast(immutable)d.clone.setContent("import std.stdio;\nvoid main() {}");
+
+		static assert(is(typeof(d.lineAtScope(0)) == const(char)[]));
+		static assert(is(typeof(d2.lineAtScope(0)) == string));
+		static assert(is(typeof(d.lineAt(0)) == string));
+		static assert(is(typeof(d2.lineAt(0)) == string));
+
+		assert(d.lineAt(0) == "im");
+		assert(d2.lineAt(0) == "import std.stdio;\n");
+
+		assert(d.lineAtScope(0) == "im");
+		assert(d2.lineAtScope(0) == "import std.stdio;\n");
+
+		assert(d.lineAt(0).ptr !is d.rawText.ptr);
+		assert(d2.lineAt(0).ptr is d2.rawText.ptr);
+	}
+
+	/// Returns the line text at the given position. The memory content may be
+	/// modified by the $(LREF setContent) method by other code in the same
+	/// context or in a different context.
+	///
+	/// The overload taking in a position just calls the overload taking a line
+	/// with the line being the position's line.
+	///
+	/// See_Also: $(LREF lineAt) to get the same content, but with duplicated
+	/// memory, so it can be stored for later use.
+	scope auto lineAtScope(Position position) const inout
 	{
 		return lineAtScope(position.line);
 	}
 
-	/// Returns the line text which is only in this scope if text isn't modified
-	/// See_Also: $(LREF lineAt)
-	scope const(char)[] lineAtScope(uint line) const
+	/// ditto
+	scope auto lineAtScope(uint line) const inout
 	{
 		auto range = lineByteRangeAt(line);
 		return text[range[0] .. range[1]];
 	}
 
+	///
 	unittest
 	{
 		void assertEqual(A, B)(A a, B b)
@@ -423,6 +541,7 @@ you?`);
 	}
 
 	/// Returns how a line is terminated at the given 0-based line number.
+	/// Defaults to LF for the last line / no line terminator.
 	EolType eolAt(int line) const
 	{
 		size_t index = 0;
@@ -430,8 +549,6 @@ you?`);
 		bool prevWasCr = false;
 		while (index < text.length)
 		{
-			if (curLine > line)
-				return EolType.lf;
 			auto c = decode!(UseReplacementDchar.yes)(text, index);
 			if (c == '\n')
 			{
@@ -445,11 +562,26 @@ you?`);
 		}
 		return EolType.lf;
 	}
+
+	///
+	unittest
+	{
+		auto d = Document("file:///home/projects/app.d");
+		d.setContent("import std.stdio;\nvoid main() {\r\n\twriteln(`hello world`);\r}");
+		// \r is not supported as line terminator
+		assert(d.lineAt(2) == "\twriteln(`hello world`);\r}");
+
+		assert(d.eolAt(0) == EolType.lf);
+		assert(d.eolAt(1) == EolType.crlf);
+		assert(d.eolAt(2) == EolType.lf);
+	}
 }
 
 /// Helper struct which should have one unique instance in the application which
 /// processes document events sent by a LSP client to an LSP server and creates
 /// an in-memory representation of all the files managed by the client.
+///
+/// This data structure is not thread safe.
 struct TextDocumentManager
 {
 	/// Internal document storage. Only iterate over this using `foreach`, other
@@ -475,16 +607,38 @@ struct TextDocumentManager
 		return documentStore[idx];
 	}
 
-	/// Tries to load a given URI manually without having it received via LSP
-	/// methods. Note that a LSP close method will unload this early.
+	deprecated ref Document loadFromFilesystem()(string uri)
+	{
+		static assert(false, "use getOrFromFilesystem instead (LSP open takes priority over filesystem)");
+	}
+
+	/// Returns the managed document for the given URI or if it doesn't exist
+	/// it tries to read the file from the filesystem and open it from that.
+	///
+	/// Note that a LSP close method will unload this early.
+	///
+	/// Params:
+	///     uri = the document URI to try to load. Must be consistent with LSP
+	///           URIs. (e.g. normalized URIs)
+	///     inserted = if specified, gets set to true if the file was read from
+	///                filesystem and false if it was already present.
+	///
 	/// Returns: the created document
+	///
 	/// Throws: FileException in case the file doesn't exist or other file
 	///         system errors. In this case no new document should have been
 	///         inserted yet.
-	ref Document loadFromFilesystem(string uri)
+	ref Document getOrFromFilesystem(string uri, out bool inserted)
 	{
 		import served.lsp.uri : uriToFile;
 		import fs = std.file;
+
+		auto idx = documentStore.countUntil!(a => a.uri == uri);
+		if (idx != -1)
+		{
+			inserted = false;
+			return documentStore[idx];
+		}
 
 		string path = uriToFile(uri);
 		auto content = fs.readText(path);
@@ -493,21 +647,43 @@ struct TextDocumentManager
 		documentStore[index].uri = uri;
 		documentStore[index].version_ = -1;
 		documentStore[index].setContent(content);
+		inserted = true;
 		return documentStore[index];
 	}
 
-	/// Tries to get a document from a URI, returns Document.init if it is not
-	/// in the in-memory cache / not sent by the client.
-	/// Throws: FileException in case the file doesn't exist or other file
-	///         system errors. In this case no new document should have been
-	///         inserted yet.
+	///
+	unittest
+	{
+		import served.lsp.uri;
+
+		import std.file;
+		import std.path;
+
+		auto dir = buildPath(tempDir(), "textdocumentmanager");
+		mkdir(dir);
+		scope (exit)
+			rmdirRecurse(dir);
+
+		auto app_d = buildPath(dir, "app.d");
+		auto src = "import std.stdio; void main() { writeln(`hello world`); }";
+		write(app_d, src);
+
+		TextDocumentManager documents;
+		bool created;
+		auto doc = &documents.getOrFromFilesystem(uriFromFile(app_d), created);
+		assert(created);
+		auto other = &documents.getOrFromFilesystem(uriFromFile(app_d));
+		assert(doc is other);
+
+		assert(doc.rawText == src);
+		assert(doc.rawText !is src);
+	}
+
+	/// ditto
 	ref Document getOrFromFilesystem(string uri)
 	{
-		auto idx = documentStore.countUntil!(a => a.uri == uri);
-		if (idx == -1)
-			return loadFromFilesystem(uri);
-		else
-			return documentStore[idx];
+		bool b;
+		return getOrFromFilesystem(uri, b);
 	}
 
 	/// Unloads the given URI so it's no longer accessible. Note that this
@@ -521,6 +697,7 @@ struct TextDocumentManager
 
 		documentStore[idx] = documentStore[$ - 1];
 		documentStore.length--;
+		documentStore = documentStore.assumeSafeAppend;
 		return true;
 	}
 
@@ -529,6 +706,29 @@ struct TextDocumentManager
 	static TextDocumentSyncKind syncKind()
 	{
 		return TextDocumentSyncKind.incremental;
+	}
+
+	///
+	unittest
+	{
+		assert(TextDocumentManager.syncKind == TextDocumentSyncKind.incremental);
+	}
+
+	/// Inserts a document manually or updates an existing one, acting like
+	/// textDocument/didOpen if it didn't exist or fully replacing the document
+	/// if it did exist.
+	ref Document insertOrUpdate(Document d)
+	{
+		auto idx = documentStore.countUntil!(a => a.uri == d.uri);
+		if (idx != -1)
+		{
+			return documentStore[idx] = d;
+		}
+		else
+		{
+			auto index = documentStore.length++;
+			return documentStore[index] = d;
+		}
 	}
 
 	/// Processes an LSP packet and performs the document update in-memory that
@@ -542,7 +742,9 @@ struct TextDocumentManager
 		if (msg.method == "textDocument/didOpen")
 		{
 			auto params = msg.paramsJson.deserializeJson!DidOpenTextDocumentParams;
-			documentStore ~= Document(params.textDocument);
+			// there may be at most one didOpen request, but library code can
+			// load files from the filesystem 
+			insertOrUpdate(Document(params.textDocument));
 			return true;
 		}
 		else if (msg.method == "textDocument/didClose")
@@ -576,6 +778,92 @@ struct TextDocumentManager
 		}
 		return false;
 	}
+}
+
+///
+unittest
+{
+	import std.exception;
+
+	TextDocumentManager documents;
+	// most common usage, forward LSP events to this helper struct.
+	RequestMessageRaw incomingPacket = {
+		// dummy data
+		method: "textDocument/didOpen",
+		paramsJson: `{
+			"textDocument": {
+				"uri": "file:///home/projects/app.d",
+				"languageId": "d",
+				"version": 123,
+				"text": "import std.stdio;\n\nvoid main()\n{\n\twriteln(\"hello world\");\n}\n"
+			}
+		}`
+	};
+	documents.process(incomingPacket);
+	// documents.process returns false if it's not a method meant for text
+	// document management. serve-d:serverbase abstracts this away automatically.
+
+	// normally used from LSP methods where you have params like this
+	TextDocumentPositionParams params = {
+		textDocument: TextDocumentIdentifier("file:///home/projects/app.d"),
+		position: Position(4, 2)
+	};
+
+	// if it's sent by the LSP, the document being loaded should be almost guaranteed.
+	auto doc = documents[params.textDocument.uri];
+	// trying to index files that haven't been sent by the client will throw an Exception
+	assertThrown(documents["file:///path/to/non-registered.d"]);
+
+	// you can use tryGet to see if a Document has been opened yet and use it if so.
+	assert(documents.tryGet("file:///path/to/non-registered.d") is Document.init);
+	assert(documents.tryGet(params.textDocument.uri) !is Document.init);
+
+	// Document defines a variety of utility functions that have been optimized
+	// for speed and convenience.
+	assert(doc.lineAtScope(params.position) == "\twriteln(\"hello world\");\n");
+
+	auto range = doc.wordRangeAt(params.position);
+	assert(doc.positionToBytes(range.start) == 34);
+	assert(doc.positionToBytes(range.end) == 41);
+
+	// when yielding (Fiber context switch) documents may be modified or deleted though:
+
+	RequestMessageRaw incomingPacket2 = {
+		// dummy data
+		method: "textDocument/didChange",
+		paramsJson: `{
+			"textDocument": {
+				"uri": "file:///home/projects/app.d",
+				"version": 124
+			},
+			"contentChanges": [
+				{
+					"range": {
+						"start": { "line": 4, "character": 6 },
+						"end": { "line": 4, "character": 8 }
+					},
+					"text": ""
+				}
+			]
+		}`
+	};
+	documents.process(incomingPacket2);
+
+	assert(doc.lineAtScope(params.position) == "\twrite(\"hello world\");\n");
+
+	RequestMessageRaw incomingPacket3 = {
+		// dummy data
+		method: "textDocument/didClose",
+		paramsJson: `{
+			"textDocument": {
+				"uri": "file:///home/projects/app.d"
+			}
+		}`
+	};
+	documents.process(incomingPacket3);
+
+	assertThrown(documents[params.textDocument.uri]);
+	// so make sure that you don't keep references to documents when leaving scope or switching context.
 }
 
 /// Helper structure for storing any data of type T on a per-file basis.
