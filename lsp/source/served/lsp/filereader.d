@@ -290,22 +290,58 @@ FileReader newStdinReader()
 ///   maxLen = The maxmimum amount of bytes to read from the file.
 /// Returns: The contents of the file up to maxLen or EOF. The data is a slice
 /// of the buffer argument case to a `char[]`.
-char[] readCodeWithBuffer(string file, ref ubyte[] buffer, size_t maxLen = 1024 * 50)
+char[] readCodeWithBuffer(string file, scope return ref ubyte[] buffer, size_t maxLen = 1024 * 50)
+in (buffer.length > 0)
 {
 	auto f = File(file, "rb");
-	size_t len = f.rawRead(buffer).length;
-	if (f.eof)
-		return cast(char[]) buffer[0 .. len];
+	size_t len;
+	while (len < buffer.length)
+	{
+		len += f.rawRead(buffer[len .. $]).length;
+		if (f.eof)
+			return cast(char[]) buffer[0 .. min(maxLen, len)];
+	}
 	while (buffer.length * 2 < maxLen)
 	{
 		buffer.length *= 2;
-		len += f.rawRead(buffer[len .. $]).length;
-		if (f.eof)
-			return cast(char[]) buffer[0 .. len];
+		while (len < buffer.length)
+		{
+			len += f.rawRead(buffer[len .. $]).length;
+			if (f.eof)
+				return cast(char[]) buffer[0 .. min(maxLen, len)];
+		}
 	}
 	if (buffer.length >= maxLen)
-		return cast(char[]) buffer;
+		return cast(char[]) buffer[0 .. maxLen];
 	buffer.length = maxLen;
 	f.rawRead(buffer[len .. $]);
 	return cast(char[]) buffer;
+}
+
+unittest
+{
+	ubyte[2048] buffer;
+	auto slice = buffer[];
+	assert(slice.ptr is buffer.ptr);
+	auto code = readCodeWithBuffer("lsp/source/served/lsp/filereader.d", slice);
+	assert(slice.ptr !is buffer.ptr);
+	assert(code[0 .. 29] == "module served.lsp.filereader;");
+
+	slice = new ubyte[1024 * 64]; // enough to store full file
+	code = readCodeWithBuffer("lsp/source/served/lsp/filereader.d", slice);
+	assert(code[0 .. 29] == "module served.lsp.filereader;");
+
+	// with max length
+	code = readCodeWithBuffer("lsp/source/served/lsp/filereader.d", slice, 16);
+	assert(code == "module served.ls");
+
+	// with max length and small buffer
+	slice = new ubyte[8];
+	code = readCodeWithBuffer("lsp/source/served/lsp/filereader.d", slice, 16);
+	assert(code == "module served.ls");
+
+	// small buffer not aligning
+	slice = new ubyte[7];
+	code = readCodeWithBuffer("lsp/source/served/lsp/filereader.d", slice, 16);
+	assert(code == "module served.ls");
 }
