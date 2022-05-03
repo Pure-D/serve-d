@@ -118,6 +118,7 @@ struct Document
 			text: "#include <stdio>",
 		};
 		auto doc = Document(item);
+		assert(doc.length == "#include <stdio>".length);
 	}
 
 	/// Creates a document with no URI and no language ID and copies the content
@@ -166,7 +167,7 @@ struct Document
 	/// returns a full string instead of a const(char)[] slice.
 	const(char)[] rawText() const
 	{
-		return cast(const(char)[]) text;
+		return text;
 	}
 
 	/// ditto
@@ -188,16 +189,17 @@ struct Document
 	/// document manually.
 	ref typeof(this) setContent(scope const(char)[] newContent) return
 	{
-		if (newContent.length <= text.length)
+		if (newContent.length < text.length)
 		{
-			text[0 .. newContent.length] = newContent;
+			text.ptr[0 .. newContent.length] = newContent;
+			text.ptr[newContent.length] = '\0'; // insert null byte to find corruptions
 			text.length = newContent.length;
+			text = text.assumeSafeAppend;
 		}
 		else
 		{
 			text = text.assumeSafeAppend;
 			text.length = newContent.length;
-			text = text.assumeSafeAppend;
 			text[0 .. $] = newContent;
 		}
 		return this;
@@ -353,16 +355,16 @@ struct Document
 	/// Converts a line/column byte offset to a line/column position.
 	Position lineColumnBytesToPosition(uint line, uint column) const
 	{
-		scope lineText = lineAtScope(line);
+		scope lineText = lineAtScope(line).chomp();
 		uint offset = 0;
 		// keep over-extending positions
 		if (column > lineText.length)
 		{
 			offset = column - cast(uint)lineText.length;
-			column -= offset;
-			assert(column <= lineText.length);
+			column = cast(uint)lineText.length;
 		}
-		return Position(line, cast(uint) lineText[0 .. column].countUTF16Length + offset);
+		// utf16 length is always gonna be less than byte length, so adding offset will never overflow
+		return Position(line, cast(uint)lineText[0 .. column].countUTF16Length + offset);
 	}
 
 	/// Returns the position at "end" starting from the given "src" position which is assumed to be at byte "start"
@@ -375,7 +377,7 @@ struct Document
 		if (end < start)
 			return bytesToPosition(end);
 
-		auto t = text[min($, start) .. min($, end)];
+		auto t = text.ptr[min(text.length, start) .. min(text.length, end)];
 		size_t bytes;
 		while (bytes < t.length)
 		{
@@ -392,12 +394,74 @@ struct Document
 		return src;
 	}
 
+	///
+	unittest
+	{
+		import std.regex;
+
+		auto intRegex = regex(`\bint\b`);
+
+		Document d;
+		d.setContent("int foo(int x, uint y)\n{\n    return cast(int)(x + y);\n}\n");
+
+		// either use size_t.max or 0, both work as starting points for different reasons:
+		// - 0 always matches Position.init, so the offset can be calculated
+		// - size_t.max is larger than the checked index match, so position is recomputed
+		size_t lastIndex = size_t.max;
+		Position lastPosition;
+
+		Position[] matches;
+
+		foreach (match; d.rawText.matchAll(intRegex))
+		{
+			size_t index = match.pre.length;
+			// to reduce boilerplate, use d.nextPositionBytes instead!
+			auto pos = d.movePositionBytes(lastPosition, lastIndex, index);
+			lastIndex = index;
+			lastPosition = pos;
+			matches ~= pos;
+		}
+
+		assert(matches == [
+			Position(0, 0),
+			Position(0, 8),
+			Position(2, 16)
+		]);
+	}
+
+	/// Calls $(LREF movePositionBytes), updates src to be the return value and
+	/// updates start to become end. This reduces boilerplate in common calling
+	/// scenarios.
 	Position nextPositionBytes(ref Position src, ref size_t start, size_t end) const
 	{
 		auto pos = movePositionBytes(src, start, end);
 		src = pos;
 		start = end;
 		return pos;
+	}
+
+	///
+	unittest
+	{
+		import std.regex;
+
+		auto intRegex = regex(`\bint\b`);
+
+		Document d;
+		d.setContent("int foo(int x, uint y)\n{\n    return cast(int)(x + y);\n}\n");
+
+		size_t lastIndex = size_t.max;
+		Position lastPosition;
+
+		Position[] matches;
+		foreach (match; d.rawText.matchAll(intRegex))
+			matches ~= d.nextPositionBytes(lastPosition, lastIndex, match.pre.length);
+
+		assert(matches == [
+			Position(0, 0),
+			Position(0, 8),
+			Position(2, 16)
+		]);
 	}
 
 	/// Returns the word range at a given line/column position.
@@ -407,18 +471,50 @@ struct Document
 		return TextRange(Position(position.line, chars[0]), Position(position.line, chars[1]));
 	}
 
+	///
+	unittest
+	{
+		Document d;
+		d.setContent(`void main() { writeln("hello world"); }`);
+		assert(d.wordRangeAt(Position(0, 0)) == TextRange(0, 0, 0, 4));
+	}
+
 	/// Returns the word range at a given byte position.
 	size_t[2] wordRangeAt(size_t bytes) const
 	{
 		auto lineStart = text.lastIndexOf('\n', bytes) + 1;
-		auto ret = wordInLineBytes(text[lineStart .. $], cast(uint)(bytes - lineStart));
+		auto ret = wordInLineBytes(
+			text.ptr[lineStart .. text.length],
+			cast(uint)(bytes - lineStart));
 		ret[0] += lineStart;
 		ret[1] += lineStart;
 		return ret;
 	}
 
+	///
+	unittest
+	{
+		Document d;
+		d.setContent(`void main() { writeln("hello world"); }`);
+		assert(d.wordRangeAt(0) == [0, 4]);
+		assert(d.wordRangeAt(3) == [0, 4]);
+		assert(d.wordRangeAt(4) == [0, 4]);
+		assert(d.wordRangeAt(5) == [5, 9]);
+		assert(d.wordRangeAt(9) == [5, 9]);
+		assert(d.wordRangeAt(10) == [10, 10]);
+		assert(d.wordRangeAt(14) == [14, 21]);
+		assert(d.wordRangeAt(20) == [14, 21]);
+		assert(d.wordRangeAt(21) == [14, 21]);
+		assert(d.wordRangeAt(23) == [23, 28]);
+		assert(d.wordRangeAt(27) == [23, 28]);
+		assert(d.wordRangeAt(28) == [23, 28]);
+		assert(d.wordRangeAt(29) == [29, 34]);
+		assert(d.wordRangeAt(30) == [29, 34]);
+		assert(d.wordRangeAt(34) == [29, 34]);
+	}
+
 	/// Returns a byte offset range as `[start, end]` of the given 0-based line
-	/// number.
+	/// number. Contains the line terminator, if it exists.
 	size_t[2] lineByteRangeAt(uint line) const
 	{
 		size_t start = 0;
@@ -447,6 +543,8 @@ struct Document
 
 	/// Returns the text of a line at the given position.
 	///
+	/// Contains the line terminator, if it exists.
+	///
 	/// The overload taking in a position just calls the overload taking a line
 	/// with the line being the position's line.
 	string lineAt(Position position) const
@@ -461,6 +559,8 @@ struct Document
 	}
 
 	/// Returns the text of a line starting at line 0.
+	///
+	/// Contains the line terminator, if it exists.
 	string lineAt(uint line) const
 	{
 		return lineAtScope(line).idup;
@@ -501,6 +601,8 @@ struct Document
 	///
 	/// The overload taking in a position just calls the overload taking a line
 	/// with the line being the position's line.
+	///
+	/// Contains the line terminator, if it exists.
 	///
 	/// See_Also: $(LREF lineAt) to get the same content, but with duplicated
 	/// memory, so it can be stored for later use.
@@ -853,6 +955,28 @@ unittest
 
 	RequestMessageRaw incomingPacket3 = {
 		// dummy data
+		method: "textDocument/didChange",
+		paramsJson: `{
+			"textDocument": {
+				"uri": "file:///home/projects/app.d",
+				"version": 125
+			},
+			"contentChanges": [
+				{
+					"text": "replace everything"
+				}
+			]
+		}`
+	};
+	documents.process(incomingPacket3);
+
+	// doc.rawText is now half overwritten, you need to refetch a document when yielding or updating:
+	assert(doc.rawText != "replace everything");
+	doc = documents[params.textDocument.uri];
+	assert(doc.rawText == "replace everything");
+
+	RequestMessageRaw incomingPacket4 = {
+		// dummy data
 		method: "textDocument/didClose",
 		paramsJson: `{
 			"textDocument": {
@@ -860,7 +984,7 @@ unittest
 			}
 		}`
 	};
-	documents.process(incomingPacket3);
+	documents.process(incomingPacket4);
 
 	assertThrown(documents[params.textDocument.uri]);
 	// so make sure that you don't keep references to documents when leaving scope or switching context.
@@ -922,12 +1046,13 @@ size_t[2] wordInLineBytes(const(char)[] line, size_t bytes)
 }
 
 SizeT[2] wordInLineImpl(CharT, SizeT)(const(char)[] line, SizeT character)
+out(r; r[1] >= r[0])
 {
 	size_t index = 0;
 	SizeT offs = 0;
 
-	SizeT lastStart = character;
-	SizeT start = character, end = character + 1;
+	SizeT lastStart = 0;
+	SizeT start = character, end = character;
 	bool searchStart = true;
 
 	while (index < line.length)
@@ -938,7 +1063,11 @@ SizeT[2] wordInLineImpl(CharT, SizeT)(const(char)[] line, SizeT character)
 		if (searchStart)
 		{
 			if (isDIdentifierSeparatingChar(c))
+			{
+				if (character == 0)
+					break;
 				lastStart = offs + l;
+			}
 
 			if (offs + l >= character)
 			{
@@ -961,10 +1090,62 @@ SizeT[2] wordInLineImpl(CharT, SizeT)(const(char)[] line, SizeT character)
 		start = cast(SizeT)line.length;
 	if (end > line.length)
 		end = cast(SizeT)line.length;
-	if (end < start)
-		end = start;
 
 	return [start, end];
+}
+
+unittest
+{
+	string a = "int i;";
+	string b = "a (int i;";
+	string c = "{int i;";
+	string d = "{ int i;";
+	assert(a.wordInLineBytes(0) == [0, 3]);
+	assert(a.wordInLineBytes(1) == [0, 3]);
+	assert(a.wordInLineBytes(2) == [0, 3]);
+	assert(a.wordInLineBytes(3) == [0, 3]);
+	assert(a.wordInLineBytes(4) == [4, 5]);
+	assert(a.wordInLineBytes(5) == [4, 5]);
+	assert(a.wordInLineBytes(6) == [6, 6]);
+	assert(a.wordInLineBytes(7) == [6, 6]);
+	assert(a.wordInLineBytes(size_t.max) == [6, 6]);
+
+	assert(b.wordInLineBytes(0) == [0, 1]);
+	assert(b.wordInLineBytes(1) == [0, 1]);
+	assert(b.wordInLineBytes(2) == [2, 2]);
+	assert(b.wordInLineBytes(3) == [3, 6]);
+	assert(b.wordInLineBytes(4) == [3, 6]);
+	assert(b.wordInLineBytes(5) == [3, 6]);
+	assert(b.wordInLineBytes(6) == [3, 6]);
+	assert(b.wordInLineBytes(7) == [7, 8]);
+	assert(b.wordInLineBytes(8) == [7, 8]);
+	assert(b.wordInLineBytes(9) == [9, 9]);
+	assert(b.wordInLineBytes(10) == [9, 9]);
+	assert(b.wordInLineBytes(100) == [9, 9]);
+	assert(b.wordInLineBytes(size_t.max) == [9, 9]);
+
+	assert(c.wordInLineBytes(0) == [0, 0]);
+	assert(c.wordInLineBytes(1) == [1, 4]);
+	assert(c.wordInLineBytes(2) == [1, 4]);
+	assert(c.wordInLineBytes(3) == [1, 4]);
+	assert(c.wordInLineBytes(4) == [1, 4]);
+	assert(c.wordInLineBytes(5) == [5, 6]);
+	assert(c.wordInLineBytes(6) == [5, 6]);
+	assert(c.wordInLineBytes(7) == [7, 7]);
+	assert(c.wordInLineBytes(8) == [7, 7]);
+	assert(c.wordInLineBytes(size_t.max) == [7, 7]);
+
+	assert(d.wordInLineBytes(0) == [0, 0]);
+	assert(d.wordInLineBytes(1) == [1, 1]);
+	assert(d.wordInLineBytes(2) == [2, 5]);
+	assert(d.wordInLineBytes(3) == [2, 5]);
+	assert(d.wordInLineBytes(4) == [2, 5]);
+	assert(d.wordInLineBytes(5) == [2, 5]);
+	assert(d.wordInLineBytes(6) == [6, 7]);
+	assert(d.wordInLineBytes(7) == [6, 7]);
+	assert(d.wordInLineBytes(8) == [8, 8]);
+	assert(d.wordInLineBytes(9) == [8, 8]);
+	assert(d.wordInLineBytes(size_t.max) == [8, 8]);
 }
 
 deprecated("use isDIdentifierSeparatingChar instead")
@@ -1152,6 +1333,11 @@ void main() {
 	enum testMidAsciiLine_offset = 753;
 	enum testMidAsciiLine_position = Position(31, 7);
 
+	// after unicode, end of line
+	enum testEOLPostUni_byte = 795;
+	enum testEOLPostUni_offset = 744;
+	enum testEOLPostUni_position = Position(29, 24); // after `purple” 在表中`
+
 	@("{offset, bytes, position} -> {offset, bytes, position}")
 	unittest
 	{
@@ -1159,7 +1345,7 @@ void main() {
 		import std.stdio;
 
 		static foreach (test; [
-				"SOF", "EOF", "LinePreUni", "LinePostUni", "MidAsciiLine"
+				"SOF", "EOF", "LinePreUni", "LinePostUni", "MidAsciiLine", "EOLPostUni"
 			])
 		{
 			{
@@ -1216,6 +1402,21 @@ void main() {
 		assert(testUnicodeDocument.positionToOffset(Position(uint.max, uint.max)) == maxOffset);
 		writeln("max position -> byte");
 		assert(testUnicodeDocument.positionToBytes(Position(uint.max, uint.max)) == maxBytes);
+	}
+
+	unittest
+	{
+		// in line after unicode
+		foreach (col; cast(uint[])[256, 300, int.max, uint.max])
+		{
+			assert(testUnicodeDocument.positionToBytes(Position(29, col)) == testEOLPostUni_byte);
+			assert(testUnicodeDocument.positionToOffset(Position(29, col)) == testEOLPostUni_offset);
+		}
+
+		assert(testUnicodeDocument.lineColumnBytesToPosition(29, 42) == Position(29, 24));
+		assert(testUnicodeDocument.lineColumnBytesToPosition(29, 43) == Position(29, 25));
+		assert(testUnicodeDocument.lineColumnBytesToPosition(29, 4_000_000_042) == Position(29, 4_000_000_024));
+		assert(testUnicodeDocument.lineColumnBytesToPosition(29, uint.max) == Position(29, 4_294_967_277));
 	}
 
 	version (none)
