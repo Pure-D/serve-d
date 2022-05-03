@@ -19,6 +19,7 @@
 	],
 	"subPackages": [
 		"http",
+		"protocol",
 		"lsp",
 		"serverbase",
 		"dcd",
