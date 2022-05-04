@@ -6,41 +6,6 @@ import core.sync.mutex;
 import std.algorithm;
 import std.stdio;
 
-/// A simple file reader continuously reading into a 1 byte buffer and appending
-/// it to the data. Ensures data is never buffered on any platform at the cost
-/// of being a lot more CPU intensive.
-class StdFileReader : FileReader
-{
-	this(File file)
-	{
-		super();
-		this.file = file;
-	}
-
-	override void stop()
-	{
-		file.close();
-	}
-
-	override void run()
-	{
-		ubyte[1] buffer;
-		while (!file.eof)
-		{
-			auto chunk = file.rawRead(buffer[]);
-			synchronized (mutex)
-				data ~= chunk;
-		}
-	}
-
-	override bool isReading()
-	{
-		return isRunning && !file.eof;
-	}
-
-	File file;
-}
-
 /// A file reader implementation using the Win32 API using events. Reads as much
 /// content as possible when new data is available at once, making the file
 /// reading operation much more efficient when large chunks of data are being
@@ -112,7 +77,16 @@ version (Windows) class WindowsStdinReader : FileReader
 /// as much content as possible when new data is available at once, making the
 /// file reading operation much more efficient when large chunks of data are
 /// being transmitted.
-version (Posix) class PosixStdinReader : FileReader
+version (Posix) class PosixStdinReader : PosixFileReader
+{
+	this()
+	{
+		super(stdin);
+	}
+}
+
+/// ditto
+version (Posix) class PosixFileReader : FileReader
 {
 	import core.stdc.errno;
 	import core.sys.posix.sys.select;
@@ -120,29 +94,37 @@ version (Posix) class PosixStdinReader : FileReader
 	import core.sys.posix.sys.types;
 	import core.sys.posix.unistd;
 
+	File stdFile;
+
+	this(File stdFile)
+	{
+		this.stdFile = stdFile;
+	}
+
 	override void stop()
 	{
-		stdin.close();
+		stdFile.close();
 	}
 
 	override void run()
 	{
+		int fd = stdFile.fileno;
 
 		ubyte[4096] buffer;
 		scope (exit)
-			stdin.close();
+			stdFile.close();
 
-		while (!stdin.error && !stdin.eof)
+		while (true)
 		{
 			fd_set rfds;
 			timeval tv;
 
 			FD_ZERO(&rfds);
-			FD_SET(0, &rfds);
+			FD_SET(fd, &rfds);
 
 			tv.tv_sec = 1;
 
-			auto ret = select(1, &rfds, null, null, &tv);
+			auto ret = select(fd + 1, &rfds, null, null, &tv);
 
 			if (ret == -1)
 			{
@@ -189,6 +171,7 @@ abstract class FileReader : Thread
 	this()
 	{
 		super(&run);
+		isDaemon = true;
 		mutex = new Mutex();
 	}
 
@@ -278,7 +261,16 @@ FileReader newStdinReader()
 	else version (Posix)
 		return new PosixStdinReader();
 	else
-		return new StdFileReader(stdin);
+		static assert(false, "no stdin reader for this platform implemented");
+}
+
+/// ditto
+FileReader newFileReader(File stdFile)
+{
+	version (Posix)
+		return new PosixFileReader(stdFile);
+	else
+		static assert(false, "no generic file reader for this platform implemented");
 }
 
 /// Reads a file into a given buffer with a specified maximum length. If the

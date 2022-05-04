@@ -294,10 +294,10 @@ class RPCProcessor : Fiber
 		return WindowFunctions(this);
 	}
 
-	/// Waits for a response message to a request from the other RPC side.
-	/// If this is called after the response has already been sent and processed by yielding after sending the request, this will yield forever and use up memory.
-	/// So it is important, if you are going to await a response, to do it immediately when sending any request.
-	ResponseMessageRaw awaitResponse(RequestToken tok)
+	/// Registers a wait handler for the given request token. When the other RPC
+	/// side sends a response to this token, the value will be saved, before it
+	/// is being awaited.
+	private size_t prepareWait(RequestToken tok)
 	{
 		size_t i;
 		bool found = false;
@@ -314,11 +314,27 @@ class RPCProcessor : Fiber
 		if (!found)
 			i = responseTokens.length++;
 		responseTokens[i] = RequestWait(tok);
+		return i;
+	}
+
+	/// Waits until the given responseToken wait handler is resolved, then
+	/// return its result and makes the memory reusable.
+	private ResponseMessageRaw resolveWait(size_t i)
+	{
 		while (!responseTokens[i].got)
 			yield(); // yield until main loop placed a response
 		auto res = responseTokens[i].ret;
 		responseTokens[i].handled = true; // make memory reusable
 		return res;
+	}
+
+	/// Waits for a response message to a request from the other RPC side.
+	/// If this is called after the response has already been sent and processed by yielding after sending the request, this will yield forever and use up memory.
+	/// So it is important, if you are going to await a response, to do it immediately when sending any request.
+	ResponseMessageRaw awaitResponse(RequestToken tok)
+	{
+		auto i = prepareWait(tok);
+		return resolveWait(i);
 	}
 
 private:
@@ -491,6 +507,68 @@ private:
 		}
 		return RequestMessageRaw.init;
 	}
+}
+
+version (Posix)
+unittest
+{
+	import served.lsp.protocol;
+	import std.process;
+
+	auto rpcPipe = pipe();
+	File writer = rpcPipe.writeEnd;
+	auto resultPipe = pipe();
+	File results = resultPipe.readEnd;
+
+	void writePacket(string s)
+	{
+		writer.lockingBinaryWriter.put(text("Content-Length: ", s.length, "\r\n\r\n", s));
+		writer.flush();
+	}
+
+	string readPacket()
+	{
+		auto lenStr = results.readln();
+		assert(lenStr.startsWith("Content-Length: "));
+		auto len = lenStr["Content-Length: ".length .. $].strip.to!int;
+		results.readln();
+		ubyte[] buf = new ubyte[len];
+		size_t i;
+		while (!results.eof && i < buf.length)
+			i += results.rawRead(buf[i .. $]).length;
+		assert(i == buf.length);
+		return cast(string)buf;
+	}
+
+	void expectPacket(string s)
+	{
+		auto res = readPacket();
+		assert(res == s, res);
+	}
+
+	auto rpcInput = newFileReader(rpcPipe.readEnd);
+	rpcInput.start();
+	scope (exit)
+		rpcInput.stop();
+
+	auto rpc = new RPCProcessor(rpcInput, resultPipe.writeEnd);
+	rpc.call();
+	InitializeParams initializeParams = {
+		processId: 1234,
+		rootUri: "file:///root/uri",
+		capabilities: ClientCapabilities.init
+	};
+	auto tok = rpc.sendMethod("initialize", initializeParams);
+	auto waitHandle = rpc.prepareWait(tok);
+	expectPacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
+	writePacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","result":{"capabilities":{}}}`);
+	rpc.call();
+	auto res = rpc.resolveWait(waitHandle);
+	assert(res.resultJson == `{"capabilities":{}}`);
+
+	rpc.stop();
+	rpc.call();
+	assert(rpc.state == Fiber.State.TERM);
 }
 
 /// Utility functions for common LSP methods performing UI things.
