@@ -6,7 +6,7 @@ import std.traits;
 
 import mir.serde;
 
-import mir.algebraic : MirVariant = Variant;
+import mir.algebraic : MirAlgebraic = Algebraic;
 public import mir.algebraic : isVariant, match;
 
 public import served.lsp.jsonops;
@@ -25,7 +25,8 @@ struct Variant(T...)
 			static assert(false, "included " ~ S.stringof ~ " in Variant, which is not a serdeFallbackStruct");
 	}
 
-	MirVariant!T value;
+	// using algebraic because its .init value is predictable (first type)
+	MirAlgebraic!T value;
 	alias value this;
 
 	this(T)(T v)
@@ -45,7 +46,8 @@ struct Variant(T...)
 	bool serdeIgnoreOut() const @property
 	{
 		return value.match!((v) {
-			static if (__traits(compiles, v.serdeIgnoreOut))
+			static if (is(typeof(v) : NoneType)
+				|| __traits(compiles, v.serdeIgnoreOut))
 				return v.serdeIgnoreOut;
 			else
 				return false;
@@ -1186,7 +1188,7 @@ alias DocumentSelector = DocumentFilter[];
 struct InitializeParams
 {
 	Variant!(typeof(null), int) processId;
-	@serdeOptional string rootPath;
+	@serdeOptional Optional!string rootPath;
 	DocumentUri rootUri;
 	@serdeOptional OptionalJsonValue initializationOptions;
 	ClientCapabilities capabilities;
@@ -1194,6 +1196,21 @@ struct InitializeParams
 	@serdeOptional Variant!(NoneType, typeof(null), WorkspaceFolder[]) workspaceFolders;
 	@serdeOptional Optional!InitializeParamsClientInfo clientInfo;
 	@serdeOptional Optional!string locale;
+}
+
+unittest
+{
+	Variant!(NoneType, typeof(null), WorkspaceFolder[]) workspaceFolders;
+	assert(workspaceFolders.serdeIgnoreOut);
+	workspaceFolders = null;
+	assert(!workspaceFolders.serdeIgnoreOut);
+
+	InitializeParams p = {
+		processId: 1234,
+		rootUri: "file:///root/path",
+		capabilities: ClientCapabilities.init
+	};
+	assert(p.serializeJson == `{"processId":1234,"rootUri":"file:///root/path","capabilities":{}}`, p.serializeJson);
 }
 
 @serdeFallbackStruct
