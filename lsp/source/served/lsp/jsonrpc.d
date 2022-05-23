@@ -363,15 +363,19 @@ private:
 		assert(reader.isReading, "must start jsonrpc after file reader!");
 		while (!stopped && reader.isReading)
 		{
+			bool gotAnyHeader;
 			bool inHeader = true;
 			size_t contentLength = 0;
 			do // dmd -O has an issue on mscoff where it forgets to emit a cmp here so this would break with while (inHeader)
 			{
-				string line = reader.yieldLine;
+				string line = reader.yieldLine(&stopped, false);
 				if (!reader.isReading)
 					stop(); // abort in header
 
-				if (!line.length && contentLength > 0)
+				if (line.length)
+					gotAnyHeader = true;
+
+				if (!line.length && gotAnyHeader)
 					inHeader = false;
 				else if (line.startsWith("Content-Length:"))
 					contentLength = line["Content-Length:".length .. $].strip.to!size_t;
@@ -387,7 +391,7 @@ private:
 				continue;
 			}
 
-			auto content = cast(const(char)[]) reader.yieldData(contentLength);
+			auto content = cast(const(char)[]) reader.yieldData(contentLength, &stopped, false);
 			if (stopped || content is null)
 				break;
 			assert(content.length == contentLength);

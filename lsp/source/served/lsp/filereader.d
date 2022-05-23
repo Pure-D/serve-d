@@ -177,11 +177,11 @@ abstract class FileReader : Thread
 		mutex = new Mutex();
 	}
 
-	string yieldLine()
+	string yieldLine(bool* whileThisIs = null, bool equalToThis = true)
 	{
 		ptrdiff_t index;
 		string ret;
-		while (true)
+		while (whileThisIs is null || *whileThisIs == equalToThis)
 		{
 			bool hasData;
 			synchronized (mutex)
@@ -209,9 +209,9 @@ abstract class FileReader : Thread
 	/// data from the incoming data stream atomically and returns a duplicate of
 	/// it.
 	/// Returns null if the file reader stops while reading.
-	ubyte[] yieldData(size_t length)
+	ubyte[] yieldData(size_t length, bool* whileThisIs = null, bool equalToThis = true)
 	{
-		while (true)
+		while (whileThisIs is null || *whileThisIs == equalToThis)
 		{
 			bool hasData;
 			synchronized (mutex)
@@ -231,6 +231,7 @@ abstract class FileReader : Thread
 
 			Fiber.yield();
 		}
+		return null;
 	}
 
 	abstract void stop();
