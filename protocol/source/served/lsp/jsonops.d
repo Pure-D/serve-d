@@ -92,7 +92,7 @@ JsonValue toJsonValue(T)(auto ref T value)
 	return value.serializeJson.deserializeJson!JsonValue;
 }
 
-private const(char)[] skipString(ref scope return const(char)[] jsonObject)
+private inout(char)[] skipString(ref scope return inout(char)[] jsonObject)
 in(jsonObject.length)
 in(jsonObject.ptr[0] == '"')
 {
@@ -123,7 +123,7 @@ in(jsonObject.ptr[0] == '"')
 	return start[0 .. jsonObject.ptr - start];
 }
 
-private const(char)[] skipNumber(ref scope return const(char)[] jsonObject)
+private inout(char)[] skipNumber(ref scope return inout(char)[] jsonObject)
 in(jsonObject.length)
 {
 	import std.ascii : isDigit;
@@ -169,7 +169,7 @@ in(jsonObject.length)
 	return start[0 .. jsonObject.ptr - start];
 }
 
-private const(char)[] skipLiteral(ref scope return const(char)[] jsonObject, string literal)
+private inout(char)[] skipLiteral(ref scope return inout(char)[] jsonObject, string literal)
 {
 	if (jsonObject.length < literal.length
 		|| jsonObject.ptr[0 .. literal.length] != literal)
@@ -182,7 +182,7 @@ private const(char)[] skipLiteral(ref scope return const(char)[] jsonObject, str
 }
 
 // skips until matching level of start/end tokens - skips strings
-private const(char)[] skipByPairs(char start, char end, string name)(ref scope return const(char)[] jsonObject)
+private inout(char)[] skipByPairs(char start, char end, string name)(ref scope return inout(char)[] jsonObject)
 in(jsonObject.length)
 in(jsonObject.ptr[0] == start)
 {
@@ -212,17 +212,17 @@ in(jsonObject.ptr[0] == start)
 	return startPtr[0 .. jsonObject.ptr - startPtr];
 }
 
-private const(char)[] skipObject(ref scope return const(char)[] jsonObject)
+private inout(char)[] skipObject(ref scope return inout(char)[] jsonObject)
 {
 	return jsonObject.skipByPairs!('{', '}', "object");
 }
 
-private const(char)[] skipArray(ref scope return const(char)[] jsonObject)
+private inout(char)[] skipArray(ref scope return inout(char)[] jsonObject)
 {
 	return jsonObject.skipByPairs!('[', ']', "array");
 }
 
-private const(char)[] skipValue(ref scope return const(char)[] jsonObject)
+private inout(char)[] skipValue(ref scope return inout(char)[] jsonObject)
 {
 	if (!jsonObject.length)
 		return null;
@@ -248,89 +248,93 @@ private const(char)[] skipValue(ref scope return const(char)[] jsonObject)
 	}
 }
 
-private void skipWhite(ref scope return const(char)[] jsonObject)
+private void skipWhite(ref scope return inout(char)[] jsonObject)
 {
 	import std.string : stripLeft;
 
 	jsonObject = jsonObject.stripLeft;
 }
 
-auto parseKeySlices(fields...)(scope return const(char)[] jsonObject)
-in (jsonObject.length)
-in (jsonObject[0] == '{')
-in (jsonObject[$ - 1] == '}')
+template parseKeySlices(fields...)
 {
-	import std.string : representation;
-	import std.algorithm : canFind;
-
-	mixin(`struct Ret {
-		union {
-			const(char)[][fields.length] _arr;
-			struct {
-				`, (){
-					string fieldsStr;
-					foreach (string field; fields)
-						fieldsStr ~= "const(char)[] " ~ field ~ ";\n";
-					return fieldsStr;
-				}(), `
-			}
-		}
-	}`);
-
-	Ret ret;
-
-	jsonObject = jsonObject[1 .. $ - 1];
-	jsonObject.skipWhite();
-	while (jsonObject.length)
+	auto parseKeySlices(T)(scope return T[] jsonObject)
+	if (is(immutable T == immutable char))
+	in (jsonObject.length)
+	in (jsonObject[0] == '{')
+	in (jsonObject[$ - 1] == '}')
 	{
-		auto key = jsonObject.skipValue();
-		if (key.length < 2 || key.ptr[0] != '"' || key.ptr[key.length - 1] != '"')
-			throw new Exception("malformed JSON object key");
-		jsonObject.skipWhite();
-		if (!jsonObject.length || jsonObject.ptr[0] != ':')
-			throw new Exception("malformed JSON");
-		jsonObject = jsonObject.ptr[1 .. jsonObject.length];
-		jsonObject.skipWhite();
-		auto value = jsonObject.skipValue();
-		jsonObject.skipWhite();
+		import std.string : representation;
+		import std.algorithm : canFind;
 
-		if (jsonObject.length)
+		mixin(`struct Ret {
+			union {
+				T[][fields.length] _arr;
+				struct {
+					`, (){
+						string fieldsStr;
+						foreach (string field; fields)
+							fieldsStr ~= "T[] " ~ field ~ ";\n";
+						return fieldsStr;
+					}(), `
+				}
+			}
+		}`);
+
+		Ret ret;
+
+		jsonObject = jsonObject[1 .. $ - 1];
+		jsonObject.skipWhite();
+		while (jsonObject.length)
 		{
-			if (jsonObject.ptr[0] != ',')
+			auto key = jsonObject.skipValue();
+			if (key.length < 2 || key.ptr[0] != '"' || key.ptr[key.length - 1] != '"')
+				throw new Exception("malformed JSON object key");
+			jsonObject.skipWhite();
+			if (!jsonObject.length || jsonObject.ptr[0] != ':')
 				throw new Exception("malformed JSON");
 			jsonObject = jsonObject.ptr[1 .. jsonObject.length];
 			jsonObject.skipWhite();
-		}
+			auto value = jsonObject.skipValue();
+			jsonObject.skipWhite();
 
-		RawKeySwitch: switch (key)
-		{
-			static foreach (string field; fields)
+			if (jsonObject.length)
 			{
-			case '"' ~ field ~ '"':
-				mixin("ret.", field, " = value;");
-				break RawKeySwitch;
+				if (jsonObject.ptr[0] != ',')
+					throw new Exception("malformed JSON");
+				jsonObject = jsonObject.ptr[1 .. jsonObject.length];
+				jsonObject.skipWhite();
 			}
-			default:
-				if (key.representation.canFind('\\'))
-				{
-					// wtf escaped key
-					DeserializedSwitch: switch (key.deserializeJson!string)
-					{
-						static foreach (string field; fields)
-						{
-						case field:
-							mixin("ret.", field, " = value;");
-							break DeserializedSwitch;
-						}
-						default:
-							break; // not part of wanted keys
-					}
-				}
-				break; // not part of wanted keys
-		}
-	}
 
-	return ret;
+			RawKeySwitch: switch (key)
+			{
+				static foreach (string field; fields)
+				{
+				case '"' ~ field ~ '"':
+					mixin("ret.", field, " = value;");
+					break RawKeySwitch;
+				}
+				default:
+					if (key.representation.canFind('\\'))
+					{
+						// wtf escaped key
+						DeserializedSwitch: switch (key.deserializeJson!string)
+						{
+							static foreach (string field; fields)
+							{
+							case field:
+								mixin("ret.", field, " = value;");
+								break DeserializedSwitch;
+							}
+							default:
+								break; // not part of wanted keys
+						}
+					}
+					break; // not part of wanted keys
+			}
+		}
+
+		return ret;
+	}
 }
 
 ///
@@ -369,7 +373,8 @@ unittest
 	assert(parts.opt is json[287 .. 291]);
 }
 
-void visitJsonArray(alias fn)(scope const(char)[] jsonArray)
+void visitJsonArray(alias fn, T)(scope T[] jsonArray)
+if (is(immutable T == immutable char))
 in (jsonArray.length)
 in (jsonArray[0] == '[')
 in (jsonArray[$ - 1] == ']')
@@ -429,4 +434,18 @@ unittest
 		assert(expected[i++] is item);
 	});
 	assert(i == expected.length);
+}
+
+bool looksLikeJsonObject(scope const(char)[] jsonString)
+{
+	return jsonString.length >= 2
+		&& jsonString.ptr[0] == '{'
+		&& jsonString.ptr[jsonString.length - 1] == '}';
+}
+
+bool looksLikeJsonArray(scope const(char)[] jsonString)
+{
+	return jsonString.length >= 2
+		&& jsonString.ptr[0] == '['
+		&& jsonString.ptr[jsonString.length - 1] == ']';
 }
