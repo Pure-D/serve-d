@@ -648,7 +648,7 @@ struct ResponseError
 	/// This may be omitted.
 	/// The value of this member is defined by the Server (e.g. detailed error
 	/// information, nested errors etc.).
-	JsonValue data;
+	@serdeOptional OptionalJsonValue data;
 
 	this(Throwable t)
 	{
