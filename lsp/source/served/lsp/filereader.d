@@ -138,7 +138,7 @@ version (Posix) class PosixFileReader : FileReader
 			}
 			else if (ret)
 			{
-				auto len = read(0, buffer.ptr, buffer.length);
+				auto len = read(fd, buffer.ptr, buffer.length);
 				if (len == -1)
 				{
 					int err = errno;
