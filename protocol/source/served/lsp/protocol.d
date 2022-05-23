@@ -1,3 +1,8 @@
+/**
+Implements the various LSP type definitions
+
+Standards: LSP v3.16 https://microsoft.github.io/language-server-protocol/specifications/specification-3-16/
+*/
 module served.lsp.protocol;
 
 import std.conv;
@@ -7,51 +12,55 @@ import std.traits;
 import mir.serde;
 
 import mir.algebraic : MirAlgebraic = Algebraic;
-public import mir.algebraic : isVariant, match;
+public import mir.algebraic : isVariant, match, Nullable;
 
 public import served.lsp.jsonops;
 
 version (unittest)
 	import std.exception;
 
-struct Variant(T...)
+template Variant(T...)
 {
-	static foreach (S; T)
+	@serdeProxy!(MirAlgebraic!T)
+	struct Variant
 	{
-		static if (!is(S : NoneType)
-			&& is(S == struct)
-			&& !hasUDA!(S, serdeFallbackStruct)
-			&& !isVariant!S)
-			static assert(false, "included " ~ S.stringof ~ " in Variant, which is not a serdeFallbackStruct");
-	}
+		static foreach (S; T)
+		{
+			static if (!is(S : NoneType)
+				&& is(S == struct)
+				&& !hasUDA!(S, serdeFallbackStruct)
+				&& !isVariant!S)
+				static assert(false, "included " ~ S.stringof ~ " in Variant, which is not a serdeFallbackStruct");
+		}
 
-	// using algebraic because its .init value is predictable (first type)
-	MirAlgebraic!T value;
-	alias value this;
+		// using algebraic because its .init value is predictable (first type)
+		MirAlgebraic!T value;
+		alias value this;
 
-	this(T)(T v)
-	{
-		value = typeof(value)(v);
-	}
+		this(T)(T v)
+		{
+			value = typeof(value)(v);
+		}
 
-	ref typeof(this) opAssign(T)(T rhs)
-	{
-		static if (is(T : typeof(this)))
-			value = rhs.value;
-		else
-			value = typeof(value)(rhs);
-		return this;
-	}
-
-	bool serdeIgnoreOut() const @property
-	{
-		return value.match!((v) {
-			static if (is(typeof(v) : NoneType)
-				|| __traits(compiles, v.serdeIgnoreOut))
-				return v.serdeIgnoreOut;
+		ref typeof(this) opAssign(T)(T rhs)
+		{
+			static if (is(T : typeof(this)))
+				value = rhs.value;
 			else
-				return false;
-		});
+				value = typeof(value)(rhs);
+			return this;
+		}
+
+		bool serdeIgnoreOut() const
+		{
+			return value.match!((v) {
+				static if (is(typeof(v) : NoneType)
+					|| __traits(compiles, v.serdeIgnoreOut))
+					return v.serdeIgnoreOut;
+				else
+					return false;
+			});
+		}
 	}
 }
 
@@ -687,24 +696,66 @@ struct ResponseMessage
 		this.error = error;
 	}
 
-	this(Optional!RequestToken id, JsonValue result)
+	this(Nullable!RequestToken id, JsonValue result)
 	{
 		this.id = id;
 		this.result = result;
 	}
 
-	this(Optional!RequestToken id, ResponseError error)
+	this(Nullable!RequestToken id, ResponseError error)
 	{
 		this.id = id;
 		this.error = error;
 	}
 
+	this(typeof(null) id, JsonValue result)
+	{
+		this.id = null;
+		this.result = result;
+	}
+
+	this(typeof(null) id, ResponseError error)
+	{
+		this.id = null;
+		this.error = error;
+	}
+
 	///
-	@serdeOptional Optional!RequestToken id;
+	@serdeOptional Nullable!RequestToken id;
 	///
 	@serdeOptional OptionalJsonValue result;
 	///
 	@serdeOptional Optional!ResponseError error;
+}
+
+unittest
+{
+	ResponseMessage res = ResponseMessage(RequestToken("id"),
+		ResponseError(ErrorCode.invalidRequest, "invalid request"));
+
+	string buf;
+	buf ~= `{"jsonrpc":"2.0"`;
+	if (!res.id.isNone)
+	{
+		buf ~= `,"id":`;
+		buf ~= res.id.serializeJson;
+	}
+
+	if (!res.result.isNone)
+	{
+		buf ~= `,"result":`;
+		buf ~= res.result.serializeJson;
+	}
+
+	if (!res.error.isNone)
+	{
+		buf ~= `,"error":`;
+		buf ~= res.error.serializeJson;
+	}
+
+	buf ~= `}`;
+
+	assert(buf == `{"jsonrpc":"2.0","id":"id","error":{"code":-32600,"message":"invalid request"}}`);
 }
 
 ///

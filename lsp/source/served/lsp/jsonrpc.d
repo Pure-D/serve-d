@@ -9,7 +9,6 @@ import std.experimental.logger;
 import std.json;
 import std.stdio;
 import std.string;
-import std.typecons;
 
 import served.lsp.filereader;
 import served.lsp.protocol;
@@ -56,6 +55,34 @@ class RPCProcessor : Fiber
 		{
 			buf[len++] = `,"result":`;
 			buf[len++] = res.result.serializeJson;
+		}
+
+		if (!res.error.isNone)
+		{
+			buf[len++] = `,"error":`;
+			buf[len++] = res.error.serializeJson;
+			stderr.writeln(buf[len - 1]);
+		}
+
+		buf[len++] = `}`;
+		sendRawPacket(buf[0 .. len]);
+	}
+	/// ditto
+	void send(ResponseMessageRaw res)
+	{
+		const(char)[][8] buf;
+		int len;
+		buf[len++] = `{"jsonrpc":"2.0"`;
+		if (!res.id.isNone)
+		{
+			buf[len++] = `,"id":`;
+			buf[len++] = res.id.serializeJson;
+		}
+
+		if (res.resultJson.length)
+		{
+			buf[len++] = `,"result":`;
+			buf[len++] = res.resultJson;
 		}
 
 		if (!res.error.isNone)
@@ -174,6 +201,18 @@ class RPCProcessor : Fiber
 			`,"params":`,
 			value,
 			`}`
+		];
+		sendRawPacket(parts[]);
+	}
+
+	void notifyProgressRaw(scope const(char)[] token, scope const(char)[] value)
+	{
+		const(char)[][5] parts = [
+			`{"jsonrpc":"2.0","method":"$/progress","params":{"token":`,
+			token,
+			`,"value":`,
+			value,
+			`}}`
 		];
 		sendRawPacket(parts[]);
 	}
@@ -328,6 +367,11 @@ class RPCProcessor : Fiber
 		return res;
 	}
 
+	private bool hasResponse(size_t handle)
+	{
+		return responseTokens[handle].got;
+	}
+
 	/// Waits for a response message to a request from the other RPC side.
 	/// If this is called after the response has already been sent and processed by yielding after sending the request, this will yield forever and use up memory.
 	/// So it is important, if you are going to await a response, to do it immediately when sending any request.
@@ -412,7 +456,7 @@ private:
 							extraRequests ~= res;
 					});
 					if (count == 0)
-						send(ResponseMessage(RequestToken.init, ResponseError(ErrorCode.invalidRequest, "Empty batch request")));
+						send(ResponseMessage(null, ResponseError(ErrorCode.invalidRequest, "Empty batch request")));
 				}
 				else if (content.length && content[0] == '{')
 				{
@@ -420,7 +464,7 @@ private:
 				}
 				else
 				{
-					send(ResponseMessage(RequestToken.init, ResponseError(ErrorCode.invalidRequest, "Invalid request type (must be object or array)")));
+					send(ResponseMessage(null, ResponseError(ErrorCode.invalidRequest, "Invalid request type (must be object or array)")));
 				}
 			}
 			catch (Exception e)
@@ -431,10 +475,11 @@ private:
 					trace(content);
 					auto idx = content.indexOf("\"id\":");
 					auto endIdx = content.indexOf(",", idx);
-					RequestToken fallback;
+					Nullable!RequestToken fallback;
 					if (!content.startsWith("[") && idx != -1 && endIdx != -1)
 						fallback = deserializeJson!RequestToken(content[idx .. endIdx].strip);
-					send(ResponseMessage(fallback, ResponseError(ErrorCode.parseError)));
+					send(ResponseMessage(fallback, ResponseError(ErrorCode.parseError,
+						"Parse error: " ~ e.msg)));
 				}
 				catch (Exception e)
 				{
@@ -462,11 +507,23 @@ private:
 		if (!json.length || json.ptr[0] != '{' || json.ptr[json.length - 1] != '}')
 			throw new Exception("malformed request JSON, must be object");
 		auto slices = json.parseKeySlices!("id", "result", "error", "method", "params");
+
 		auto id = slices.id;
+		if (slices.result.length && slices.method.length
+			|| !slices.result.length && !slices.method.length && !slices.error.length)
+		{
+			ResponseMessage res;
+			if (id.length)
+				res.id = id.deserializeJson!RequestToken;
+			res.error = ResponseError(ErrorCode.invalidRequest, "missing required members or has ambiguous members");
+			send(res);
+			return RequestMessageRaw.init;
+		}
+
 		bool isResponse = false;
 		if (id.length)
 		{
-			auto tok = RequestToken(id.deserializeJson!RequestToken);
+			auto tok = id.deserializeJson!RequestToken;
 			foreach (ref waiting; responseTokens)
 			{
 				if (!waiting.got && waiting.token == tok)
@@ -483,6 +540,13 @@ private:
 					break;
 				}
 			}
+
+			if (!isResponse && slices.result.length)
+			{
+				send(ResponseMessage(tok,
+					ResponseError(ErrorCode.invalidRequest, "unknown request response ID")));
+				return RequestMessageRaw.init;
+			}
 		}
 		if (!isResponse)
 		{
@@ -498,11 +562,14 @@ private:
 				&& request.paramsJson.ptr[0] != '['
 				&& request.paramsJson.ptr[0] != '{')
 			{
-				send(ResponseMessage(request.id,
-					ResponseError(ErrorCode.invalidParams,
-						"`params` MUST be an object (named arguments) or array "
-						~ "(positional arguments), other types are not allowed by spec"
-				)));
+				auto err = ResponseError(ErrorCode.invalidParams,
+					"`params` MUST be an object (named arguments) or array "
+					~ "(positional arguments), other types are not allowed by spec"
+				);
+				if (request.id.isNone)
+					send(ResponseMessage(null, err));
+				else
+					send(ResponseMessage(RequestToken(request.id.deref), err));
 			}
 			else
 			{
@@ -519,27 +586,33 @@ unittest
 	import served.lsp.protocol;
 	import std.process;
 
-	auto rpcPipe = pipe();
-	File writer = rpcPipe.writeEnd;
-	auto resultPipe = pipe();
-	File results = resultPipe.readEnd;
+	Pipe rpcPipe;
+	Pipe resultPipe;
 
-	void writePacket(string s)
+	void writePacket(string s, string epilogue = "", string prologue = "")
 	{
-		writer.lockingBinaryWriter.put(text("Content-Length: ", s.length, "\r\n\r\n", s));
-		writer.flush();
+		with (rpcPipe.writeEnd.lockingBinaryWriter)
+		{
+			put(prologue);
+			put("Content-Length: ");
+			put(s.length.to!string);
+			put("\r\n\r\n");
+			put(s);
+			put(epilogue);
+		}
+		rpcPipe.writeEnd.flush();
 	}
 
 	string readPacket()
 	{
-		auto lenStr = results.readln();
+		auto lenStr = resultPipe.readEnd.readln();
 		assert(lenStr.startsWith("Content-Length: "));
 		auto len = lenStr["Content-Length: ".length .. $].strip.to!int;
-		results.readln();
+		resultPipe.readEnd.readln();
 		ubyte[] buf = new ubyte[len];
 		size_t i;
-		while (!results.eof && i < buf.length)
-			i += results.rawRead(buf[i .. $]).length;
+		while (!resultPipe.readEnd.eof && i < buf.length)
+			i += resultPipe.readEnd.rawRead(buf[i .. $]).length;
 		assert(i == buf.length);
 		return cast(string)buf;
 	}
@@ -550,29 +623,190 @@ unittest
 		assert(res == s, res);
 	}
 
-	auto rpcInput = newFileReader(rpcPipe.readEnd);
-	rpcInput.start();
-	scope (exit)
-		rpcInput.stop();
+	void testRPC(void delegate(RPCProcessor rpc) cb)
+	{
+		rpcPipe = pipe();
+		resultPipe = pipe();
 
-	auto rpc = new RPCProcessor(rpcInput, resultPipe.writeEnd);
-	rpc.call();
-	InitializeParams initializeParams = {
-		processId: 1234,
-		rootUri: "file:///root/uri",
-		capabilities: ClientCapabilities.init
-	};
-	auto tok = rpc.sendMethod("initialize", initializeParams);
-	auto waitHandle = rpc.prepareWait(tok);
-	expectPacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
-	writePacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","result":{"capabilities":{}}}`);
-	rpc.call();
-	auto res = rpc.resolveWait(waitHandle);
-	assert(res.resultJson == `{"capabilities":{}}`);
+		auto rpcInput = newFileReader(rpcPipe.readEnd);
+		rpcInput.start();
+		scope (exit)
+		{
+			rpcInput.stop();
+			Thread.sleep(1.msecs);
+		}
 
-	rpc.stop();
-	rpc.call();
-	assert(rpc.state == Fiber.State.TERM);
+		auto rpc = new RPCProcessor(rpcInput, resultPipe.writeEnd);
+		rpc.call();
+
+		cb(rpc);
+
+		rpc.stop();
+		rpc.call();
+		assert(rpc.state == Fiber.State.TERM);
+	}
+
+	testRPC((rpc) { /* test immediate close */ });
+
+	foreach (i; 0 .. 2)
+	testRPC((rpc) {
+		InitializeParams initializeParams = {
+			processId: 1234,
+			rootUri: "file:///root/uri",
+			capabilities: ClientCapabilities.init
+		};
+		auto tok = rpc.sendMethod("initialize", initializeParams);
+		auto waitHandle = rpc.prepareWait(tok);
+		expectPacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
+		writePacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","result":{"capabilities":{}}}`);
+		rpc.call();
+		Thread.sleep(1.hnsecs);
+		rpc.call();
+		assert(rpc.hasResponse(waitHandle));
+		auto res = rpc.resolveWait(waitHandle);
+		assert(res.resultJson == `{"capabilities":{}}`);
+	});
+
+	// test close after unfinished message (e.g. client crashed)
+	testRPC((rpc) {
+		rpcPipe.writeEnd.lockingBinaryWriter.put("Content-Length: 5\r\n\r\n");
+		rpcPipe.writeEnd.flush();
+		rpc.call();
+		Thread.sleep(1.msecs);
+		rpc.call();
+	});
+	testRPC((rpc) {
+		rpcPipe.writeEnd.lockingBinaryWriter.put("Content-Length: 5\r\n\r\ntrue");
+		rpcPipe.writeEnd.flush();
+		rpc.call();
+		Thread.sleep(1.msecs);
+		rpc.call();
+	});
+
+	// test unlucky buffering
+	testRPC((rpc) {
+		void slowIO()
+		{
+			rpc.call();
+			Thread.sleep(1.msecs);
+			rpc.call();
+		}
+
+		InitializeParams initializeParams = {
+			processId: 1234,
+			rootUri: "file:///root/uri",
+			capabilities: ClientCapabilities.init
+		};
+		auto tok = rpc.sendMethod("initialize", initializeParams);
+		auto waitHandle = rpc.prepareWait(tok);
+		expectPacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
+		auto s = `{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","result":{"capabilities":{}}}`;
+		rpcPipe.writeEnd.lockingBinaryWriter.put("Content-Length: ");
+		rpcPipe.writeEnd.flush();
+		slowIO();
+		assert(!rpc.hasResponse(waitHandle));
+		rpcPipe.writeEnd.lockingBinaryWriter.put(s.length.to!string);
+		rpcPipe.writeEnd.flush();
+		slowIO();
+		assert(!rpc.hasResponse(waitHandle));
+		rpcPipe.writeEnd.lockingBinaryWriter.put("\r\n\r\n");
+		rpcPipe.writeEnd.flush();
+		slowIO();
+		assert(!rpc.hasResponse(waitHandle));
+		rpcPipe.writeEnd.lockingBinaryWriter.put(s[0 .. $ / 2]);
+		rpcPipe.writeEnd.flush();
+		slowIO();
+		assert(!rpc.hasResponse(waitHandle));
+		rpcPipe.writeEnd.lockingBinaryWriter.put(s[$ / 2 .. $]);
+		rpcPipe.writeEnd.flush();
+		slowIO();
+		assert(rpc.hasResponse(waitHandle));
+		auto res = rpc.resolveWait(waitHandle);
+		assert(res.resultJson == `{"capabilities":{}}`);
+	});
+
+	// test spec-resiliance with whitespace before/after message
+	foreach (pair; [["", "\r\n"], ["\r\n", ""], ["\r\n\r\n", "\r\n\r\n"]])
+	testRPC((rpc) {
+		InitializeParams initializeParams = {
+			processId: 1234,
+			rootUri: "file:///root/uri",
+			capabilities: ClientCapabilities.init
+		};
+		auto tok = rpc.sendMethod("initialize", initializeParams);
+		auto waitHandle = rpc.prepareWait(tok);
+		expectPacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
+		writePacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","result":{"capabilities":{}}}`, pair[1], pair[0]);
+		rpc.call();
+		Thread.sleep(1.msecs);
+		rpc.call();
+		assert(rpc.hasResponse(waitHandle));
+		auto res = rpc.resolveWait(waitHandle);
+		assert(res.resultJson == `{"capabilities":{}}`);
+
+		writePacket(`{"jsonrpc":"2.0","id":"sendtest","method":"test","params":{"x":{"a":4}}}`, pair[1], pair[0]);
+		rpc.call();
+		Thread.sleep(1.msecs);
+		rpc.call();
+		assert(rpc.hasData);
+		auto msg = rpc.poll;
+		assert(!msg.id.isNone);
+		assert(msg.id.deref == "sendtest");
+		assert(msg.method == "test");
+		assert(msg.paramsJson == `{"x":{"a":4}}`);
+	});
+
+	// test error handling
+	testRPC((rpc) {
+		InitializeParams initializeParams = {
+			processId: 1234,
+			rootUri: "file:///root/uri",
+			capabilities: ClientCapabilities.init
+		};
+		auto tok = rpc.sendMethod("initialize", initializeParams);
+		auto waitHandle = rpc.prepareWait(tok);
+		expectPacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
+		writePacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","result":{"capabilities":{}}}`);
+		rpc.call();
+		Thread.sleep(1.msecs);
+		rpc.call();
+		assert(rpc.hasResponse(waitHandle));
+		auto res = rpc.resolveWait(waitHandle);
+		assert(res.resultJson == `{"capabilities":{}}`);
+
+		void errorTest(string send, string recv)
+		{
+			writePacket(send);
+			rpc.call();
+			Thread.sleep(1.msecs);
+			rpc.call();
+			expectPacket(recv);
+		}
+
+		errorTest(`{"jsonrpc":"2.0","id":"invalid-token","result":{"capabilities":{}}}`,
+			`{"jsonrpc":"2.0","id":"invalid-token","error":{"code":-32600,"message":"unknown request response ID"}}`);
+
+		// twice to see that the same error gets handled
+		errorTest(`{"jsonrpc":"2.0","id":"invalid-token","result":{"capabilities":{}}}`,
+			`{"jsonrpc":"2.0","id":"invalid-token","error":{"code":-32600,"message":"unknown request response ID"}}`);
+
+		errorTest(`{"jsonrpc": "2.0", "method": "foobar, "params": "bar", "baz]`,
+			`{"jsonrpc":"2.0","id":null,"error":{"code":-32700,"message":"Parse error: malformed request JSON, must be object"}}`);
+
+		errorTest(`[]`,
+			`{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"Empty batch request"}}`);
+
+		errorTest(`[{}]`,
+			`{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"missing required members or has ambiguous members"}}`);
+
+		writePacket(`[{},{},{}]`);
+		rpc.call();
+		Thread.sleep(1.msecs);
+		rpc.call();
+		expectPacket(`{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"missing required members or has ambiguous members"}}`);
+		expectPacket(`{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"missing required members or has ambiguous members"}}`);
+		expectPacket(`{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"missing required members or has ambiguous members"}}`);
+	});
 }
 
 /// Utility functions for common LSP methods performing UI things.
