@@ -14,6 +14,8 @@ import std.process;
 import std.stdio;
 import std.string;
 
+__gshared bool debugMode;
+
 void main(string[] args)
 {
 	version (Windows)
@@ -21,7 +23,14 @@ void main(string[] args)
 	else
 		string exePath = `./null_server/null_server`;
 
-	auto pipes = pipeProcess(exePath, Redirect.all);
+	string[] invocationArgs = [exePath];
+	if (args.length > 1 && args[1] == "debug")
+	{
+		debugMode = true;
+		invocationArgs = ["gdbserver", "127.0.0.1:2345", exePath];
+	}
+
+	auto pipes = pipeProcess(invocationArgs, Redirect.all);
 	scope (exit)
 	{
 		pipes.stdin.close();
@@ -208,7 +217,7 @@ void assertContainsJson(JSONValue doesThis, JSONValue containAllOfThis, int maxD
 		foreach (key, value; containAllOfThis.object)
 		{
 			auto a = key in doesThis.object;
-			assert(a);
+			assert(a, "missing key \"" ~ key ~ "\" in " ~ doesThis.toString);
 			(*a).assertContainsJson(value, maxDepth - 1);
 		}
 		break;
@@ -227,7 +236,12 @@ bool startsWithSI(scope const(char)[] doesThis, scope const(char)[] startWithThi
 		&& sicmp(doesThis[0 .. startWithThis.length], startWithThis) == 0;
 }
 
-auto terminateTimeout(ref ProcessPipes pipes, Duration timeout = 5.seconds)
+auto terminateTimeout(ref ProcessPipes pipes)
+{
+	return terminateTimeout(pipes, debugMode ? 2.minutes : 5.seconds);
+}
+
+auto terminateTimeout(ref ProcessPipes pipes, Duration timeout)
 {
 	static struct ScopeGuard
 	{
@@ -345,7 +359,7 @@ JSONValue readPacket(ref ProcessPipes pipes, int expectId = -1)
 		}
 
 		if (contentLength == 0)
-			throw new Exception("Read headers but there was no content length");
+			throw new Exception("missing content length / empty packet");
 
 		static ubyte[] buffer;
 		if (buffer.length < contentLength)
