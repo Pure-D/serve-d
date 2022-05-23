@@ -81,7 +81,9 @@ version (Posix) class PosixStdinReader : PosixFileReader
 {
 	this()
 	{
-		super(stdin);
+		File f;
+		f.fdopen(0); // use stdin even if std.stdio.stdin is changed
+		super(f);
 	}
 }
 
