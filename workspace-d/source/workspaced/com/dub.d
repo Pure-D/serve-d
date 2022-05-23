@@ -723,11 +723,14 @@ struct PackageBuildSettings
 	/// construct from dub build settings
 	this(BuildSettings dubBuildSettings, string packagePath, string packageName, string recipePath)
 	{
-		foreach (i, ref val; this.tupleof[0 .. __IGNORE_TRAIL])
+		foreach (i, ref val; this.tupleof)
 		{
-			enum name = __traits(identifier, this.tupleof[i]);
-			static if (__traits(hasMember, dubBuildSettings, name))
+			alias attr = __traits(getAttributes, this.tupleof[i]);
+			static if (attr.length == 0 || !__traits(isSame, attr[0], ignoreCopy))
+			{
+				enum name = __traits(identifier, this.tupleof[i]);
 				val = __traits(getMember, dubBuildSettings, name);
+			}
 		}
 		this.packagePath = packagePath;
 		this.packageName = packageName;
@@ -754,8 +757,13 @@ struct PackageBuildSettings
 		}
 	}
 
+	private enum ignoreCopy; // UDA for ignored values on copy
+
+	@ignoreCopy
 	string packagePath;
+	@ignoreCopy
 	string packageName;
+	@ignoreCopy
 	string recipePath;
 
 	string targetPath; /// same as dub BuildSettings
@@ -784,7 +792,7 @@ struct PackageBuildSettings
 	string[] preRunCommands; /// same as dub BuildSettings
 	string[] postRunCommands; /// same as dub BuildSettings
 
-	private enum __IGNORE_TRAIL = 2; // number of ignored settings below this line
+	@ignoreCopy:
 
 	string targetType; /// same as dub BuildSettings
 	string[] buildOptions; /// same as dub BuildSettings
