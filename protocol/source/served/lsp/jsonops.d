@@ -449,3 +449,92 @@ bool looksLikeJsonArray(scope const(char)[] jsonString)
 		&& jsonString.ptr[0] == '['
 		&& jsonString.ptr[jsonString.length - 1] == ']';
 }
+
+bool isValidJsonStringContent(scope const(char)[] jsonString)
+{
+	foreach (char c; jsonString)
+		if (c == '"' || c == '\\' || c < 0x20)
+			return false;
+	return true;
+}
+
+const(inout(char))[] escapeJsonStringContent(scope return inout(char)[] str)
+{
+	import std.ascii : hexDigits;
+	import std.array;
+
+	if (isValidJsonStringContent(str))
+		return str;
+
+	auto ret = appender!string;
+	ret.reserve(str.length);
+	foreach (char c; str)
+	{
+		if (c == '"' || c == '\\')
+		{
+			ret.put('\\');
+			ret.put(c);
+		}
+		else if (c < 0x20)
+		{
+			if (c < 0x10)
+				ret.put("\\u000");
+			else
+				ret.put("\\u001");
+			ret.put(hexDigits[c & 0xF]);
+		}
+		else
+		{
+			ret.put(c);
+		}
+	}
+	return ret.data;
+}
+
+unittest
+{
+	string test = "hello";
+	assert(test.escapeJsonStringContent is test);
+	test = `hel"lo`;
+	assert(test.escapeJsonStringContent == `hel\"lo`);
+
+	string[] expected = [
+		`\u0000`,
+		`\u0001`,
+		`\u0002`,
+		`\u0003`,
+		`\u0004`,
+		`\u0005`,
+		`\u0006`,
+		`\u0007`,
+		`\u0008`,
+		`\u0009`,
+		`\u000A`,
+		`\u000B`,
+		`\u000C`,
+		`\u000D`,
+		`\u000E`,
+		`\u000F`,
+		`\u0010`,
+		`\u0011`,
+		`\u0012`,
+		`\u0013`,
+		`\u0014`,
+		`\u0015`,
+		`\u0016`,
+		`\u0017`,
+		`\u0018`,
+		`\u0019`,
+		`\u001A`,
+		`\u001B`,
+		`\u001C`,
+		`\u001D`,
+		`\u001E`,
+		`\u001F`,
+	];
+	foreach (i; 0 .. 0x1F)
+	{
+		char[] testStr = [cast(char)i];
+		assert(testStr.escapeJsonStringContent == expected[i]);
+	}
+}

@@ -217,6 +217,20 @@ class RPCProcessor : Fiber
 		sendRawPacket(parts[]);
 	}
 
+	void registerCapability(T)(scope const(char)[] id, scope const(char)[] method, T options)
+	{
+		const(char)[][7] parts = [
+			`{"jsonrpc":"2.0","method":"client/registerCapability","registrations":[{"id":"`,
+			id.escapeJsonStringContent,
+			`","method":"`,
+			method.escapeJsonStringContent,
+			`","registerOptions":`,
+			options.serializeJson,
+			`]}`
+		];
+		sendRawPacket(parts[]);
+	}
+
 	/// Sends a request with the given `method` name to the other RPC side without any parameters.
 	/// Doesn't handle the response by the other RPC side.
 	/// Returns: a RequestToken to use with $(LREF awaitResponse) to get the response. Can be ignored if the response isn't important.
