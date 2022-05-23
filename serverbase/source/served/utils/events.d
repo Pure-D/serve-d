@@ -200,7 +200,7 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 			{
 				ResponseError error;
 				error.code = ErrorCode.invalidParams;
-				error.message = "Failed converting input parameter " ~ params.toPrettyString ~ " to needed type `" ~ T.stringof ~ "`: " ~ e.msg;
+				error.message = "Failed converting input parameter " ~ params ~ " to needed type `" ~ T.stringof ~ "`: " ~ e.msg;
 				error.data = JsonValue(e.toString);
 				throw new MethodException(error);
 			}

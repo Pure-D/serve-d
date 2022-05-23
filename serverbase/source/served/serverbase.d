@@ -68,6 +68,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 	import core.thread;
 
 	import served.lsp.filereader;
+	import served.lsp.jsonops;
 	import served.lsp.jsonrpc;
 	import served.lsp.protocol;
 	import served.lsp.textdocumentmanager;
@@ -118,7 +119,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		size_t numHandlers;
 		eventProcessor.emitProtocol!(protocolMethod, (name, callSymbol, uda) {
 			numHandlers++;
-		}, false)(msg.method, msg.params);
+		}, false)(msg.method, msg.paramsJson);
 
 		// trace("Function ", msg.method, " has ", numHandlers, " handlers");
 		if (numHandlers == 0)
@@ -128,21 +129,18 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			return res;
 		}
 
-		JSONValue workDoneToken, partialResultToken;
-		if (msg.params.type == JSONType.object)
+		string workDoneToken, partialResultToken;
+		if (msg.paramsJson.looksLikeJsonObject)
 		{
-			if (auto doneToken = "workDoneToken" in msg.params)
-				workDoneToken = *doneToken;
-			if (auto partialToken = "partialResultToken" in msg.params)
-				partialResultToken = *partialToken;
+			auto v = msg.paramsJson.parseKeySlices!("workDoneToken", "partialResultToken");
+			workDoneToken = v.workDoneToken;
+			partialResultToken = v.partialResultToken;
 		}
 
 		int working = 0;
-		JSONValue[] partialResults;
+		string[] partialResults;
 		void handlePartialWork(Symbol, Arguments)(Symbol fn, Arguments args)
 		{
-			import painlessjson : toJSON;
-
 			working++;
 			pushFiber({
 				scope (exit)
@@ -151,15 +149,12 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				trace("Partial ", thisId, " / ", numHandlers, "...");
 				auto result = fn(args.expand);
 				trace("Partial ", thisId, " = ", result);
-				JSONValue json = toJSON(result);
-				if (partialResultToken == JSONValue.init)
+				auto json = result.serializeJson;
+				if (!partialResultToken.length)
 					partialResults ~= json;
 				else
-					rpc.notifyMethod("$/progress", JSONValue([
-						"token": partialResultToken,
-						"value": json
-					]));
-				processRequestObservers(msg, json);
+					rpc.notifyProgressRaw(partialResultToken, json);
+				processRequestObservers(msg, result);
 			});
 		}
 
@@ -173,10 +168,10 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				trace("Calling ", name);
 				alias RequestResultT = typeof(symbol(arguments.expand));
 
-				static if (is(RequestResultT : JSONValue))
+				static if (is(RequestResultT : JsonValue))
 				{
 					auto requestResult = symbol(arguments.expand);
-					res.result = requestResult;
+					res.resultJson = requestResult.serializeJson;
 					done = true;
 					processRequestObservers(msg, requestResult);
 				}
@@ -194,15 +189,15 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 						~ msg.method ~ " handler on non-partial method returning "
 						~ RequestResultT.stringof);
 					auto requestResult = symbol(arguments.expand);
-					res.result = toJSON(requestResult);
+					res.resultJson = requestResult.serializeJson;
 					done = true;
 					processRequestObservers(msg, requestResult);
 				}
-			}, false)(msg.method, msg.params);
+			}, false)(msg.method, msg.paramsJson);
 		}
 		catch (MethodException e)
 		{
-			res.result.nullify();
+			res.resultJson = null;
 			res.error = e.error;
 			return res;
 		}
@@ -214,15 +209,26 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			while (working > 0)
 				Fiber.yield();
 
-			if (partialResultToken == JSONValue.init)
+			if (!partialResultToken.length)
 			{
-				JSONValue[] combined;
+				size_t reservedLength = 1 + partialResults.length;
 				foreach (partial; partialResults)
 				{
-					assert(partial.type == JSONType.array);
-					combined ~= partial.array;
+					assert(partial.looksLikeJsonArray);
+					reservedLength += partial.length - 2;
 				}
-				res.result = JSONValue(combined);
+				char[] resJson = new char[reservedLength];
+				size_t i = 0;
+				resJson.ptr[i++] = '[';
+				foreach (partial; partialResults)
+				{
+					assert(i + partial.length - 2 < resJson.length);
+					resJson.ptr[i .. i += (partial.length - 2)] = partial[1 .. $ - 1];
+					resJson.ptr[i++] = ',';
+				}
+				assert(i == resJson.length);
+				resJson.ptr[reservedLength - 1] = ']';
+				res.resultJson = cast(string)resJson;
 			}
 			else
 			{
@@ -234,7 +240,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 	}
 
 	// calls @postProcotolMethod methods for the given request
-	private void processRequestObservers(T)(RequestMessage msg, T result)
+	private void processRequestObservers(T)(RequestMessageRaw msg, T result)
 	{
 		eventProcessor.emitProtocol!(postProtocolMethod, (name, callSymbol, uda) {
 			try
@@ -245,7 +251,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			{
 				error("Error in post-protocolMethod: ", e);
 			}
-		}, false)(msg.method, msg.params, result);
+		}, false)(msg.method, msg.paramsJson, result);
 	}
 
 	void processNotify(RequestMessageRaw msg)
@@ -291,13 +297,13 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			{
 				error("Failed notify: ", e);
 			}
-		}, false)(msg.method, msg.params);
+		}, false)(msg.method, msg.paramsJson);
 	}
 
-	void delegate() gotRequest(RequestMessage msg)
+	void delegate() gotRequest(RequestMessageRaw msg)
 	{
 		return {
-			ResponseMessage res;
+			ResponseMessageRaw res;
 			try
 			{
 				res = processRequest(msg);
@@ -305,14 +311,16 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			catch (Exception e)
 			{
 				res.id = msg.id;
-				res.error = ResponseError(e);
-				res.error.code = ErrorCode.internalError;
+				auto err = ResponseError(e);
+				err.code = ErrorCode.internalError;
+				res.error = err;
 			}
 			catch (Throwable e)
 			{
 				res.id = msg.id;
-				res.error = ResponseError(e);
-				res.error.code = ErrorCode.internalError;
+				auto err = ResponseError(e);
+				err.code = ErrorCode.internalError;
+				res.error = err;
 				rpc.window.showMessage(MessageType.error,
 						"A fatal internal error occured in "
 						~ serverConfig.productName
@@ -323,7 +331,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		};
 	}
 
-	void delegate() gotNotify(RequestMessage msg)
+	void delegate() gotNotify(RequestMessageRaw msg)
 	{
 		return {
 			try
