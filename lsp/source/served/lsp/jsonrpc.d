@@ -23,7 +23,7 @@ class RPCProcessor : Fiber
 	/// Creates this fiber with a reasonable fiber size.
 	this(FileReader reader, File writer)
 	{
-		super(&run, 4096 * 8);
+		super(&run, 4096 * 32);
 		this.reader = reader;
 		this.writer = writer;
 	}
