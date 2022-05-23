@@ -609,6 +609,7 @@ struct RequestMessageRaw
 }
 
 ///
+@serdeEnumProxy!int
 enum ErrorCode
 {
 	/// Invalid JSON was received by the server.
@@ -778,6 +779,7 @@ struct ShowMessageParams
 	string message;
 }
 
+@serdeEnumProxy!int
 enum MessageType
 {
 	error = 1,
@@ -1065,6 +1067,7 @@ struct DiagnosticRelatedInformation
 	string message;
 }
 
+@serdeEnumProxy!int
 enum DiagnosticSeverity
 {
 	error = 1,
@@ -1073,6 +1076,7 @@ enum DiagnosticSeverity
 	hint
 }
 
+@serdeEnumProxy!int
 enum DiagnosticTag
 {
 	unnecessary = 1,
@@ -1277,6 +1281,7 @@ struct DynamicRegistration
 	@serdeOptional Optional!bool dynamicRegistration;
 }
 
+@serdeEnumProxy!string
 enum ResourceOperationKind : string
 {
 	create = "create",
@@ -1284,6 +1289,7 @@ enum ResourceOperationKind : string
 	delete_ = "delete"
 }
 
+@serdeEnumProxy!string
 enum FailureHandlingKind : string
 {
 	abort = "abort",
@@ -1296,10 +1302,21 @@ enum FailureHandlingKind : string
 struct WorkspaceEditClientCapabilities
 {
 	@serdeOptional Optional!bool documentChanges;
-	@serdeOptional Optional!(string[]) resourceOperations;
-	@serdeOptional Optional!string failureHandling;
+	@serdeOptional Optional!(ResourceOperationKind[]) resourceOperations;
+	@serdeOptional Optional!FailureHandlingKind failureHandling;
 	@serdeOptional Optional!bool normalizesLineEndings;
 	@serdeOptional Optional!ChangeAnnotationWorkspaceEditClientCapabilities changeAnnotationSupport;
+}
+
+unittest
+{
+	WorkspaceEditClientCapabilities cap = {
+		documentChanges: true,
+		resourceOperations: [ResourceOperationKind.delete_],
+		failureHandling: FailureHandlingKind.textOnlyTransactional
+	};
+
+	assert(cap.serializeJson == `{"documentChanges":true,"resourceOperations":["delete"],"failureHandling":"textOnlyTransactional"}`);
 }
 
 @serdeFallbackStruct
@@ -1350,6 +1367,7 @@ struct MonikerParams
 	Position position;
 }
 
+@serdeEnumProxy!string
 enum UniquenessLevel : string
 {
 	document = "document",
@@ -1359,6 +1377,7 @@ enum UniquenessLevel : string
 	global = "global"
 }
 
+@serdeEnumProxy!string
 enum MonikerKind : string
 {
 	import_ = "import",
@@ -1543,6 +1562,7 @@ struct TextDocumentSyncClientCapabilities
 	@serdeOptional Optional!bool didSave;
 }
 
+@serdeEnumProxy!int
 enum TextDocumentSyncKind
 {
 	none,
@@ -1595,6 +1615,18 @@ struct ServerCapabilities
 	@serdeOptional OptionalJsonValue experimental;
 }
 
+unittest
+{
+	CodeActionOptions cao = {
+		codeActionKinds: [CodeActionKind.refactor, CodeActionKind.sourceOrganizeImports, cast(CodeActionKind)"CustomKind"]
+	};
+	ServerCapabilities cap = {
+		textDocumentSync: TextDocumentSyncKind.incremental,
+		codeActionProvider: cao
+	};
+	assert(cap.serializeJson == `{"textDocumentSync":2,"codeActionProvider":{"codeActionKinds":["refactor","source.organizeImports","CustomKind"]}}`, cap.serializeJson);
+}
+
 @serdeFallbackStruct
 struct ServerWorkspaceCapabilities
 {
@@ -1626,6 +1658,7 @@ struct FileOperationRegistrationOptions
 	FileOperationFilter[] filters;
 }
 
+@serdeEnumProxy!string
 enum FileOperationPatternKind : string
 {
 	file = "file",
@@ -1792,6 +1825,7 @@ struct WillSaveTextDocumentParams
 	TextDocumentSaveReason reason;
 }
 
+@serdeEnumProxy!int
 enum TextDocumentSaveReason
 {
 	manual = 1,
@@ -1824,14 +1858,24 @@ struct DidCloseTextDocumentParams
 struct FileSystemWatcher
 {
 	string globPattern;
-	@serdeOptional Optional!uint kind;
+	@serdeOptional Optional!WatchKind kind;
 }
 
+@serdeEnumProxy!int
 enum WatchKind
 {
 	create = 1,
 	change = 2,
 	delete_ = 4
+}
+
+unittest
+{
+	FileSystemWatcher w = {
+		globPattern: "**/foo.d",
+		kind: WatchKind.change | WatchKind.delete_
+	};
+	assert(w.serializeJson == `{"globPattern":"**/foo.d","kind":6}`);
 }
 
 @serdeFallbackStruct
@@ -1859,6 +1903,7 @@ struct FileEvent
 	FileChangeType type;
 }
 
+@serdeEnumProxy!int
 enum FileChangeType
 {
 	created = 1,
@@ -1896,7 +1941,7 @@ struct WorkspaceSymbolParams
 struct PublishDiagnosticsClientCapabilities
 {
 	@serdeOptional Optional!bool relatedInformation;
-	@serdeOptional Optional!(ValueSet!SymbolTag) tagSupport;
+	@serdeOptional Optional!(ValueSet!DiagnosticTag) tagSupport;
 	@serdeOptional Optional!bool versionSupport;
 	@serdeOptional Optional!bool codeDescriptionSupport;
 	@serdeOptional Optional!bool dataSupport;
@@ -1927,6 +1972,7 @@ struct CompletionParams
 	@serdeOptional Optional!CompletionContext context;
 }
 
+@serdeEnumProxy!int
 enum CompletionTriggerKind
 {
 	invoked = 1,
@@ -1948,12 +1994,14 @@ struct CompletionList
 	CompletionItem[] items;
 }
 
+@serdeEnumProxy!int
 enum InsertTextFormat
 {
 	plainText = 1,
 	snippet
 }
 
+@serdeEnumProxy!int
 enum CompletionItemTag
 {
 	deprecated_ = 1
@@ -1995,6 +2043,7 @@ unittest
 	assert(strS.deserializeJson!Struct == str, strS.deserializeJson!Struct.to!string ~ " !=\n" ~ str.to!string);
 }
 
+@serdeEnumProxy!int
 enum InsertTextMode
 {
 	asIs = 1,
@@ -2081,6 +2130,7 @@ unittest
 		assert(deserializeJson!CompletionItem(v.serializeJson) == v, v.to!string ~ " !=\n" ~ v.serializeJson.deserializeJson!CompletionItem.to!string);
 }
 
+@serdeEnumProxy!int
 enum CompletionItemKind
 {
 	text = 1,
@@ -2151,6 +2201,7 @@ struct MarkedString
 	string language;
 }
 
+@serdeEnumProxy!string
 enum MarkupKind : string
 {
 	plaintext = "plaintext",
@@ -2251,6 +2302,7 @@ struct SignatureHelpParams
 	@serdeOptional Optional!SignatureHelpContext context;
 }
 
+@serdeEnumProxy!int
 enum SignatureHelpTriggerKind
 {
 	invoked = 1,
@@ -2487,6 +2539,7 @@ struct DocumentHighlight
 	@serdeOptional Optional!DocumentHighlightKind kind;
 }
 
+@serdeEnumProxy!int
 enum DocumentHighlightKind
 {
 	text = 1,
@@ -2527,6 +2580,7 @@ struct DocumentSymbolParams
 	TextDocumentIdentifier textDocument;
 }
 
+@serdeEnumProxy!int
 enum SymbolKind
 {
 	file = 1,
@@ -2557,6 +2611,7 @@ enum SymbolKind
 	typeParameter
 }
 
+@serdeEnumProxy!int
 enum SymbolTag
 {
 	deprecated_ = 1
@@ -2638,6 +2693,7 @@ struct CodeActionParams
 	CodeActionContext context;
 }
 
+@serdeEnumProxy!string
 enum CodeActionKind : string
 {
 	empty = "",
@@ -2924,6 +2980,7 @@ struct DocumentOnTypeFormattingParams
 	FormattingOptions options;
 }
 
+@serdeEnumProxy!int
 enum PrepareSupportDefaultBehavior
 {
 	identifier = 1
@@ -2998,6 +3055,7 @@ struct FoldingRangeParams
 	TextDocumentIdentifier textDocument;
 }
 
+@serdeEnumProxy!string
 enum FoldingRangeKind : string
 {
 	comment = "comment",
@@ -3115,6 +3173,7 @@ struct CallHierarchyOutgoingCall
 	TextRange[] fromRanges;
 }
 
+@serdeEnumProxy!string
 enum SemanticTokenTypes : string
 {
 	namespace = "namespace",
@@ -3141,6 +3200,7 @@ enum SemanticTokenTypes : string
 	operator = "operator"
 }
 
+@serdeEnumProxy!string
 enum SemanticTokenModifiers : string
 {
 	declaration = "declaration",
@@ -3155,6 +3215,7 @@ enum SemanticTokenModifiers : string
 	defaultLibrary = "defaultLibrary"
 }
 
+@serdeEnumProxy!string
 enum TokenFormat : string
 {
 	relative = "relative"
