@@ -89,6 +89,35 @@ JsonValue toJsonValue(StdJSONValue value)
 	}
 }
 
+StdJSONValue toStdJSONValue(JsonValue value)
+{
+	final switch (value.kind)
+	{
+	case JsonValue.Kind.object:
+		auto obj = value.get!(StringMap!JsonValue);
+		StdJSONValue[string] ret;
+		foreach (kv; obj.byKeyValue)
+			ret[kv.key] = kv.value.toStdJSONValue;
+		return StdJSONValue(ret);
+	case JsonValue.Kind.array:
+		auto arr = value.get!(JsonValue[]);
+		StdJSONValue[] ret = new StdJSONValue[arr.length];
+		foreach (i, val; arr)
+			ret[i] = val.toStdJSONValue;
+		return StdJSONValue(ret);
+	case JsonValue.Kind.boolean:
+		return StdJSONValue(value.get!bool);
+	case JsonValue.Kind.null_:
+		return StdJSONValue(null);
+	case JsonValue.Kind.string:
+		return StdJSONValue(value.get!string);
+	case JsonValue.Kind.float_:
+		return StdJSONValue(value.get!double);
+	case JsonValue.Kind.integer:
+		return StdJSONValue(value.get!long);
+	}
+}
+
 JsonValue toJsonValue(T)(auto ref T value)
 {
 	return value.serializeJson.deserializeJson!JsonValue;
