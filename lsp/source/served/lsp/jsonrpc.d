@@ -316,12 +316,12 @@ class RPCProcessor : Fiber
 	///   args = the message parts to send
 	void log(MessageType type = MessageType.log, Args...)(Args args)
 	{
-		string[3] parts = [
+		scope const(char)[][3] parts = [
 			`{"jsonrpc":"2.0","method":"window/logMessage","params":`,
 			LogMessageParams(type, text(args)).serializeJson,
 			`}`
 		];
-		sendRawPacket(parts);
+		sendRawPacket(parts[]);
 	}
 
 	/// Returns: `true` if there has been any messages been sent to us from the other RPC side, otherwise `false`.
