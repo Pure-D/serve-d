@@ -6,6 +6,8 @@ public import mir.algebraic_alias.json : JsonValue = JsonAlgebraic, StringMap;
 
 deprecated("use serializeJson") StdJSONValue toJSON(T)(T value)
 {
+	import std.json : parseJSON;
+
 	return parseJSON(serializeJson(value));
 }
 
