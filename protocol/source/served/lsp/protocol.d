@@ -380,6 +380,23 @@ struct NoneType
 
 alias Optional(T) = Variant!(NoneType, T);
 alias OptionalJsonValue = Optional!JsonValue;
+template TypeFromOptional(T)
+{
+	alias Reduced = FilterNonNoneType!(T.AllowedTypes);
+	static assert(Reduced.length == 1, "got optional without exactly a single type: " ~ T.AllowedTypes.stringof);
+	static assert(!isVariant!(Reduced[0]), "failed to reduce " ~ T.stringof ~ " - " ~ Reduced[0].stringof);
+	alias TypeFromOptional = Reduced[0];
+}
+
+private template FilterNonNoneType(T...)
+{
+	static if (!T.length)
+		alias FilterNonNoneType = AliasSeq!();
+	else static if (is(immutable T[0] == immutable NoneType))
+		alias FilterNonNoneType = AliasSeq!(FilterNonNoneType!(T[1 .. $]));
+	else
+		alias FilterNonNoneType = AliasSeq!(T[0], FilterNonNoneType!(T[1 .. $]));
+}
 
 bool isNone(T)(T v)
 if (isVariant!T)
@@ -399,6 +416,25 @@ if (isVariant!T)
 			throw new Exception("Attempted to get unset " ~ T.stringof);
 			return assert(false); // changes return type to bottom_t
 		},
+		ret => ret
+	);
+}
+
+/// ditto
+JsonValue deref(scope return inout OptionalJsonValue v)
+{
+	if (v.value._is!NoneType)
+		throw new Exception("Attempted to get unset JsonValue");
+	return v.value.get!JsonValue;
+}
+
+/// Returns the deref value from this optional or TypeFromOptional!T.init if
+/// set to none.
+TypeFromOptional!T orDefault(T)(scope return T v)
+if (isVariant!T)
+{
+	return v.match!(
+		(NoneType none) => TypeFromOptional!T.init,
 		ret => ret
 	);
 }
@@ -1191,12 +1227,14 @@ struct TextDocumentEdit
 
 alias TextEditCollection = TextEdit[];
 
+alias DocumentChange = StructVariant!(TextDocumentEdit, CreateFile, RenameFile, DeleteFile);
+
 @serdeFallbackStruct
 struct WorkspaceEdit
 {
 	TextEditCollection[DocumentUri] changes;
 
-	@serdeOptional Optional!(StructVariant!(TextDocumentEdit, CreateFile, RenameFile, DeleteFile)[]) documentChanges;
+	@serdeOptional Optional!(DocumentChange[]) documentChanges;
 	@serdeOptional Optional!(ChangeAnnotation[ChangeAnnotationIdentifier]) changeAnnotations;
 }
 
@@ -1523,6 +1561,7 @@ struct CompletionClientCapabilities
 		@serdeOptional Optional!bool insertReplaceSupport;
 		@serdeOptional Optional!ResolveSupport resolveSupport;
 		@serdeOptional Optional!(ValueSet!InsertTextMode) insertTextModeSupport;
+		@serdeOptional Optional!bool labelDetailsSupport;
 	}
 
 	@serdeOptional Optional!bool dynamicRegistration;
@@ -3440,4 +3479,12 @@ struct WorkspaceFoldersChangeEvent
 struct TraceParams
 {
 	string value;
+}
+
+unittest
+{
+	StringMap!JsonValue s;
+	assert(serializeJson(s) == `{}`);
+	s["hello"] = JsonValue("world");
+	assert(serializeJson(s) == `{"hello":"world"}`);
 }
