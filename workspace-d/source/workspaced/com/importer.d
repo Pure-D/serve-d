@@ -275,7 +275,7 @@ public import std.string;
 public import std.stdio;
 import std.traits;
 import std.algorithm;
-`;
+`.normLF;
 
 	//dfmt off
 	assertEqual(backend.get!ImporterComponent(workspace.directory).sortImports(code, 0), ImportBlock(0, 164, [
@@ -370,7 +370,7 @@ import std.algorithm;
 	// import std.array;
 	import std.path;
 	import std.file;
-}`;
+}`.normLF;
 
 	assertEqual(backend.get!ImporterComponent(workspace.directory).sortImports(code, 70), ImportBlock(62, 96, [
 		ImportInfo(["std", "file"]),
@@ -384,7 +384,7 @@ import std.algorithm;
 	import std.array; */
 	import std.path;
 	import std.file;
-}`;
+}`.normLF;
 
 	assertEqual(backend.get!ImporterComponent(workspace.directory).sortImports(code, 75), ImportBlock(63, 97, [
 		ImportInfo(["std", "file"]),

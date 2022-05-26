@@ -498,3 +498,11 @@ unittest
 	assert(extractPathSemver("foo-1.0.0x") is null);
 	assert(extractPathSemver("-1.0.0") == "1.0.0");
 }
+
+version (unittest)
+package string normLF(scope string str)
+{
+	import std.string : lineSplitter, join;
+
+	return str.lineSplitter.join("\n");
+}

@@ -300,7 +300,7 @@ void main()
 		"a": "b"
 	];
 	// dfmt on
-}`) == [
+}`.normLF) == [
 		DfmtInstruction(DfmtInstruction.Type.dfmtOn, 19, 3, 1, 10),
 		DfmtInstruction(DfmtInstruction.Type.dfmtOff, 45, 6, 2, 11),
 		DfmtInstruction(DfmtInstruction.Type.unknown, 77, 8, 2, 11),

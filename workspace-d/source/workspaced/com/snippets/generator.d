@@ -162,7 +162,7 @@ void map()
 	auto map = ["hello": "world", "key": "value"];
 	// key, value
 
-}`;
+}`.normLF;
 
 	SnippetInfo i;
 	SnippetLoopScope s;

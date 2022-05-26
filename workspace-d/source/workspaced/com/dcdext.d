@@ -2302,7 +2302,7 @@ unittest
 		default:
 			break;
 	}
-}`, 35) == [
+}`.normLF, 35) == [
 	Related(Related.Type.controlFlow, [14, 20]),
 	Related(Related.Type.controlFlow, [32, 36]),
 	Related(Related.Type.controlFlow, [43, 47]),
@@ -2549,7 +2549,7 @@ unittest
 			}
 		}
 	}
-}`, 88) == [
+}`.normLF, 88) == [
 	Related(Related.Type.controlFlow, [54, 60]),
 	Related(Related.Type.controlFlow, [73, 77]),
 	Related(Related.Type.controlFlow, [85, 90]),
@@ -2574,7 +2574,7 @@ unittest
 			}
 		}
 	}
-}`, 111) == [
+}`.normLF, 111) == [
 	Related(Related.Type.controlFlow, [32, 39]),
 	Related(Related.Type.controlFlow, [107, 115]),
 ]);
@@ -2596,7 +2596,7 @@ unittest
 			}
 		}
 	}
-}`, 15) == [
+}`.normLF, 15) == [
 	Related(Related.Type.controlFlow, [14, 19]),
 	Related(Related.Type.controlFlow, [133, 139]),
 ]);
@@ -2696,7 +2696,7 @@ unittest
 	bar();
 
 	return;
-}`, 33) == [
+}`.normLF, 33) == [
 	Related(Related.Type.controlFlow, [14, 21]),
 	Related(Related.Type.controlFlow, [31, 37]),
 	Related(Related.Type.controlFlow, [79, 85]),
