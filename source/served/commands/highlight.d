@@ -11,7 +11,7 @@ import workspaced.com.dcdext;
 @protocolMethod("textDocument/documentHighlight")
 DocumentHighlight[] provideDocumentHighlight(DocumentHighlightParams params)
 {
-	scope immutable document = documents[params.textDocument.uri].clone();
+	scope document = cast(immutable)documents[params.textDocument.uri].clone();
 	string file = document.uri.uriToFile;
 	auto currOffset = cast(int) document.positionToBytes(params.position);
 

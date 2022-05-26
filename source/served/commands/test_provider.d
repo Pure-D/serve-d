@@ -160,18 +160,13 @@ private void rescanProject(WorkspaceD.Instance instance)
 
 		auto uri = fullPath.uriFromFile;
 
-		bool tempLoad = documents.tryGet(uri) == Document.init;
-		if (tempLoad)
+		bool tempLoad;
+		try
+			documents.getOrFromFilesystem(uri, tempLoad);
+		catch (FileException e)
 		{
-			try
-			{
-				documents.loadFromFilesystem(uri);
-			}
-			catch (FileException e)
-			{
-				warningf("Failed to read file %s for tests: %s", fullPath, e);
-				continue;
-			}
+			warningf("Failed to read file %s for tests: %s", fullPath, e);
+			continue;
 		}
 
 		scope (exit)
