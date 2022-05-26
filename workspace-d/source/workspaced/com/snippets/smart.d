@@ -64,14 +64,14 @@ class SmartSnippetProvider : SnippetProvider
 
 		debug (SnippetScope)
 		{
-			import painlessjson : toJSON;
+			import mir.ser.json : serializeJson;
 
 			Snippet ret;
 			ret.providerId = typeid(this).name;
 			ret.id = "workspaced-snippet-debug";
 			ret.title = "[DEBUG] Snippet";
 			ret.shortcut = "__debug_snippet";
-			ret.plain = ret.snippet = info.toJSON.toPrettyString;
+			ret.plain = ret.snippet = info.serializeJson;
 			ret.unformatted = true;
 			ret.resolved = true;
 			res ~= ret;
