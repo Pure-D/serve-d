@@ -10,15 +10,6 @@ import std.range;
 
 import served.utils.memory;
 
-static if (__traits(compiles, { import workspaced.api : Future; }))
-{
-	import workspaced.api : Future;
-
-	enum hasFuture = true;
-}
-else
-	enum hasFuture = false;
-
 public import core.thread : Fiber, Thread;
 
 struct FiberManager
@@ -108,7 +99,9 @@ void joinAll(size_t fiberSize = 4096 * 48, Fibers...)(Fibers fibers)
 			{
 				static if (is(typeof(fib) : Fiber))
 					addFiber(fib);
-				else static if (hasFuture && is(typeof(fib) : Future!T, T))
+				else static if (__traits(hasMember, fib, "toFiber"))
+					addFiber(fib.toFiber);
+				else static if (__traits(hasMember, fib, "getYield"))
 					addFiber(new Fiber(&fib.getYield, fiberSize));
 				else
 					addFiber(new Fiber(fib, fiberSize));
@@ -118,7 +111,9 @@ void joinAll(size_t fiberSize = 4096 * 48, Fibers...)(Fibers fibers)
 		{
 			static if (is(typeof(fiber) : Fiber))
 				addFiber(fiber);
-			else static if (hasFuture && is(typeof(fiber) : Future!T, T))
+			else static if (__traits(hasMember, fiber, "toFiber"))
+				addFiber(fiber.toFiber);
+			else static if (__traits(hasMember, fiber, "getYield"))
 				addFiber(new Fiber(&fiber.getYield, fiberSize));
 			else
 				addFiber(new Fiber(fiber, fiberSize));
