@@ -8,7 +8,7 @@ import std.algorithm;
 import std.array : appender;
 import std.conv;
 import std.exception;
-import std.json : JSONType, JSONValue;
+import std.json : JSONValue;
 import std.parallelism;
 import std.regex;
 import std.stdio;
@@ -460,11 +460,8 @@ class DubComponent : ComponentWrapper
 
 	/// Selects a new arch type and updates the import paths accordingly
 	/// Returns: `false` if there are no import paths in the new arch type
-	bool setArchType(JSONValue request)
+	bool setArchType(string type)
 	{
-		enforce(request.type == JSONType.object && "arch-type" in request, "arch-type not in request");
-		auto type = request["arch-type"].str;
-
 		try
 		{
 			_platform = _compiler.determinePlatform(_settings, _compilerBinaryName, type);
@@ -486,10 +483,8 @@ class DubComponent : ComponentWrapper
 
 	/// Selects a new build type and updates the import paths accordingly
 	/// Returns: `false` if there are no import paths in the new build type
-	bool setBuildType(JSONValue request)
+	bool setBuildType(string type)
 	{
-		enforce(request.type == JSONType.object && "build-type" in request, "build-type not in request");
-		auto type = request["build-type"].str;
 		if (buildTypes.canFind(type))
 		{
 			_buildType = type;
@@ -717,6 +712,7 @@ struct BuildIssue
 	bool cont;
 }
 
+private enum ignoreCopy; // UDA for ignored values on copy
 /// returned by rootPackageBuildSettings
 struct PackageBuildSettings
 {
@@ -756,8 +752,6 @@ struct PackageBuildSettings
 				this.buildRequirements ~= enumMember;
 		}
 	}
-
-	private enum ignoreCopy; // UDA for ignored values on copy
 
 	@ignoreCopy
 	string packagePath;
