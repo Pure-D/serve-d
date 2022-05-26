@@ -1,1 +1,3 @@
 name "test-as-a-exe"
+
+dependency "serve-d:lsp" path="../.."

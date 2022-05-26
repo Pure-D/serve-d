@@ -1,10 +1,22 @@
 import std.bitmanip;
+import std.bitmanip;
 import std.conv;
 import std.file;
-import std.process;
-import std.string;
-import std.stdio;
+import std.functional;
 import std.json;
+import std.path;
+import std.process;
+import std.stdio;
+import std.string;
+import std.uuid;
+
+import core.thread;
+import core.thread.fiber;
+
+import served.lsp.filereader;
+import served.lsp.jsonrpc;
+import served.lsp.protocol;
+import served.lsp.uri;
 
 version (assert)
 {
@@ -12,131 +24,108 @@ version (assert)
 else
 	static assert(false, "Compile with asserts.");
 
+__gshared RPCProcessor rpc;
+__gshared string cwd;
+
+// https://forum.dlang.org/post/akucvkduasjlwgykkrzs@forum.dlang.org
+void copyDir(string inDir, string outDir)
+{
+	if (!exists(outDir))
+		mkdir(outDir);
+	else
+		if (!isDir(outDir))
+			throw new FileException(format("Destination path %s is not a folder.", outDir));
+
+	foreach (entry; dirEntries(inDir.idup, SpanMode.shallow))
+	{
+		auto fileName = baseName(entry.name);
+		auto destName = buildPath(outDir, fileName);
+		if (entry.isDir())
+			copyDir(entry.name, destName);
+		else
+			copy(entry.name, destName);
+	}
+}
+
 void main()
 {
-	writeln("TODO: LSP client test");
+	version (Windows)
+		string exe = `..\..\serve-d.exe`;
+	else
+		string exe = `../../serve-d`;
+
+	cwd = buildNormalizedPath(tempDir, randomUUID.toString);
+	copyDir("template", cwd);
+	writeln("temporary CWD: ", cwd);
+	scope (failure)
+		writeln("Keeping temporary directory for debugging purposes");
+	scope (success)
+		rmdirRecurse(cwd);
+
+	auto proc = pipeProcess([exe], Redirect.stdin | Redirect.stdout);
+
+	auto reader = new StdFileReader(proc.stdout);
+	reader.start();
+	scope (exit)
+		reader.stop();
+	rpc = new RPCProcessor(reader, proc.stdin);
+	auto testMethod = new Fiber(&doTests);
+	do
+	{
+		rpc.call();
+		testMethod.call();
+		Thread.sleep(1.msecs);
+	}
+	while (rpc.state != Fiber.State.TERM);
+	assert(testMethod.state == Fiber.State.TERM);
 	return;
 }
 
-void main2()
+void delegate(RequestMessage msg) gotRequest;
+void delegate(RequestMessage msg) gotNotify;
+
+shared static this()
 {
-	string dir = getcwd;
-	JSONValue response;
-
-	//scope backend = new WorkspaceD();
-	version (Windows)
-		auto backend = pipeProcess(["..\\..\\workspace-d.exe"], Redirect.stdout | Redirect.stdin);
-	else
-		auto backend = pipeProcess(["../../workspace-d"], Redirect.stdout | Redirect.stdin);
-
-	//auto instance = backend.addInstance(dir);
-	backend.stdin.writeRequest(10, `{"cmd": "new", "cwd": ` ~ JSONValue(dir).toString ~ `}`);
-	assert(backend.stdout.readResponse(10).type == JSONType.true_);
-
-	//backend.register!FSWorkspaceComponent;
-	backend.stdin.writeRequest(20,
-			`{"cmd": "load", "component": "fsworkspace", "cwd": ` ~ JSONValue(dir).toString ~ `}`);
-	assert(backend.stdout.readResponse(20).type == JSONType.true_);
-
-	//backend.register!DscannerComponent;
-	backend.stdin.writeRequest(21,
-			`{"cmd": "load", "component": "dscanner", "cwd": ` ~ JSONValue(dir).toString ~ `}`);
-	assert(backend.stdout.readResponse(21).type == JSONType.true_);
-
-	//auto fsworkspace = backend.get!FSWorkspaceComponent(dir);
-	//assert(instance.importPaths == [getcwd]);
-	backend.stdin.writeRequest(30, `{"cmd": "import-paths", "cwd": ` ~ JSONValue(dir).toString ~ `}`);
-	response = backend.stdout.readResponse(30);
-	assert(response.type == JSONType.array);
-	assert(response.array.length == 1);
-	assert(response.array[0].type == JSONType.string);
-	assert(response.array[0].str == getcwd);
-
-	//fsworkspace.addImports(["source"]);
-	backend.stdin.writeRequest(40,
-			`{"cmd": "call", "component": "fsworkspace", "method": "addImports", "params": [["source"]], "cwd": ` ~ JSONValue(
-				dir).toString ~ `}`);
-	backend.stdout.readResponse(40);
-
-	//dscanner.resolveRanges(code, ref issues);
-	backend.stdin.writeRequest(41,
-			`{"cmd": "call", "component": "dscanner", "method": "resolveRanges", "params": ["cool code", [{"file": "something.d", "line": 1, "column": 4, "type": "custom.type", "description": "custom description", "key": "custom.key"}]], "cwd": ` ~ JSONValue(
-				dir).toString ~ `}`);
-	response = backend.stdout.readResponse(41);
-	assert(response.type == JSONType.array);
-	assert(response.array.length == 1);
-	assert(response.array[0].type == JSONType.object);
-	assert(response.array[0].object["file"].str == "something.d");
-	assert(response.array[0].object["line"].integer == 1);
-	assert(response.array[0].object["column"].integer == 4);
-	assert(response.array[0].object["type"].str == "custom.type");
-	assert(response.array[0].object["description"].str == "custom description");
-	assert(response.array[0].object["key"].str == "custom.key");
-	assert(response.array[0].object["range"].type == JSONType.array);
-
-	//assert(instance.importPaths == [getcwd, "source"]);
-	backend.stdin.writeRequest(50, `{"cmd": "import-paths", "cwd": ` ~ JSONValue(dir).toString ~ `}`);
-	response = backend.stdout.readResponse(50);
-	assert(response.type == JSONType.array);
-	assert(response.array.length == 2);
-	assert(response.array[0].type == JSONType.string);
-	assert(response.array[0].str == getcwd);
-	assert(response.array[1].type == JSONType.string);
-	assert(response.array[1].str == "source");
+	gotRequest = toDelegate(&defaultRequestHandler);
+	gotNotify = toDelegate(&defaultNotifyHandler);
 }
 
-void writeRequest(File stdin, int id, JSONValue data)
+void defaultRequestHandler(RequestMessage msg)
 {
-	stdin.writeRequest(id, data.toString);
+	assert(false, "Unexpected request " ~ msg.toJSON.toString);
 }
 
-void writeRequest(File stdin, int id, string data)
+void defaultNotifyHandler(RequestMessage msg)
 {
-	stdin.rawWrite((cast(uint) data.length + 4).nativeToBigEndian);
-	stdin.rawWrite(id.nativeToBigEndian);
-	stdin.rawWrite(data);
-	stdin.flush();
-	writefln("%s >> %s", id, data);
+	writeln("Ignoring notification " ~ msg.toJSON.toString);
 }
 
-JSONValue readResponse(File stdout, int expectedId = 0x7F000001)
+void pumpEvents()
 {
-	import std.algorithm;
-
-	ubyte[512] skipBuf;
-	ubyte[4] intBuf;
-	uint length;
-	int reqId;
-	while (true)
+	while (rpc.hasData)
 	{
-		stdout.rawRead(intBuf[]);
-		length = intBuf.bigEndianToNative!uint;
-		stdout.rawRead(intBuf[]);
-		reqId = intBuf.bigEndianToNative!uint;
-		if (expectedId != 0x7F000001 && expectedId != reqId)
-		{
-			writefln("%s << <skipped %d bytes>", reqId, length);
-			if (length > 4)
-			{
-				length -= 4;
-				while (length > 0)
-					length -= stdout.rawRead(skipBuf[0 .. min($, length)]).length;
-			}
-		}
+		auto msg = rpc.poll;
+		if (!msg.id.isNone)
+			gotRequest(msg);
 		else
-			break;
+			gotNotify(msg);
 	}
+}
 
-	if (length > 4)
-	{
-		ubyte[] data = new ubyte[length - 4];
-		stdout.rawRead(data);
-		writefln("%s << %s", reqId, cast(char[]) data);
-		return parseJSON(cast(char[]) data);
-	}
-	else
-	{
-		writefln("%s << <empty>", reqId);
-		return JSONValue.init;
-	}
+void doTests()
+{
+	WorkspaceClientCapabilities workspace = {
+		configuration: opt(true)
+	};
+	InitializeParams init = {
+		processId: JSONValue(thisProcessID),
+		rootUri: uriFromFile(cwd),
+		capabilities: {
+			workspace: opt(workspace)
+		}
+	};
+	rpc.sendRequest("initialize", init);
+	pumpEvents();
+	Fiber.yield();
+	writeln("done!");
 }
