@@ -12,7 +12,7 @@ import std.traits;
 import mir.serde;
 
 import mir.algebraic : MirAlgebraic = Algebraic;
-public import mir.algebraic : isVariant, match, Nullable;
+public import mir.algebraic : isVariant = isLikeVariant, match, Nullable;
 
 public import served.lsp.jsonops;
 
