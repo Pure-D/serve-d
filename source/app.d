@@ -39,8 +39,6 @@ import served.utils.fibermanager;
 import served.utils.trace;
 import served.utils.translate;
 
-import painlessjson;
-
 static import served.extension;
 
 void printVersion(io.File output = io.stdout)

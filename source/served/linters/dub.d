@@ -2,8 +2,6 @@ module served.linters.dub;
 
 import core.thread;
 
-import painlessjson;
-
 import served.extension;
 import served.linters.diagnosticmanager;
 import served.types;
@@ -13,7 +11,6 @@ import std.array;
 import std.datetime.stopwatch : StopWatch;
 import std.experimental.logger;
 import std.file;
-import std.json;
 import std.path;
 import std.process;
 import std.range;

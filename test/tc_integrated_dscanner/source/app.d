@@ -6,8 +6,6 @@ import workspaced.api;
 import workspaced.coms;
 import workspaced.com.dscanner;
 
-import painlessjson;
-
 enum mainLine = __LINE__ + 1;
 void main()
 {
