@@ -10,7 +10,7 @@ import std.json : JSONType, JSONValue;
 import std.parallelism : defaultPoolThreads, TaskPool;
 import std.path : buildNormalizedPath, buildPath;
 import std.range : chain;
-import sumtype : match, SumType, This;
+import std.sumtype : match, SumType, This;
 import std.traits : getUDAs, isSomeString;
 
 import workspaced.api;
@@ -18,6 +18,30 @@ import workspaced.api;
 struct Configuration
 {
 	alias ValueT = SumType!(typeof(null), string, bool, long, double, This[], This[string]);
+
+	private static ValueT toValueT(T)(T value)
+	{
+		static if (is(immutable T == immutable ValueT))
+			return value;
+		else static if (is(T : U[], U))
+		{
+			ValueT[] ret = new ValueT[value.length];
+			foreach (i, v; value)
+				ret[i] = toValueT(v);
+			return ValueT(ret);
+		}
+		else static if (is(T : U[string], U))
+		{
+			ValueT[string] ret;
+			foreach (k, v; value)
+				ret[k] = toValueT(v);
+			return ValueT(ret);
+		}
+		else
+		{
+			return ValueT(value);
+		}
+	}
 
 	static T toType(T)(ValueT value)
 	{
@@ -103,12 +127,12 @@ struct Configuration
 	{
 		if (auto com = component in base)
 		{
-			com.values[key] = ValueT(value);
+			com.values[key] = toValueT(value);
 		}
 		else
 		{
 			ValueT[string] val;
-			val[key] = ValueT(value);
+			val[key] = toValueT(value);
 			base[component] = Section(val);
 		}
 		return true;
