@@ -29,6 +29,12 @@ jobs:
         env:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
 
+      - name: serialization tests
+        run: dub test :protocol
+        env:
+          # shouldn't break other OSes
+          MACOSX_DEPLOYMENT_TARGET: '10.12'
+
       - name: LSP tests
         run: dub test :lsp
         env:
