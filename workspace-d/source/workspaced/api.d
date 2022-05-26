@@ -502,7 +502,9 @@ unittest
 version (unittest)
 package string normLF(scope string str)
 {
-	import std.string : lineSplitter, join;
+	import std.string : replace;
 
-	return str.lineSplitter.join("\n");
+	return str
+		.replace("\r\n", "\n")
+		.replace("\r", "\n");
 }
