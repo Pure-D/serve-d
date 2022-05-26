@@ -5,7 +5,7 @@
 			"type": "gdb",
 			"request": "launch",
 			"name": "Launch Tests",
-			"target": "./serve-d-test-library",
+			"target": "./serve-d-test-unittest",
 			"cwd": "${workspaceRoot}",
 			"showDevDebugOutput": true,
 			"printCalls": true
@@ -18,6 +18,77 @@
 			"target": ":2345",
 			"remote": true,
 			"cwd": "${workspaceRoot}"
-		}
+		},
+		{
+			"name": "Debug test :lsp",
+			"type": "code-d",
+			"debugger": "code-lldb",
+			"request": "launch",
+			"program": "${workspaceFolder}/lsp/serve-d-lsp-test-library"
+		},
+		{
+			"name": "debug test :protocol",
+			"type": "code-d",
+			"debugger": "code-lldb",
+			"request": "launch",
+			"program": "${workspaceFolder}/protocol/serve-d-protocol-test-library"
+		},
+		{
+			"name": "debug test mir-ion",
+			"type": "code-d",
+			"debugger": "code-lldb",
+			"request": "launch",
+			"program": "${workspaceFolder}/mir-ion/mir-ion-test-unittest"
+		},
+		{
+			"type": "gdb",
+			"request": "attach",
+			"name": "Attach to gdbserver null_server",
+			"executable": "./null_server/null_server",
+			"target": ":2345",
+			"remote": true,
+			"stopAtConnect": true,
+			"stopAtEntry": true,
+			"cwd": "${workspaceRoot}",
+			"autorun": ["source /home/webfreak/.vscode-oss/extensions/webfreak.code-d-0.23.2/dlang-debug/gdb_dlang.py"]
+		},
+		// {
+		// 	"name": "Attach to serve-d process",
+		// 	"type": "lldb",
+		// 	"request": "attach",
+		// 	"program": "${workspaceFolder}/serve-d",
+		// 	"pid": "${command:pickMyProcess}",
+		// 	"initCommands": ["command script import \"/home/webfreak/dev/dlang-debug/lldb_dlang.py\""]
+		// },
+		{
+			"name": "Attach to serve-d process",
+			"type": "cppdbg",
+			"request": "attach",
+			"program": "${workspaceFolder}/serve-d",
+			"processId": "${command:pickProcess}",
+			"MIMode": "gdb",
+			"setupCommands": [
+				{
+					"description": "Enable pretty-printing for gdb",
+					"text": "-enable-pretty-printing",
+					"ignoreFailures": true
+				},
+				{
+					"description": "Load D GDB type extensions",
+					"ignoreFailures": false,
+					"text": "-interpreter-exec console \"source /home/webfreak/dev/dlang-debug/gdb_dlang.py\""
+				}
+			]
+		},
+		// {
+		// 	"type": "gdb",
+		// 	"request": "attach",
+		// 	"name": "Attach to serve-d process",
+		// 	"target": "108200",
+		// 	"executable": "${workspaceFolder}/serve-d",
+		// 	"cwd": "${workspaceRoot}",
+		// 	"valuesFormatting": "prettyPrinters",
+		// 	"autorun": ["source /home/webfreak/dev/dlang-debug/gdb_dlang.py", "handle SIGUSR1 noprint", "handle SIGUSR2 noprint"]
+		// }
 	]
 }
