@@ -11,8 +11,26 @@ import std.conv : to;
 import std.json;
 import std.string;
 
+struct ResolvedFormattingOptions
+{
+	int tabSize;
+	bool insertSpaces;
+	bool trimTrailingWhitespace;
+	bool insertFinalNewline;
+	bool trimFinalNewlines;
+
+	this(FormattingOptions o)
+	{
+		tabSize = o.tabSize;
+		insertSpaces = o.insertSpaces;
+		trimTrailingWhitespace = o.trimTrailingWhitespace.orDefault;
+		insertFinalNewline = o.insertFinalNewline.orDefault;
+		trimFinalNewlines = o.trimFinalNewlines.orDefault;
+	}
+}
+
 shared string gFormattingOptionsApplyOn;
-shared FormattingOptions gFormattingOptions;
+shared ResolvedFormattingOptions gFormattingOptions;
 
 private static immutable string lotsOfSpaces = "                        ";
 string indentString(const FormattingOptions options)
@@ -50,7 +68,7 @@ string[] generateDfmtArgs(const ref UserConfiguration config, EolType overrideEo
 			maxLineLength = config.editor.rulers[$ - 1];
 			softMaxLineLength = config.editor.rulers[$ - 2];
 		}
-		FormattingOptions options = gFormattingOptions;
+		ResolvedFormattingOptions options = gFormattingOptions;
 		//dfmt off
 		args = [
 			"--align_switch_statements", config.dfmt.alignSwitchStatements.to!string,
@@ -80,15 +98,16 @@ string[] generateDfmtArgs(const ref UserConfiguration config, EolType overrideEo
 
 void tryFindFormattingSettings(UserConfiguration config, Document document)
 {
-	gFormattingOptions.tabSize = 4;
-	gFormattingOptions.insertSpaces = false;
+	ResolvedFormattingOptions options;
+	options.tabSize = 4;
+	options.insertSpaces = false;
 	bool hadOneSpace;
 	foreach (line; document.rawText.lineSplitter)
 	{
 		auto whitespace = line[0 .. line.length - line.stripLeft.length];
 		if (whitespace.startsWith("\t"))
 		{
-			gFormattingOptions.insertSpaces = false;
+			options.insertSpaces = false;
 		}
 		else if (whitespace == " ")
 		{
@@ -96,13 +115,14 @@ void tryFindFormattingSettings(UserConfiguration config, Document document)
 		}
 		else if (whitespace.length >= 2)
 		{
-			gFormattingOptions.tabSize = hadOneSpace ? 1 : cast(int) whitespace.length;
-			gFormattingOptions.insertSpaces = true;
+			options.tabSize = hadOneSpace ? 1 : cast(int) whitespace.length;
+			options.insertSpaces = true;
 		}
 	}
 
 	if (config.editor.tabSize != 0)
-		gFormattingOptions.tabSize = config.editor.tabSize;
+		options.tabSize = config.editor.tabSize;
+	gFormattingOptions = options;
 }
 
 @protocolMethod("textDocument/formatting")
@@ -115,7 +135,7 @@ TextEdit[] provideFormatting(DocumentFormattingParams params)
 	if (document.languageId != "d")
 		return [];
 	gFormattingOptionsApplyOn = params.textDocument.uri;
-	gFormattingOptions = params.options;
+	gFormattingOptions = ResolvedFormattingOptions(params.options);
 	auto result = backend.get!DfmtComponent.format(document.rawText,
 			generateDfmtArgs(config, document.eolAt(0))).getYield;
 	return diff(document, result);
