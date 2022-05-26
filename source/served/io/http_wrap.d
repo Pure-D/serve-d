@@ -19,7 +19,7 @@ void downloadFile(string url, string title, string into)
 	if (letEditorDownload)
 	{
 		if (rpc.sendRequest("coded/interactiveDownload", InteractiveDownload(url,
-				title, into)).result.type != JSONType.true_)
+				title, into)).resultJson != "true")
 			throw new Exception("The download has failed.");
 	}
 	else

@@ -3,7 +3,6 @@ module served.linters.dscanner;
 import std.algorithm;
 import std.conv;
 import std.file;
-import std.json;
 import std.path;
 import std.string;
 
@@ -71,7 +70,7 @@ void lint(Document document)
 			continue;
 		d.adjustSeverityForType(document, issue);
 
-		if (!d.source.isNull && d.source.get.length)
+		if (d.source.orDefault.length)
 		{
 			// handled by previous functions
 			result ~= d;
@@ -84,7 +83,7 @@ void lint(Document document)
 			d.source = DScannerDiagnosticSource;
 
 		d.message = issue.description;
-		d.code = JSONValue(issue.key);
+		d.code = JsonValue(issue.key);
 		result ~= d;
 	}
 
@@ -212,8 +211,10 @@ version (unittest)
 			return diagnostics
 				.filter!(a
 					=> a.range.contains(location)
-					&& a.code.get.type == JSONType.string
-					&& a.code.get.str == key)
+					&& a.code.deref.match!(
+						(string s) => s == key,
+						_ => false
+					))
 				.array;
 		}
 
@@ -236,14 +237,14 @@ version (unittest)
 					continue;
 				d.adjustSeverityForType(document, issue);
 
-				if (!d.source.isNull && d.source.get.length)
+				if (d.source.orDefault.length)
 				{
 					// handled by previous functions
 					diagnostics ~= d;
 					continue;
 				}
 
-				d.code = JSONValue(issue.key).opt;
+				d.code = JsonValue(issue.key);
 				d.message = issue.description;
 				diagnostics ~= d;
 			}

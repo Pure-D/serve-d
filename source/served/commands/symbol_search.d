@@ -3,6 +3,8 @@ module served.commands.symbol_search;
 import served.extension;
 import served.types;
 
+import mir.serde;
+
 import workspaced.api;
 import workspaced.coms;
 
@@ -58,14 +60,15 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 }
 
 @protocolMethod("textDocument/documentSymbol")
-JSONValue provideDocumentSymbols(DocumentSymbolParams params)
+JsonValue provideDocumentSymbols(DocumentSymbolParams params)
 {
-	import painlessjson : toJSON;
-
-	if (capabilities.textDocument.documentSymbol.hierarchicalDocumentSymbolSupport)
-		return provideDocumentSymbolsHierarchical(params).toJSON;
+	if (capabilities
+		.textDocument.orDefault
+		.documentSymbol.orDefault
+		.hierarchicalDocumentSymbolSupport.orDefault)
+		return provideDocumentSymbolsHierarchical(params).toJsonValue;
 	else
-		return provideDocumentSymbolsOld(DocumentSymbolParamsEx(params)).map!"a.downcast".array.toJSON;
+		return provideDocumentSymbolsOld(DocumentSymbolParamsEx(params)).map!"a.downcast".array.toJsonValue;
 }
 
 private struct OldSymbolsCache
@@ -130,19 +133,27 @@ SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParamsEx params)
 	return params.verbose ? retVerbose.data : ret.data;
 }
 
-PerDocumentCache!(DocumentSymbol[]) documentSymbolsCacheHierarchical;
-DocumentSymbol[] provideDocumentSymbolsHierarchical(DocumentSymbolParams params)
+@serdeProxy!DocumentSymbol
+struct DocumentSymbolInfo
+{
+	DocumentSymbol symbol;
+	string parent;
+	alias symbol this;
+}
+
+PerDocumentCache!(DocumentSymbolInfo[]) documentSymbolsCacheHierarchical;
+DocumentSymbolInfo[] provideDocumentSymbolsHierarchical(DocumentSymbolParams params)
 {
 	auto cached = documentSymbolsCacheHierarchical.cached(documents, params.textDocument.uri);
 	if (cached.length)
 		return cached;
-	DocumentSymbol[] all;
+	DocumentSymbolInfo[] all;
 	auto symbols = provideDocumentSymbolsOld(DocumentSymbolParamsEx(params));
 	foreach (symbol; symbols)
 	{
-		DocumentSymbol sym;
+		DocumentSymbolInfo sym;
 		static foreach (member; __traits(allMembers, SymbolInformationEx))
-			static if (__traits(hasMember, DocumentSymbol, member))
+			static if (__traits(hasMember, DocumentSymbolInfo, member))
 				__traits(getMember, sym, member) = __traits(getMember, symbol, member);
 		sym.parent = symbol.containerName;
 		sym.range = sym.selectionRange = symbol.location.range;
@@ -167,7 +178,7 @@ DocumentSymbol[] provideDocumentSymbolsHierarchical(DocumentSymbolParams params)
 		}
 	}
 
-	DocumentSymbol[] ret = all.filter!(a => a.parent.length == 0).array;
+	DocumentSymbolInfo[] ret = all.filter!(a => a.parent.length == 0).array;
 	documentSymbolsCacheHierarchical.store(documents.tryGet(params.textDocument.uri), ret);
 	return ret;
 }

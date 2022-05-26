@@ -2,8 +2,7 @@ module served.lsp.protoext;
 
 import served.lsp.protocol;
 
-import painlessjson;
-import std.json;
+import mir.serde;
 
 struct AddImportParams
 {
@@ -14,7 +13,7 @@ struct AddImportParams
 	/// Location of cursor as standard offset
 	int location;
 	/// if `false`, the import will get added to the innermost block
-	bool insertOutermost = true;
+	@serdeOptional bool insertOutermost = true;
 }
 
 struct SortImportsParams
@@ -38,7 +37,7 @@ struct UpdateSettingParams
 	/// The configuration section to update in (e.g. "d" or "dfmt")
 	string section;
 	/// The value to set the configuration value to
-	JSONValue value;
+	JsonValue value;
 	/// `true` if this is a configuration change across all instances and not just the active one
 	bool global;
 }
@@ -49,7 +48,7 @@ struct DubDependency
 	/// The name of this package
 	string name;
 	/// The installed version of this dependency or null if it isn't downloaded/installed yet
-	@SerializedName("version")
+	@serdeKeys("version")
 	string version_;
 	/// Path to the directory in which the package resides or null if it's not stored in the local file system.
 	string path;
@@ -86,7 +85,7 @@ struct InstallRequest
 	/// Name of the dub dependency
 	string name;
 	/// Version to install in the dub recipe file
-	@SerializedName("version")
+	@serdeKeys("version")
 	string version_;
 }
 
@@ -96,7 +95,7 @@ struct UpdateRequest
 	/// Name of the dub dependency
 	string name;
 	/// Version to install in the dub recipe file
-	@SerializedName("version")
+	@serdeKeys("version")
 	string version_;
 }
 
@@ -109,6 +108,7 @@ struct UninstallRequest
 
 struct Task
 {
+	@serdeEnumProxy!string
 	enum Group : string
 	{
 		clean = "clean",
@@ -118,9 +118,9 @@ struct Task
 	}
 
 	/// the default JSON task
-	JSONValue definition;
+	JsonValue definition;
 	/// global | workspace | uri of workspace folder
-	@SerializedName("scope")
+	@serdeKeys("scope")
 	string scope_;
 	/// command to execute
 	string[] exec;
@@ -155,6 +155,7 @@ struct DocumentSymbolParamsEx
 }
 
 /// special serve-d internal symbol kinds
+@serdeEnumProxy!int
 enum SymbolKindEx
 {
 	none = 0,
@@ -182,7 +183,7 @@ struct SymbolInformationEx
 	SymbolKind kind;
 	Location location;
 	string containerName;
-	@SerializedName("deprecated") bool deprecated_;
+	@serdeKeys("deprecated") bool deprecated_;
 	TextRange range;
 	TextRange selectionRange;
 	SymbolKindEx extendedType;
@@ -226,7 +227,7 @@ struct SerializablePlainSnippet
 struct UpdateImportsParams
 {
 	/// set this to false to not emit progress updates for the UI
-	bool reportProgress = true;
+	@serdeOptional bool reportProgress = true;
 }
 
 /// An ini section of the dscanner.ini which is written in form [name]
@@ -290,7 +291,7 @@ struct RescanTestsParams
 struct ListArchTypesParams
 {
 	/// If true, return ArchTypeInfo[] with meanings instead of string[]
-	bool withMeaning;
+	@serdeOptional bool withMeaning;
 }
 
 /// Returned by served/listArchTypes if request was sent with
@@ -300,5 +301,15 @@ struct ArchTypeInfo
 	/// The value to use with a switchArchType call / the value DUB uses.
 	string value;
 	/// If not null, show this string in the UI rather than value.
+	string label;
+}
+
+///
+@serdeFallbackStruct
+struct ArchType
+{
+	/// Value to pass into other calls
+	string value;
+	/// UI label override or null if none
 	string label;
 }

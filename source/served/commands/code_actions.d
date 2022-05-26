@@ -65,8 +65,16 @@ CodeAction[] provideCodeActions(CodeActionParams params)
 				// probably extends
 				if (instance.get!DCDExtComponent.implementAll(codeText,
 						cast(int) startIndex).getYield.length > 0)
-					ret ~= CodeAction(Command("Implement base classes/interfaces", "code-d.implementMethods",
-							[JSONValue(document.positionToOffset(params.range.start))]));
+				{
+					Command cmd = {
+						title: "Implement base classes/interfaces",
+						command: "code-d.implementMethods",
+						arguments: [
+							JsonValue(document.positionToOffset(params.range.start))
+						]
+					};
+					ret ~= CodeAction(cmd);
+				}
 				break;
 			}
 			if (codeText[idx] == ';' || codeText[idx] == '{' || codeText[idx] == '}')
@@ -99,10 +107,10 @@ void addDubDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 	if (diagnostic.message.canFind("import ") && match)
 	{
 		ret ~= CodeAction(Command("Import " ~ match[1], "code-d.addImport",
-				[
-					JSONValue(match[1]),
-					JSONValue(document.positionToOffset(params.range[0]))
-				]));
+			[
+				JsonValue(match[1]),
+				JsonValue(document.positionToOffset(params.range[0]))
+			]));
 	}
 	if (cast(bool)(match = diagnostic.message.matchFirst(undefinedIdentifier))
 			|| cast(bool)(match = diagnostic.message.matchFirst(undefinedTemplate))
@@ -167,9 +175,9 @@ void addDubDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 		}
 		foreach (mod; modules.sort().uniq)
 			ret ~= CodeAction(Command("Import " ~ mod, "code-d.addImport", [
-					JSONValue(mod),
-					JSONValue(document.positionToOffset(params.range[0]))
-					]));
+				JsonValue(mod),
+				JsonValue(document.positionToOffset(params.range[0]))
+			]));
 	}
 
 	if (diagnostic.message.startsWith("use `is` instead of `==`",
@@ -201,32 +209,32 @@ void addDScannerDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 {
 	import dscanner.analysis.imports_sortedness : ImportSortednessCheck;
 
-	string key = diagnostic.code.type == JSONType.string ? diagnostic.code.str : null;
+	string key = diagnostic.code.match!((string s) => s, _ => null);
 
 	info("Diagnostic: ", diagnostic);
 
 	if (key == ImportSortednessCheck.KEY)
 	{
 		ret ~= CodeAction(Command("Sort imports", "code-d.sortImports",
-				[JSONValue(document.positionToOffset(params.range[0]))]));
+				[JsonValue(document.positionToOffset(params.range[0]))]));
 	}
 
 	if (key.length)
 	{
+		JsonValue code = diagnostic.code.match!((NoneType n) => JsonValue(null), j => j);
 		if (key.startsWith("dscanner."))
 			key = key["dscanner.".length .. $];
 		ret ~= CodeAction(Command("Ignore " ~ key ~ " warnings (this line)",
-				"code-d.ignoreDscannerKey", [diagnostic.code, JSONValue("line")]));
-		ret ~= CodeAction(Command("Ignore " ~ key ~ " warnings", "code-d.ignoreDscannerKey", [
-				diagnostic.code
-				]));
+			"code-d.ignoreDscannerKey", [code, JsonValue("line")]));
+		ret ~= CodeAction(Command("Ignore " ~ key ~ " warnings",
+			"code-d.ignoreDscannerKey", [code]));
 	}
 }
 
 void addSyntaxDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 	Document document, Diagnostic diagnostic, CodeActionParams params)
 {
-	string key = diagnostic.code.type == JSONType.string ? diagnostic.code.str : null;
+	string key = diagnostic.code.match!((string s) => s, _ => null);
 	switch (key)
 	{
 	case "workspaced.foreach-auto":

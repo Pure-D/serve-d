@@ -27,6 +27,7 @@ import std.string : join;
 import io = std.stdio;
 
 import workspaced.api;
+import workspaced.api : WConfiguration = Configuration;
 import workspaced.coms;
 
 // list of all commands for auto dispatch
@@ -150,23 +151,19 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 			break;
 		case "d.dubArchType":
 			if (backend.has!DubComponent(workspaceFs) && config.d.dubArchType.length
-					&& !backend.get!DubComponent(workspaceFs)
-					.setArchType(JSONValue(["arch-type": JSONValue(config.d.dubArchType)])))
+				&& !backend.get!DubComponent(workspaceFs).setArchType(config.d.dubArchType))
 				rpc.window.showErrorMessage(
 						translate!"d.ext.config.invalid.archType"(config.d.dubArchType));
 			break;
 		case "d.dubBuildType":
 			if (backend.has!DubComponent(workspaceFs) && config.d.dubBuildType.length
-					&& !backend.get!DubComponent(workspaceFs)
-					.setBuildType(JSONValue([
-							"build-type": JSONValue(config.d.dubBuildType)
-						])))
+				&& !backend.get!DubComponent(workspaceFs).setBuildType(config.d.dubBuildType))
 				rpc.window.showErrorMessage(
 						translate!"d.ext.config.invalid.buildType"(config.d.dubBuildType));
 			break;
 		case "d.dubCompiler":
 			if (backend.has!DubComponent(workspaceFs) && config.d.dubCompiler.length
-					&& !backend.get!DubComponent(workspaceFs).setCompiler(config.d.dubCompiler))
+				&& !backend.get!DubComponent(workspaceFs).setCompiler(config.d.dubCompiler))
 				rpc.window.showErrorMessage(
 						translate!"d.ext.config.invalid.compiler"(config.d.dubCompiler));
 			break;
@@ -227,8 +224,6 @@ void didChangeConfiguration(DidChangeConfigurationParams params)
 
 void processConfigChange(served.types.Configuration configuration)
 {
-	import painlessjson : fromJSON;
-
 	syncingConfiguration = true;
 	scope (exit)
 		syncingConfiguration = false;
@@ -240,7 +235,10 @@ void processConfigChange(served.types.Configuration configuration)
 		workspaces[0].initialized = false;
 	}
 
-	if (capabilities.workspace.configuration && workspaces.length >= 2)
+	if (capabilities
+		.workspace.orDefault
+		.configuration.orDefault
+		&& workspaces.length >= 2)
 	{
 		ConfigurationItem[] items;
 		items = getGlobalConfigurationItems(); // default workspace
@@ -253,16 +251,16 @@ void processConfigChange(served.types.Configuration configuration)
 		auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
 
 		const expected = workspaces.length + 1;
-		JSONValue[] settings = res.validateConfigurationItemsResponse(expected);
+		string[] settings = res.validateConfigurationItemsResponse(expected);
 		if (!settings.length)
 			return;
 
 		for (size_t i = 0; i < expected; i++)
 		{
 			const isDefault = i == 0;
-			auto workspace = isDefault ? &fallbackWorkspace : &.workspace(items[i * stride].scopeUri.get,
+			auto workspace = isDefault ? &fallbackWorkspace : &.workspace(items[i * stride].scopeUri.deref,
 					false);
-			string[] changed = workspace.config.replaceAllSections(settings[i * stride .. $]);
+			string[] changed = workspace.config.replaceAllSectionsJson(settings[i * stride .. $]);
 			changedConfig(isDefault ? null : workspace.folder.uri, changed,
 					workspace.config, isDefault, i, expected);
 		}
@@ -278,15 +276,18 @@ void processConfigChange(served.types.Configuration configuration)
 	}
 	else
 		error("unexpected state: got ", workspaces.length, " workspaces and ",
-				capabilities.workspace.configuration ? "" : "no ", "configuration request support");
+				capabilities
+					.workspace.orDefault
+					.configuration.orDefault ? "" : "no ",
+				"configuration request support");
 	reportProgress(ProgressType.configFinish, 0, 0);
 }
 
 bool syncConfiguration(string workspaceUri, size_t index = 0, size_t numConfigs = 0)
 {
-	import painlessjson : fromJSON;
-
-	if (capabilities.workspace.configuration)
+	if (capabilities
+		.workspace.orDefault
+		.configuration.orDefault)
 	{
 		Workspace* proj = &workspace(workspaceUri);
 		if (proj is &fallbackWorkspace && workspaceUri.length)
@@ -304,11 +305,11 @@ bool syncConfiguration(string workspaceUri, size_t index = 0, size_t numConfigs 
 		trace("Sending workspace/configuration request for ", workspaceUri);
 		auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
 
-		JSONValue[] settings = res.validateConfigurationItemsResponse();
+		string[] settings = res.validateConfigurationItemsResponse();
 		if (!settings.length)
 			return false;
 
-		string[] changed = proj.config.replaceAllSections(settings);
+		string[] changed = proj.config.replaceAllSectionsJson(settings);
 		string uri = workspaceUri.length ? proj.folder.uri : null;
 		changedConfig(uri, changed, proj.config,
 				workspaceUri.length == 0, index, numConfigs);
@@ -334,17 +335,23 @@ ConfigurationItem[] getConfigurationItems(DocumentUri uri)
 	return items;
 }
 
-JSONValue[] validateConfigurationItemsResponse(scope return ref ResponseMessage res,
+private string[] validateConfigurationItemsResponse(scope return ref ResponseMessageRaw res,
 		size_t expected = size_t.max)
 {
-	if (res.result.type != JSONType.array)
+	if (!res.resultJson.looksLikeJsonArray)
 	{
 		error("Got invalid configuration response from language client. (not an array)");
 		trace("Response: ", res);
 		return null;
 	}
 
-	JSONValue[] settings = res.result.array;
+	string[] settings;
+	int i;
+	res.resultJson.visitJsonArray!(v => i++);
+	settings.length = i;
+	i = 0;
+	res.resultJson.visitJsonArray!(v => settings[i++] = v);
+
 	if (settings.length % configurationSections.length != 0)
 	{
 		error("Got invalid configuration response from language client. (invalid length)");
@@ -400,16 +407,20 @@ InitializeResult initialize(InitializeParams params)
 	trace("initialize params:");
 	prettyPrintStruct!trace(params);
 
-	if (params.workspaceFolders.length)
-		workspaces = params.workspaceFolders.map!(a => Workspace(a,
-				served.types.Configuration.init)).array;
+	if (params.workspaceFolders.match!(
+		(WorkspaceFolder[] f) => f.length > 0,
+		_ => false
+	))
+		workspaces = params.workspaceFolders.get!(WorkspaceFolder[])
+			.map!(a => Workspace(a, served.types.Configuration.init))
+			.array;
 	else if (params.rootUri.length)
 		workspaces = [
 			Workspace(WorkspaceFolder(params.rootUri, "Root"), served.types.Configuration.init)
 		];
-	else if (params.rootPath.length)
+	else if (params.rootPath.orDefault.length)
 		workspaces = [
-			Workspace(WorkspaceFolder(params.rootPath.uriFromFile, "Root"),
+			Workspace(WorkspaceFolder(params.rootPath.deref.uriFromFile, "Root"),
 					served.types.Configuration.init)
 		];
 
@@ -431,31 +442,51 @@ InitializeResult initialize(InitializeParams params)
 	}
 
 	InitializeResult result;
-	result.capabilities.textDocumentSync = documents.syncKind;
-	// only provide fixes when doCompleteSnippets is requested
-	result.capabilities.completionProvider = CompletionOptions(doCompleteSnippets, [
+	CompletionOptions completionProvider = {
+		resolveProvider: doCompleteSnippets,
+		triggerCharacters: [
 			".", "=", "/", "*", "+", "-"
-			], CompletionOptions.CompletionItem(true.opt).opt);
-	result.capabilities.signatureHelpProvider = SignatureHelpOptions([
-			"(", "[", ","
-			]);
-	result.capabilities.workspaceSymbolProvider = true;
-	result.capabilities.definitionProvider = true;
-	result.capabilities.hoverProvider = true;
-	result.capabilities.codeActionProvider = true;
-	result.capabilities.codeLensProvider = CodeLensOptions(true);
-	result.capabilities.documentSymbolProvider = true;
-	result.capabilities.documentFormattingProvider = true;
-	result.capabilities.documentRangeFormattingProvider = true;
-	result.capabilities.colorProvider = ColorProviderOptions();
-	result.capabilities.documentHighlightProvider = true;
-	result.capabilities.workspace = opt(ServerWorkspaceCapabilities(
-			opt(ServerWorkspaceCapabilities.WorkspaceFolders(opt(true), opt(true)))));
+		],
+		completionItem: CompletionOptions.CompletionItem(true.opt)
+	};
+	SignatureHelpOptions signatureHelpProvider = {
+		triggerCharacters: ["(", "[", ","]
+	};
+	CodeLensOptions codeLensProvider = {
+		resolveProvider: true
+	};
+	WorkspaceFoldersServerCapabilities workspaceFolderCapabilities = {
+		supported: true,
+		changeNotifications: true
+	};
+	ServerWorkspaceCapabilities workspaceCapabilities = {
+		workspaceFolders: workspaceFolderCapabilities
+	};
+	ServerCapabilities serverCapabilities = {
+		textDocumentSync: documents.syncKind,
+		// only provide fixes when doCompleteSnippets is requested
+		completionProvider: completionProvider,
+		signatureHelpProvider: signatureHelpProvider,
+		workspaceSymbolProvider: true,
+		definitionProvider: true,
+		hoverProvider: true,
+		codeActionProvider: true,
+		codeLensProvider: codeLensProvider,
+		documentSymbolProvider: true,
+		documentFormattingProvider: true,
+		documentRangeFormattingProvider: true,
+		colorProvider: DocumentColorOptions.init,
+		documentHighlightProvider: true,
+		workspace: workspaceCapabilities
+	};
+	result.capabilities = serverCapabilities;
 
 	setTimeout({
 		if (!syncedConfiguration && !syncingConfiguration)
 		{
-			if (capabilities.workspace.configuration)
+			if (capabilities
+				.workspace.orDefault
+				.configuration.orDefault)
 			{
 				if (!syncConfiguration(null, 0, workspaces.length + 1))
 					error("Syncing user configuration failed!");
@@ -492,21 +523,24 @@ void ensureStartedUp()
 
 void doGlobalStartup()
 {
+	import workspaced.backend : Configuration;
+
 	try
 	{
 		trace("Initializing serve-d for global access");
 
-		backend.globalConfiguration.base = JSONValue(
-				[
-				"dcd": JSONValue([
-						"clientPath": JSONValue(firstConfig.d.dcdClientPath.userPath),
-						"serverPath": JSONValue(firstConfig.d.dcdServerPath.userPath),
-						"port": JSONValue(9166)
-					]),
-				"dmd": JSONValue(["path": JSONValue(firstConfig.d.dmdPath.userPath)])
-				]);
+		backend.globalConfiguration.base = [
+			"dcd": Configuration.Section([
+				"clientPath": Configuration.ValueT(firstConfig.d.dcdClientPath.userPath),
+				"serverPath": Configuration.ValueT(firstConfig.d.dcdServerPath.userPath),
+				"port": Configuration.ValueT(9166)
+			]),
+			"dmd": Configuration.Section([
+				"path": Configuration.ValueT(firstConfig.d.dmdPath.userPath)
+			])
+		];
 
-		trace("Setup global configuration as " ~ backend.globalConfiguration.base.toString);
+		trace("Setup global configuration as " ~ backend.globalConfiguration.base.to!string);
 
 		reportProgress(ProgressType.globalStartup, 0, 0, "Initializing serve-d...");
 
@@ -671,15 +705,17 @@ void doStartup(string workspaceUri)
 		info("registering instance for root ", root);
 
 		auto workspaceRoot = root.dir;
-		workspaced.api.Configuration config;
-		config.base = JSONValue([
-				"dcd": JSONValue([
-						"clientPath": JSONValue(proj.config.d.dcdClientPath.userPath),
-						"serverPath": JSONValue(proj.config.d.dcdServerPath.userPath),
-						"port": JSONValue(9166)
-					]),
-				"dmd": JSONValue(["path": JSONValue(proj.config.d.dmdPath.userPath)])
-				]);
+		WConfiguration config;
+		config.base = [
+			"dcd": WConfiguration.Section([
+				"clientPath": WConfiguration.ValueT(proj.config.d.dcdClientPath.userPath),
+				"serverPath": WConfiguration.ValueT(proj.config.d.dcdServerPath.userPath),
+				"port": WConfiguration.ValueT(9166)
+			]),
+			"dmd": WConfiguration.Section([
+				"path": WConfiguration.ValueT(proj.config.d.dmdPath.userPath)
+			])
+		];
 		auto instance = backend.addInstance(workspaceRoot, config);
 		if (!activeInstance)
 			activeInstance = instance;

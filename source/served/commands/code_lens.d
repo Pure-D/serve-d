@@ -39,12 +39,12 @@ CodeLens[] provideCodeLens(CodeLensParams params)
 			lastPosition = pos;
 
 			ret ~= CodeLens(TextRange(pos), Optional!Command.init,
-					JSONValue([
-							"type": JSONValue("importcompilecheck"),
-							"code": JSONValue(match.hit),
-							"module": JSONValue(match[1]),
-							"file": JSONValue(file)
-						]));
+					JsonValue([
+						"type": JsonValue("importcompilecheck"),
+						"code": JsonValue(match.hit.idup),
+						"module": JsonValue(match[1].idup),
+						"file": JsonValue(file)
+					]).opt);
 		}
 	}
 	return ret;
@@ -53,26 +53,34 @@ CodeLens[] provideCodeLens(CodeLensParams params)
 @protocolMethod("codeLens/resolve")
 CodeLens resolveCodeLens(CodeLens lens)
 {
-	if (lens.data.type != JSONType.object)
+	if (lens.data.isNone ||
+		lens.data.deref.kind != JsonValue.Kind.object)
 		throw new Exception("Invalid Lens Object");
-	auto type = "type" in lens.data;
-	if (!type)
-		throw new Exception("No type in Lens Object");
-	switch (type.str)
+
+	auto lensData = lens.data.deref.get!(StringMap!JsonValue);
+	auto type = lensData.get("type", JsonValue(""))
+		.match!((string s) => s, _ => "");
+	switch (type)
 	{
 	case "importcompilecheck":
 		try
 		{
-			auto code = "code" in lens.data;
-			if (!code || code.type != JSONType.string || !code.str.length)
+			auto code = lensData.get("code", JsonValue(null))
+				.match!((string s) => s, _ => "");
+			if (!code.length)
 				throw new Exception("No valid code provided");
-			auto module_ = "module" in lens.data;
-			if (!module_ || module_.type != JSONType.string || !module_.str.length)
+
+			auto module_ = lensData.get("module", JsonValue(null))
+				.match!((string s) => s, _ => "");
+			if (!module_.length)
 				throw new Exception("No valid module provided");
-			auto file = "file" in lens.data;
-			if (!file || file.type != JSONType.string || !file.str.length)
+
+			auto file = lensData.get("file", JsonValue(null))
+				.match!((string s) => s, _ => "");
+			if (!file.length)
 				throw new Exception("No valid file provided");
-			int decMs = getImportCompilationTime(code.str, module_.str, file.str);
+
+			int decMs = getImportCompilationTime(code, module_, file);
 			lens.command = Command((decMs < 10
 					? "no noticable effect" : "~" ~ decMs.to!string ~ "ms") ~ " for importing this");
 			return lens;

@@ -203,41 +203,39 @@ struct Configuration
 		return ret;
 	}
 
-	string[] replaceAllSections(JSONValue[] settings)
+	string[] replaceAllSectionsJson(string[] settingJsons)
 	{
-		import painlessjson : fromJSON;
-
-		assert(settings.length >= configurationSections.length);
+		assert(settingJsons.length >= configurationSections.length);
 		auto changed = appender!(string[]);
 		static foreach (n, section; configurationSections)
-			changed ~= this.replaceSection!section(settings[n].fromJSON!(configurationTypes[n]));
+			changed ~= this.replaceSection!section(settingJsons[n].deserializeJson!(configurationTypes[n]));
 		return changed.data;
 	}
 }
 
-Configuration parseConfiguration(JSONValue json)
+Configuration parseConfiguration(JsonValue json)
 {
 	Configuration ret;
-	if (json.type != JSONType.object)
+	if (json.kind != JsonValue.Kind.object)
 	{
 		error("Configuration is not an object!");
 		return ret;
 	}
 
-	foreach (key, value; json.object)
+	foreach (kv; json.get!(StringMap!JsonValue).byKeyValue)
 	{
 	SectionSwitch:
-		switch (key)
+		switch (kv.key)
 		{
 			static foreach (section; configurationSections)
 			{
 		case section:
-				__traits(getMember, ret, section) = value.parseConfigurationSection!(
-						typeof(__traits(getMember, ret, section)))(key);
+				__traits(getMember, ret, section) = kv.value.parseConfigurationSection!(
+						typeof(__traits(getMember, ret, section)))(kv.key);
 				break SectionSwitch;
 			}
 		default:
-			infof("Ignoring unknown configuration section '%s'", key);
+			infof("Ignoring unknown configuration section '%s'", kv.key);
 			break;
 		}
 	}
@@ -245,22 +243,21 @@ Configuration parseConfiguration(JSONValue json)
 	return ret;
 }
 
-T parseConfigurationSection(T)(JSONValue json, string sectionKey)
+T parseConfigurationSection(T)(JsonValue json, string sectionKey)
 {
 	import std.traits : FieldNameTuple;
-	import painlessjson : fromJSON;
 
 	T ret;
-	if (json.type != JSONType.object)
+	if (json.kind != JsonValue.Kind.object)
 	{
 		error("Configuration is not an object!");
 		return ret;
 	}
 
-	foreach (key, value; json.object)
+	foreach (kv; json.get!(StringMap!JsonValue).byKeyValue)
 	{
 	ConfigSwitch:
-		switch (key)
+		switch (kv.key)
 		{
 			static foreach (member; FieldNameTuple!T)
 			{
@@ -271,43 +268,43 @@ T parseConfigurationSection(T)(JSONValue json, string sectionKey)
 					{
 						static if (__traits(compiles, { T t = null; }))
 						{
-							if (value.type == JSONType.null_)
+							if (kv.value.kind == JsonValue.Kind.null_)
 							{
 								__traits(getMember, ret, member) = null;
 							}
 							else
 							{
 								static if (is(U : string))
-									__traits(getMember, ret, member) = cast(U) value.str;
+									__traits(getMember, ret, member) = cast(U) kv.value.get!string;
 								else
-									__traits(getMember, ret, member) = value.fromJSON!U;
+									__traits(getMember, ret, member) = kv.value.jsonValueTo!U;
 							}
 						}
 						else
 						{
-							if (value.type == JSONType.null_)
+							if (kv.value.kind == JsonValue.Kind.null_)
 							{
 								// ignore null value on non-nullable
 							}
 							else
 							{
 								static if (is(U : string))
-									__traits(getMember, ret, member) = cast(U) value.str;
+									__traits(getMember, ret, member) = cast(U) kv.value.get!string;
 								else
-									__traits(getMember, ret, member) = value.fromJSON!U;
+									__traits(getMember, ret, member) = kv.value.jsonValueTo!U;
 							}
 						}
 					}
 					catch (Exception e)
 					{
 						errorf("Skipping unparsable configuration '%s.%s' which was expected to be of type %s parsed from %s: %s",
-								sectionKey, key, U.stringof, value.type, e.msg);
+								sectionKey, kv.key, U.stringof, kv.value.kind, e.msg);
 					}
 					break ConfigSwitch;
 				}
 			}
 		default:
-			warningf("Ignoring unknown configuration section '%s.%s'", sectionKey, key);
+			warningf("Ignoring unknown configuration section '%s.%s'", sectionKey, kv.key);
 			break;
 		}
 	}

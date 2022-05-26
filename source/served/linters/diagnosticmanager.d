@@ -6,8 +6,6 @@ import std.algorithm : map, sort;
 import served.utils.memory;
 import served.types;
 
-import painlessjson;
-
 enum NumDiagnosticProviders = 3;
 alias DiagnosticCollection = PublishDiagnosticsParams[];
 DiagnosticCollection[NumDiagnosticProviders] diagnostics;
@@ -66,9 +64,9 @@ void updateDiagnostics(string uriHint = "")
 		if (!uriHint.length || diagnostics.uri == uriHint)
 		{
 			// TODO: related information
-			RequestMessage request;
+			RequestMessageRaw request;
 			request.method = "textDocument/publishDiagnostics";
-			request.params = diagnostics.toJSON;
+			request.paramsJson = diagnostics.serializeJson;
 			rpc.send(request);
 		}
 	}
@@ -80,9 +78,9 @@ void updateDiagnostics(string uriHint = "")
 	{
 		if (!sorted.contains(submitted))
 		{
-			RequestMessage request;
+			RequestMessageRaw request;
 			request.method = "textDocument/publishDiagnostics";
-			request.params = PublishDiagnosticsParams(submitted, null).toJSON;
+			request.paramsJson = PublishDiagnosticsParams(submitted, null).serializeJson;
 			rpc.send(request);
 		}
 	}

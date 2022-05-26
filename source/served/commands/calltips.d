@@ -61,29 +61,36 @@ SignatureHelp convertDCDCalltips(DCDExtComponent dcdext, string[] calltips,
 			{
 				int[2] range = param.nameRange[1] == 0 ? param.contentRange : param.nameRange;
 				string paramName = calltip[range[0] .. range[1]];
-				JSONValue paramLabel;
-				if (capabilities.textDocument.signatureHelp.supportsLabelOffset)
-					paramLabel = JSONValue([
-							JSONValue(cast(int) calltip[0 .. param.contentRange[0]].countUTF16Length),
-							JSONValue(cast(int) calltip[0 .. param.contentRange[1]].countUTF16Length)
-							]);
+				Variant!(string, uint[2]) paramLabel;
+				if (capabilities.textDocument.orDefault
+					.signatureHelp.orDefault
+					.signatureInformation.orDefault
+					.parameterInformation.orDefault
+					.labelOffsetSupport.orDefault)
+					paramLabel = cast(uint[2])[
+						cast(uint) calltip[0 .. param.contentRange[0]].countUTF16Length,
+						cast(uint) calltip[0 .. param.contentRange[1]].countUTF16Length
+					];
 				else
-					paramLabel = JSONValue(calltip[param.contentRange[0] .. param.contentRange[1]]);
-				Optional!MarkupContent paramDocs;
+					paramLabel = calltip[param.contentRange[0] .. param.contentRange[1]];
+				Variant!(NoneType, string, MarkupContent) paramDocs;
 				if (docs != Comment.init)
 				{
 					auto docString = getParamDocumentation(docs, paramName);
 					if (docString.length)
 					{
-						Optional!(string[]) formats = capabilities.textDocument
-							.signatureHelp.signatureInformation.documentationFormat;
-						MarkupKind kind = formats.isNull || formats.length == 0
-							? MarkupKind.markdown : cast(MarkupKind) formats[0];
+						MarkupKind[] formats = capabilities.textDocument.orDefault
+							.signatureHelp.orDefault
+							.signatureInformation.orDefault
+							.documentationFormat.orDefault;
+						MarkupKind kind = formats.length == 0
+							? MarkupKind.markdown
+							: formats[0];
 						string prefix = kind == MarkupKind.markdown ? "**" ~ paramName ~ "**: " : paramName
 							~ ": ";
 						string docRet = kind == MarkupKind.markdown
 							? ddocToMarkdown(docString.strip) : docString.strip;
-						paramDocs = MarkupContent(kind, (prefix ~ docRet).stripRight).opt;
+						paramDocs = MarkupContent(kind, (prefix ~ docRet).stripRight);
 					}
 				}
 				retParams ~= ParameterInformation(paramLabel, paramDocs);
@@ -104,7 +111,7 @@ SignatureHelp convertDCDCalltips(DCDExtComponent dcdext, string[] calltips,
 			possibleFunctions ~= i;
 
 	if (extractedParams.activeParameter != -1)
-		help.activeParameter = extractedParams.activeParameter.opt;
+		help.activeParameter = extractedParams.activeParameter;
 
 	help.activeSignature = possibleFunctions.length ? cast(int) possibleFunctions[0] : 0;
 

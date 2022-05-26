@@ -203,7 +203,7 @@ void lint(Document document)
 					supplError.source = DubDiagnosticSource;
 					supplError.message = issue.text ~ "\n" ~ suppl.text;
 					if (i + 1 < supplemental.length)
-						supplError.relatedInformation = opt(error.relatedInformation.get[i + 1 .. $]);
+						supplError.relatedInformation = opt(error.relatedInformation.deref[i + 1 .. $]);
 					extendErrorRange(supplError.range, instance, supplUri, supplError);
 					pushError(supplError, supplUri);
 				}

@@ -15,18 +15,15 @@ import workspaced.coms;
 
 import std.algorithm : among, any, canFind, chunkBy, endsWith, filter, findSplit,
 	map, min, reverse, sort, startsWith, uniq;
-import std.array : appender, array;
+import std.array : appender, array, split;
 import std.conv : text, to;
-import std.format : format;
 import std.experimental.logger;
-import std.json : JSONType, JSONValue;
+import std.format : format;
 import std.string : indexOf, join, lastIndexOf, lineSplitter, strip, stripLeft,
 	stripRight, toLower;
 import std.utf : decodeFront;
 
 import dparse.lexer : Token;
-
-import painlessjson : fromJSON, toJSON;
 
 import fs = std.file;
 import io = std.stdio;
@@ -384,25 +381,39 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 		auto possibleFields = backend.get!DscannerComponent.listAllIniFields;
 		scope line = document.lineAtScope(params.position).strip;
 		auto defaultList = CompletionList(false, possibleFields.map!((a) {
-			CompletionItem ret = CompletionItem(a.name, CompletionItemKind.field.opt);
-			ret.documentation = MarkupContent(a.documentation).opt;
-			ret.insertText = (a.name ~ '=').opt;
+			CompletionItem ret = {
+				label: a.name,
+				kind: CompletionItemKind.field,
+				documentation: MarkupContent(a.documentation),
+				insertText: a.name ~ '='
+			};
 			return ret;
 		}).array);
+
 		if (!line.length)
 			return defaultList;
+
 		if (line[0] == '[')
-			return CompletionList(false, [
-					CompletionItem("analysis.config.StaticAnalysisConfig",
-						CompletionItemKind.keyword.opt),
-					CompletionItem("analysis.config.ModuleFilters", CompletionItemKind.keyword.opt, Optional!string.init,
-						MarkupContent("In this optional section a comma-separated list of inclusion and exclusion"
-						~ " selectors can be specified for every check on which selective filtering"
-						~ " should be applied. These given selectors match on the module name and"
-						~ " partial matches (std. or .foo.) are possible. Moreover, every selectors"
-						~ " must begin with either + (inclusion) or - (exclusion). Exclusion selectors"
-						~ " take precedence over all inclusion operators.").opt)
-					]);
+		{
+			// ini section
+			CompletionItem staticAnalysisConfig = {
+				label: "analysis.config.StaticAnalysisConfig",
+				kind: CompletionItemKind.keyword
+			};
+			CompletionItem moduleFilters = {
+				label: "analysis.config.ModuleFilters",
+				kind: CompletionItemKind.keyword,
+				documentation: MarkupContent(
+					"In this optional section a comma-separated list of inclusion and exclusion"
+					~ " selectors can be specified for every check on which selective filtering"
+					~ " should be applied. These given selectors match on the module name and"
+					~ " partial matches (std. or .foo.) are possible. Moreover, every selectors"
+					~ " must begin with either + (inclusion) or - (exclusion). Exclusion selectors"
+					~ " take precedence over all inclusion operators.")
+			};
+			return CompletionList(false, [staticAnalysisConfig, moduleFilters]);
+		}
+
 		auto eqIndex = line.indexOf('=');
 		auto quotIndex = line.lastIndexOf('"');
 		if (quotIndex != -1 && params.position.character >= quotIndex)
@@ -410,14 +421,24 @@ CompletionList provideComplete(TextDocumentPositionParams params)
 		if (params.position.character < eqIndex)
 			return defaultList;
 		else
-			return CompletionList(false, [
-					CompletionItem(`"disabled"`, CompletionItemKind.value.opt,
-						"Check is disabled".opt),
-					CompletionItem(`"enabled"`, CompletionItemKind.value.opt,
-						"Check is enabled".opt),
-					CompletionItem(`"skip-unittest"`, CompletionItemKind.value.opt,
-						"Check is enabled but not operated in the unittests".opt)
-					]);
+		{
+			CompletionItem disabled = {
+				label: `"disabled"`,
+				kind: CompletionItemKind.value,
+				detail: "Check is disabled"
+			};
+			CompletionItem enabled = {
+				label: `"enabled"`,
+				kind: CompletionItemKind.value,
+				detail: "Check is enabled"
+			};
+			CompletionItem skipUnittest = {
+				label: `"skip-unittest"`,
+				kind: CompletionItemKind.value,
+				detail: "Check is enabled but not operated in the unittests"
+			};
+			return CompletionList(false, [disabled, enabled, skipUnittest]);
+		}
 	}
 	else
 	{
@@ -571,7 +592,11 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 			if (a.definition.length)
 			{
 				ret.detail = a.definition.opt;
-				if (capabilities.textDocument.completion.completionItem.labelDetailsSupport)
+				if (capabilities
+					.textDocument.orDefault
+					.completion.orDefault
+					.completionItem.orDefault
+					.labelDetailsSupport.orDefault)
 					ret.labelDetails = CompletionItemLabelDetails(ret.detail);
 			}
 			if (a.documentation.length)
@@ -612,8 +637,11 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 			{
 				if (compl.startsWith(remaining))
 				{
-					auto item = CompletionItem(compl, CompletionItemKind.snippet.opt);
-					item.insertText = compl ~ ": ";
+					CompletionItem item = {
+						label: compl,
+						kind: CompletionItemKind.snippet,
+						insertText: compl ~ ": "
+					};
 					completion ~= item;
 				}
 			}
@@ -768,11 +796,15 @@ private SnippetInfo provideSnippetComplete(TextDocumentPositionParams params, Wo
 	auto eol = document.eolAt(0);
 	foreach (Snippet snippet; ret.snippets)
 	{
-		auto item = snippet.snippetToCompletionItem;
-		item.data["level"] = JSONValue(ret.info.level.to!string);
+		CompletionItem item = snippet.snippetToCompletionItem;
+		JsonValue[string] data;
+		data["level"] = JsonValue(ret.info.level.to!string);
 		if (!snippet.unformatted)
-			item.data["format"] = toJSON(generateDfmtArgs(config, eol));
-		item.data["params"] = toJSON(params);
+			data["format"] = JsonValue(generateDfmtArgs(config, eol).join("\t"));
+		data["uri"] = JsonValue(params.textDocument.uri);
+		data["line"] = JsonValue(params.position.line);
+		data["column"] = JsonValue(params.position.character);
+		item.data = JsonValue(data);
 		completion ~= item;
 	}
 
@@ -789,11 +821,12 @@ private SnippetInfo getSnippetInfo(WorkspaceD.Instance instance, ref Document do
 }
 
 private void addDocComplete(ref CompletionItem[] completion, CompletionItem doc, string prefix)
+in(!doc.insertText.isNone)
 {
 	if (!doc.label.startsWith(prefix))
 		return;
 	if (prefix.length > 0)
-		doc.insertText = doc.insertText[prefix.length .. $];
+		doc.insertText = doc.insertText.deref[prefix.length .. $];
 	completion ~= doc;
 }
 
@@ -851,16 +884,19 @@ CompletionItem resolveCompletionItem(CompletionItem item)
 {
 	auto data = item.data;
 
-	if (item.insertTextFormat.get == InsertTextFormat.snippet
-			&& item.kind.get == CompletionItemKind.snippet && data.type == JSONType.object)
+	if (item.insertTextFormat.orDefault == InsertTextFormat.snippet
+		&& item.kind.orDefault == CompletionItemKind.snippet
+		&& !data.isNone)
 	{
-		const resolved = "resolved" in data.object;
-		if (resolved.type != JSONType.true_)
+		auto object = data.deref.get!(StringMap!JsonValue);
+		const resolved = "resolved" in object;
+		if (resolved && !resolved.get!bool)
 		{
-			TextDocumentPositionParams params = data.object["params"]
-				.fromJSON!TextDocumentPositionParams;
+			auto uri = object["uri"].get!string;
+			auto line = cast(uint)object["line"].get!long;
+			auto column = cast(uint)object["column"].get!long;
 
-			Document document = documents[params.textDocument.uri];
+			Document document = documents[uri];
 			auto f = document.uri.uriToFile;
 			auto instance = backend.getBestInstance(f);
 
@@ -869,24 +905,24 @@ CompletionItem resolveCompletionItem(CompletionItem item)
 				auto snippets = instance.get!SnippetsComponent;
 				auto snippet = snippetFromCompletionItem(item);
 				snippet = snippets.resolveSnippet(f, document.rawText,
-						cast(int) document.positionToBytes(params.position), snippet).getYield;
+						cast(int) document.positionToBytes(Position(line, column)), snippet).getYield;
 				item = snippetToCompletionItem(snippet);
 			}
 		}
 
-		if (const format = "format" in data.object)
+		if (const format = "format" in object)
 		{
-			auto args = (*format).fromJSON!(string[]);
-			if (item.insertTextFormat.get == InsertTextFormat.snippet)
+			auto args = format.get!string.split("\t");
+			if (item.insertTextFormat.orDefault == InsertTextFormat.snippet)
 			{
 				SnippetLevel level = SnippetLevel.global;
-				if (const levelStr = "level" in data.object)
-					level = levelStr.str.to!SnippetLevel;
-				item.insertText = formatSnippet(item.insertText.get, args, level).opt;
+				if (const levelStr = "level" in object)
+					level = levelStr.get!string.to!SnippetLevel;
+				item.insertText = formatSnippet(item.insertText.deref, args, level);
 			}
 			else
 			{
-				item.insertText = formatCode(item.insertText.get, args).opt;
+				item.insertText = formatCode(item.insertText.deref, args);
 			}
 		}
 
@@ -909,7 +945,11 @@ CompletionItem snippetToCompletionItem(Snippet snippet)
 	item.documentation = MarkupContent(MarkupKind.markdown,
 			snippet.documentation ~ "\n\n```d\n" ~ snippet.snippet ~ "\n```\n");
 	item.filterText = snippet.shortcut.opt;
-	if (capabilities.textDocument.completion.completionItem.snippetSupport)
+	if (capabilities
+		.textDocument.orDefault
+		.completion.orDefault
+		.completionItem.orDefault
+		.snippetSupport.orDefault)
 	{
 		item.insertText = snippet.snippet.opt;
 		item.insertTextFormat = InsertTextFormat.snippet.opt;
@@ -917,12 +957,12 @@ CompletionItem snippetToCompletionItem(Snippet snippet)
 	else
 		item.insertText = snippet.plain.opt;
 
-	item.data = JSONValue([
-			"resolved": JSONValue(snippet.resolved),
-			"id": JSONValue(snippet.id),
-			"providerId": JSONValue(snippet.providerId),
-			"data": snippet.data
-			]);
+	item.data = JsonValue([
+		"resolved": JsonValue(snippet.resolved),
+		"id": JsonValue(snippet.id),
+		"providerId": JsonValue(snippet.providerId),
+		"data": snippet.data.toJsonValue
+	]);
 	return item;
 }
 
@@ -930,21 +970,30 @@ Snippet snippetFromCompletionItem(CompletionItem item)
 {
 	Snippet snippet;
 	snippet.shortcut = item.label;
-	snippet.title = item.detail.get;
-	snippet.documentation = item.documentation.get.value;
+	snippet.title = item.detail.deref;
+	snippet.documentation = item.documentation.match!(
+		(NoneType _) => cast(string)(null),
+		(string s) => s,
+		(MarkupContent c) => c.value
+	);
 	auto end = snippet.documentation.lastIndexOf("\n\n```d\n");
 	if (end != -1)
 		snippet.documentation = snippet.documentation[0 .. end];
 
-	if (capabilities.textDocument.completion.completionItem.snippetSupport)
-		snippet.snippet = item.insertText.get;
+	if (capabilities
+		.textDocument.orDefault
+		.completion.orDefault
+		.completionItem.orDefault
+		.snippetSupport.orDefault)
+		snippet.snippet = item.insertText.deref;
 	else
-		snippet.plain = item.insertText.get;
+		snippet.plain = item.insertText.deref;
 
-	snippet.resolved = item.data["resolved"].boolean;
-	snippet.id = item.data["id"].str;
-	snippet.providerId = item.data["providerId"].str;
-	snippet.data = item.data["data"];
+	auto itemData = item.data.deref.get!(StringMap!JsonValue);
+	snippet.resolved = itemData["resolved"].get!bool;
+	snippet.id = itemData["id"].get!string;
+	snippet.providerId = itemData["providerId"].get!string;
+	snippet.data = itemData["data"].toStdJSONValue;
 	return snippet;
 }
 
@@ -1122,20 +1171,20 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 			}
 		}
 
-		if (item.sortText.isNull)
-			item.sortText = item.label.opt;
+		if (item.sortText.isNone)
+			item.sortText = item.label;
 
-		item.sortText = opt(sortPrefixDCD ~ identifier.type.sortFromDCDType ~ item.sortText.get);
+		item.sortText = sortPrefixDCD ~ identifier.type.sortFromDCDType ~ item.sortText.deref;
 
 		if (detailDescription.length || detailDetail.length)
 		{
 			CompletionItemLabelDetails d;
 			if (detailDetail.length)
-				d.detail = detailDetail.opt;
+				d.detail = detailDetail;
 			if (detailDescription.length)
-				d.description = detailDescription.opt;
+				d.description = detailDescription;
 
-			item.labelDetails = d.opt;
+			item.labelDetails = d;
 		}
 
 		completion ~= item;
@@ -1150,22 +1199,30 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 		).map!((a) {
 			CompletionItem ret = a.front;
 			auto details = a.map!"a.detail"
-				.filter!"!a.isNull && a.value.length"
+				.filter!(a => !a.isNone && a.deref.length)
 				.uniq
 				.array;
 			auto docs = a.map!"a.documentation"
-				.filter!"!a.isNull && a.value.value.length"
+				.filter!(a => a.match!(
+					(NoneType n) => false,
+					(string s) => s.length > 0,
+					(MarkupContent s) => s.value.length > 0,
+				))
 				.uniq
 				.array;
 			auto labelDetails = a.map!"a.labelDetails"
-				.filter!"!a.isNull"
+				.filter!(a => !a.isNone)
 				.uniq
 				.array;
 			if (docs.length)
 				ret.documentation = MarkupContent(MarkupKind.markdown,
-					docs.map!"a.value.value".join("\n\n"));
+					docs.map!(a => a.match!(
+						(NoneType n) => assert(false),
+						(string s) => s,
+						(MarkupContent s) => s.value,
+					)).join("\n\n"));
 			if (details.length)
-				ret.detail = details.map!"a.value".join("\n");
+				ret.detail = details.map!(a => a.deref).join("\n");
 
 			if (labelDetails.length == 1)
 			{
@@ -1174,15 +1231,15 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 			else if (labelDetails.length > 1)
 			{
 				auto descriptions = labelDetails
-					.filter!"!a.description.isNull"
-					.map!"a.description.get"
+					.filter!(a => !a.deref.description.isNone)
+					.map!(a => a.deref.description.deref)
 					.array
 					.sort!"a<b"
 					.uniq
 					.array;
 				auto detailDetails = labelDetails
-					.filter!"!a.detail.isNull"
-					.map!"a.detail.get"
+					.filter!(a => !a.deref.detail.isNone)
+					.map!(a => a.deref.detail.deref)
 					.array
 					.sort!"a<b"
 					.uniq
@@ -1212,22 +1269,26 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 
 private void migrateLabelDetailsSupport(ref CompletionItem item)
 {
-	if (!capabilities.textDocument.completion.completionItem.labelDetailsSupport
-		&& !item.labelDetails.isNull)
+	if (!capabilities
+		.textDocument.orDefault
+		.completion.orDefault
+		.completionItem.orDefault
+		.labelDetailsSupport.orDefault
+		&& !item.labelDetails.isNone)
 	{
 		// labelDetails is not supported, but let's use what we computed, it's
 		// still very useful
-		CompletionItemLabelDetails detail = item.labelDetails.get;
+		CompletionItemLabelDetails detail = item.labelDetails.deref;
 
 		// don't overwrite `detail`, it may be used to show full definition in a
 		// documentation popup.
 
 		// if we got a detailed detail, use that and properly set the insertText
-		if (detail.detail)
+		if (!detail.detail.isNone)
 		{
-			if (item.insertText.isNull)
+			if (item.insertText.isNone)
 				item.insertText = item.label;
-			item.label ~= detail.detail;
+			item.label ~= detail.detail.deref;
 		}
 
 		item.labelDetails.nullify();

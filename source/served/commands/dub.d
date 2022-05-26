@@ -9,14 +9,11 @@ import served.utils.translate;
 import workspaced.api;
 import workspaced.coms;
 
-import painlessjson : toJSON;
-
 import core.time;
 
 import std.algorithm : among, canFind, count, endsWith, map, remove, startsWith;
 import std.array : array, replace, appender;
 import std.experimental.logger;
-import std.json : JSONValue;
 import std.path : baseName, buildPath, dirName, setExtension;
 import std.regex : regex, replaceFirst;
 import std.string : indexOf, join, KeepTerminator, splitLines, strip, stripLeft, stripRight;
@@ -49,11 +46,12 @@ string getConfig()
 }
 
 @protocolMethod("served/listArchTypes")
-JSONValue listArchTypes(ListArchTypesParams params)
+Variant!(string, ArchType)[] listArchTypes(ListArchTypesParams params)
 {
-	auto ret = appender!(JSONValue[]);
+	auto ret = appender!(typeof(return));
+	alias Item = typeof(ret.data[0]);
 	if (!activeInstance || !activeInstance.has!DubComponent)
-		return JSONValue(ret.data);
+		return null;
 
 	auto archTypes = activeInstance.get!DubComponent.extendedArchTypes;
 
@@ -61,20 +59,17 @@ JSONValue listArchTypes(ListArchTypesParams params)
 	{
 		foreach (archType; archTypes)
 		{
-			ret ~= JSONValue([
-				"label": JSONValue(archType.label),
-				"value": JSONValue(archType.value)
-			]);
+			ret ~= Item(ArchType(archType.value, archType.label));
 		}
 	}
 	else
 	{
 		foreach (archType; archTypes)
 		{
-			ret ~= JSONValue(archType.value);
+			ret ~= Item(archType.value);
 		}
 	}
-	return JSONValue(ret.data);
+	return ret.data;
 }
 
 @protocolMethod("served/switchArchType")
@@ -82,9 +77,7 @@ bool switchArchType(string value)
 {
 	if (!activeInstance || !activeInstance.has!DubComponent)
 		return false;
-	return activeInstance.get!DubComponent.setArchType(JSONValue([
-				"arch-type": JSONValue(value)
-			]));
+	return activeInstance.get!DubComponent.setArchType(value);
 }
 
 @protocolMethod("served/getArchType")
@@ -108,9 +101,7 @@ bool switchBuildType(string value)
 {
 	if (!activeInstance || !activeInstance.has!DubComponent)
 		return false;
-	return activeInstance.get!DubComponent.setBuildType(JSONValue([
-				"build-type": JSONValue(value)
-			]));
+	return activeInstance.get!DubComponent.setBuildType(value);
 }
 
 @protocolMethod("served/getBuildType")
@@ -172,10 +163,10 @@ bool switchCompiler(string value)
 /// }
 /// ```
 @protocolMethod("served/getActiveDubConfig")
-JSONValue getActiveDubConfig()
+StringMap!JsonValue getActiveDubConfig()
 {
 	if (!activeInstance || !activeInstance.has!DubComponent)
-		return JSONValue.init;
+		return StringMap!JsonValue.init;
 	auto ret = activeInstance.get!DubComponent.rootPackageBuildSettings();
 	static assert(is(typeof(ret.packagePath) : string), "API guarantee broken");
 	static assert(is(typeof(ret.packageName) : string), "API guarantee broken");
@@ -205,7 +196,8 @@ JSONValue getActiveDubConfig()
 	static assert(is(typeof(ret.postRunCommands) : string[]), "API guarantee broken");
 	static assert(is(typeof(ret.buildOptions) : string[]), "API guarantee broken");
 	static assert(is(typeof(ret.buildRequirements) : string[]), "API guarantee broken");
-	return ret.toJSON;
+
+	return ret.toJsonValue.get!(StringMap!JsonValue);
 }
 
 @protocolMethod("served/addImport")
@@ -412,31 +404,31 @@ Task[] provideBuildTasks()
 		auto workspace = .workspace(instance.cwd.uriFromFile, false);
 		info("Found dub package to build at ", dub.recipePath);
 
-		JSONValue dollarMagicValue;
+		JsonValue dollarMagicValue;
 		if (useBuildTaskDollarCurrent)
-			dollarMagicValue = JSONValue("$current");
+			dollarMagicValue = JsonValue("$current");
 
-		JSONValue currentValue(string prop)()
+		JsonValue currentValue(string prop)()
 		{
 			if (useBuildTaskDollarCurrent)
-				return JSONValue("$current");
+				return JsonValue("$current");
 			else
-				return JSONValue(__traits(getMember, dub, prop));
+				return JsonValue(__traits(getMember, dub, prop));
 		}
 
-		auto cwd = JSONValue(dub.recipePath.dirName.replace(workspace.folder.uri.uriToFile, "${workspaceFolder}"));
+		auto cwd = JsonValue(dub.recipePath.dirName.replace(workspace.folder.uri.uriToFile, "${workspaceFolder}"));
 		{
 			Task t;
 			t.source = "dub";
-			t.definition = JSONValue([
-					"type": JSONValue("dub"),
-					"run": JSONValue(true),
-					"compiler": currentValue!"compiler",
-					"archType": currentValue!"archType",
-					"buildType": currentValue!"buildType",
-					"configuration": currentValue!"configuration",
-					"cwd": cwd
-					]);
+			t.definition = JsonValue([
+				"type": JsonValue("dub"),
+				"run": JsonValue(true),
+				"compiler": currentValue!"compiler",
+				"archType": currentValue!"archType",
+				"buildType": currentValue!"buildType",
+				"configuration": currentValue!"configuration",
+				"cwd": cwd
+			]);
 			t.group = Task.Group.build;
 			t.exec = [
 				workspace.config.d.dubPath.userPath, "run", "--compiler=" ~ dub.compiler,
@@ -449,15 +441,15 @@ Task[] provideBuildTasks()
 		{
 			Task t;
 			t.source = "dub";
-			t.definition = JSONValue([
-					"type": JSONValue("dub"),
-					"test": JSONValue(true),
-					"compiler": currentValue!"compiler",
-					"archType": currentValue!"archType",
-					"buildType": currentValue!"buildType",
-					"configuration": currentValue!"configuration",
-					"cwd": cwd
-					]);
+			t.definition = JsonValue([
+				"type": JsonValue("dub"),
+				"test": JsonValue(true),
+				"compiler": currentValue!"compiler",
+				"archType": currentValue!"archType",
+				"buildType": currentValue!"buildType",
+				"configuration": currentValue!"configuration",
+				"cwd": cwd
+			]);
 			t.group = Task.Group.test;
 			t.exec = [
 				workspace.config.d.dubPath.userPath, "test", "--compiler=" ~ dub.compiler,
@@ -470,15 +462,15 @@ Task[] provideBuildTasks()
 		{
 			Task t;
 			t.source = "dub";
-			t.definition = JSONValue([
-					"type": JSONValue("dub"),
-					"run": JSONValue(false),
-					"compiler": currentValue!"compiler",
-					"archType": currentValue!"archType",
-					"buildType": currentValue!"buildType",
-					"configuration": currentValue!"configuration",
-					"cwd": cwd
-					]);
+			t.definition = JsonValue([
+				"type": JsonValue("dub"),
+				"run": JsonValue(false),
+				"compiler": currentValue!"compiler",
+				"archType": currentValue!"archType",
+				"buildType": currentValue!"buildType",
+				"configuration": currentValue!"configuration",
+				"cwd": cwd
+			]);
 			t.group = Task.Group.build;
 			t.exec = [
 				workspace.config.d.dubPath.userPath, "build", "--compiler=" ~ dub.compiler,
@@ -491,16 +483,16 @@ Task[] provideBuildTasks()
 		{
 			Task t;
 			t.source = "dub";
-			t.definition = JSONValue([
-					"type": JSONValue("dub"),
-					"run": JSONValue(false),
-					"force": JSONValue(true),
-					"compiler": currentValue!"compiler",
-					"archType": currentValue!"archType",
-					"buildType": currentValue!"buildType",
-					"configuration": currentValue!"configuration",
-					"cwd": cwd
-					]);
+			t.definition = JsonValue([
+				"type": JsonValue("dub"),
+				"run": JsonValue(false),
+				"force": JsonValue(true),
+				"compiler": currentValue!"compiler",
+				"archType": currentValue!"archType",
+				"buildType": currentValue!"buildType",
+				"configuration": currentValue!"configuration",
+				"cwd": cwd
+			]);
 			t.group = Task.Group.rebuild;
 			t.exec = [
 				workspace.config.d.dubPath.userPath, "build", "--force",
@@ -555,17 +547,27 @@ void convertDubFormat(DubConvertRequest req)
 		TextEdit(TextRange(Position(0, 0), document.offsetToPosition(document.length)), result.output)
 	];
 
-	if (capabilities.workspace.workspaceEdit.resourceOperations.canFind(ResourceOperationKind.rename))
+	if (capabilities
+		.workspace.orDefault
+		.workspaceEdit.orDefault
+		.resourceOperations.orDefault
+		.canFind(ResourceOperationKind.rename))
 	{
-		edit.documentChanges = JSONValue([
-				toJSON(RenameFile(req.textDocument.uri, newUri)),
-				toJSON(TextDocumentEdit(VersionedTextDocumentIdentifier(newUri,
-					document.version_), edits))
-				]);
+		edit.documentChanges = [
+			DocumentChange(RenameFile(req.textDocument.uri, newUri)),
+			DocumentChange(TextDocumentEdit(
+				VersionedTextDocumentIdentifier(newUri, document.version_),
+				edits
+			))
+		];
 	}
 	else
 		edit.changes[req.textDocument.uri] = edits;
-	rpc.sendMethod("workspace/applyEdit", ApplyWorkspaceEditParams(edit));
+
+	ApplyWorkspaceEditParams params = {
+		edit: edit
+	};
+	rpc.sendMethod("workspace/applyEdit", params);
 }
 
 @protocolNotification("served/installDependency")

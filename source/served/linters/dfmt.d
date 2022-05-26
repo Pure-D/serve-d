@@ -71,7 +71,7 @@ private Diagnostic[] lintDfmt(DfmtComponent dfmt, ref Document document)
 				if (on == fmtOn)
 				{
 					d.message = on ? "Redundant `dfmt on`" : "Redundant `dfmt off`";
-					d.code = JSONValue(on ? "redundant-on" : "redundant-off");
+					d.code = JsonValue(on ? "redundant-on" : "redundant-off");
 					d.severity = DiagnosticSeverity.hint;
 					d.tags = [DiagnosticTag.unnecessary];
 					diagnostics ~= d;
@@ -108,8 +108,8 @@ unittest
 }`);
 	auto linted = lintDfmt(dfmt, d);
 	assert(linted.length == 2);
-	assert(linted[0].severity.get == DiagnosticSeverity.warning);
-	assert(linted[1].severity.get == DiagnosticSeverity.warning);
+	assert(linted[0].severity.deref == DiagnosticSeverity.warning);
+	assert(linted[1].severity.deref == DiagnosticSeverity.warning);
 }
 
 @("redundant on/off")
@@ -127,7 +127,7 @@ unittest
 	auto linted = lintDfmt(dfmt, d);
 	import std.stdio; stderr.writeln("diagnostics:\n", linted);
 	assert(linted.length == 3);
-	assert(linted[0].severity.get == DiagnosticSeverity.hint);
-	assert(linted[1].severity.get == DiagnosticSeverity.hint);
-	assert(linted[2].severity.get == DiagnosticSeverity.warning);
+	assert(linted[0].severity.deref == DiagnosticSeverity.hint);
+	assert(linted[1].severity.deref == DiagnosticSeverity.hint);
+	assert(linted[2].severity.deref == DiagnosticSeverity.warning);
 }

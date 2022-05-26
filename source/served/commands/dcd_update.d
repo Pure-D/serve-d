@@ -251,9 +251,9 @@ void updateDCD()
 			workspace.config.d.dcdServerPath = finalDestinationServer;
 		}
 		rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("dcdClientPath",
-				JSONValue(finalDestinationClient), true));
+				JsonValue(finalDestinationClient), true));
 		rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("dcdServerPath",
-				JSONValue(finalDestinationServer), true));
+				JsonValue(finalDestinationServer), true));
 		rpc.notifyMethod("coded/logInstall", "Successfully installed DCD");
 
 		foreach (ref workspace; workspaces)

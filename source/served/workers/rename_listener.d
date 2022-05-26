@@ -142,7 +142,8 @@ void onFullyCreateDSource(DocumentUri uri)
 		WorkspaceEdit edit;
 		edit.changes[uri] = patches.map!(a => TextEdit(TextRange(document.bytesToPosition(a.range[0]),
 				document.bytesToPosition(a.range[1])), a.content)).array;
-		rpc.sendMethod("workspace/applyEdit", ApplyWorkspaceEditParams(edit));
+		ApplyWorkspaceEditParams params = { edit: edit };
+		rpc.sendMethod("workspace/applyEdit", params);
 		rpc.window.showInformationMessage(translate!"d.served.moduleNameAutoUpdated");
 	}
 }
@@ -157,7 +158,8 @@ void onFullyCreateDubJson(DocumentUri uri)
 		edit.changes[uri] = [
 			TextEdit(TextRange(0, 0, 0, 0), "{\n\t\"name\": \"" ~ packageName ~ "\"\n}")
 		];
-		rpc.sendMethod("workspace/applyEdit", ApplyWorkspaceEditParams(edit));
+		ApplyWorkspaceEditParams params = { edit: edit };
+		rpc.sendMethod("workspace/applyEdit", params);
 	}
 }
 
@@ -171,7 +173,8 @@ void onFullyCreateDubSdl(DocumentUri uri)
 		edit.changes[uri] = [
 			TextEdit(TextRange(0, 0, 0, 0), `name "` ~ packageName ~ `"` ~ '\n')
 		];
-		rpc.sendMethod("workspace/applyEdit", ApplyWorkspaceEditParams(edit));
+		ApplyWorkspaceEditParams params = { edit: edit };
+		rpc.sendMethod("workspace/applyEdit", params);
 	}
 }
 

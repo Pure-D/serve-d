@@ -6,14 +6,11 @@ import std.ascii : isDigit;
 import std.conv;
 import std.experimental.logger;
 import std.format;
-import std.json;
 import std.string;
 
 import served.types;
 
 import workspaced.api;
-
-import painlessjson;
 
 struct ProfileGCEntry
 {
@@ -134,20 +131,19 @@ ProfileGCEntry[] getProfileGCEntries()
 @onRegisteredComponents
 void setupProfileGCWatchers()
 {
-	if (capabilities.workspace.didChangeWatchedFiles.dynamicRegistration)
+	if (capabilities
+		.workspace.orDefault
+		.didChangeWatchedFiles.orDefault
+		.dynamicRegistration.orDefault)
 	{
-		rpc.sendRequest("client/registerCapability",
-			RegistrationParams([
-				Registration(
-					"profilegc.watchfiles",
-					"workspace/didChangeWatchedFiles",
-					JSONValue([
-						"watchers": JSONValue([
-							FileSystemWatcher("**/profilegc.log").toJSON
-						])
-					])
-				)
-			])
+		rpc.registerCapability(
+			"profilegc.watchfiles",
+			"workspace/didChangeWatchedFiles",
+			DidChangeWatchedFilesRegistrationOptions(
+				[
+					FileSystemWatcher("**/profilegc.log")
+				]
+			)
 		);
 	}
 }
