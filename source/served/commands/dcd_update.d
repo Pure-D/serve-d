@@ -159,7 +159,8 @@ void updateDCD()
 			url = commonPrefix ~ "-linux-x86_64.tar.gz";
 		else version (OSX)
 			url = commonPrefix ~ "-osx-x86_64.tar.gz";
-		else
+
+		if (!url.length)
 			assert(false, "this branch should not be reachable on this platform");
 
 		import std.process : pipeProcess, Redirect, Config, wait;
