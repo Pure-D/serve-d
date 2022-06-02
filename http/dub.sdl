@@ -1,2 +1,2 @@
 name "http"
-dependency "requests" version="~>1.1.6"
+dependency "requests" version="~>2.0.8"
