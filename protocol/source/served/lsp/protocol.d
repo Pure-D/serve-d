@@ -67,6 +67,23 @@ template Variant(T...)
 static assert(isVariant!(Variant!(int, string)),
 	"isVariant suffers from D issue 21975, please upgrade compiler (fixed since frontend 2.100.0)");
 
+template MyEnumProxyImpl(T)
+{
+	@serdeProxy!T
+	struct MyEnumProxyImpl
+	{
+		T value;
+		alias value this;
+
+		this(T value)
+		{
+			this.value = value;
+		}
+	}
+}
+
+alias serdeEnumProxy(T) = serdeProxy!(MyEnumProxyImpl!T);
+
 private enum getJsonKey(T, string member) = ({
 	enum keys = getUDAs!(__traits(getMember, T, member), serdeKeys);
 	static if (keys.length)
