@@ -567,7 +567,7 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 		ret = raw.map!((a) {
 			CompletionItem ret;
 			ret.label = a.text;
-			if (a.text.among!(`""`, `{}`, `()`, `[]`))
+			if (a.text.among!(`''`, `""`, "``", `{}`, `()`, `[]`, `<>`))
 			{
 				ret.insertTextFormat = InsertTextFormat.snippet;
 				ret.insertText = a.text[0] ~ "$0" ~ a.text[1];
