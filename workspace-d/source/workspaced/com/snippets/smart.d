@@ -1,6 +1,6 @@
 module workspaced.com.snippets.smart;
 
-debug = SnippetScope;
+//debug = SnippetScope;
 
 import workspaced.api;
 import workspaced.com.snippets;
