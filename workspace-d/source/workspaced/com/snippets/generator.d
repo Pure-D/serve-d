@@ -245,6 +245,7 @@ enum SnippetLevelWrapper(SnippetLevel level) = "if (done) return; pushLevel("
 	~ level.stringof ~ ", dec); scope (exit) popLevel(dec); "
 	~ "if (!dec.tokens.length || dec.tokens[0].index <= position) lastStatement = null;";
 enum FullSnippetLevelWrapper(SnippetLevel level) = SnippetLevelWrapper!level ~ " super.visit(dec);";
+enum MethodSnippetLevelWrapper(SnippetLevel level) = "repeatLastOnDeclStmt = true; scope(exit) repeatLastOnDeclStmt = false; " ~ FullSnippetLevelWrapper!level;
 
 class SnippetInfoGenerator : ASTVisitor
 {
@@ -278,6 +279,7 @@ class SnippetInfoGenerator : ASTVisitor
 		override void visit(const T dec)
 		{
 			mixin(StackStorageScope!"variableStack");
+			mixin(SnippetLevelWrapper!(SnippetLevel.newMethod));
 			mixin(FullSnippetLevelWrapper!(SnippetLevel.method));
 		}
 
@@ -289,9 +291,32 @@ class SnippetInfoGenerator : ASTVisitor
 
 	override void visit(const DeclarationOrStatement dec)
 	{
-		super.visit(dec);
-		if (!dec.tokens.length || dec.tokens[0].index <= position)
-			lastStatement = cast()dec;
+		if (repeatLastOnDeclStmt)
+		{
+			if (done) return;
+			pushLevel(ret.stack[$ - 2], dec);
+			scope (exit) popLevel(dec);
+			super.visit(dec);
+			if (!dec.tokens.length || dec.tokens[0].index <= position)
+				lastStatement = cast()dec;
+		}
+		else
+		{
+			super.visit(dec);
+			if (!dec.tokens.length || dec.tokens[0].index <= position)
+				lastStatement = cast()dec;
+		}
+	}
+
+	static foreach (T; AliasSeq!(ForeachStatement, ForStatement, WhileStatement, DoStatement))
+		override void visit(const T dec)
+		{
+			mixin(MethodSnippetLevelWrapper!(SnippetLevel.loop));
+		}
+
+	override void visit(const SwitchStatement dec)
+	{
+		mixin(MethodSnippetLevelWrapper!(SnippetLevel.switch_));
 	}
 
 	static foreach (T; AliasSeq!(Arguments, ExpressionNode))
@@ -372,6 +397,7 @@ class SnippetInfoGenerator : ASTVisitor
 	bool done;
 	VariableUsage[] variableStack;
 	DeclarationOrStatement lastStatement;
+	bool repeatLastOnDeclStmt;
 	size_t position, current;
 	SnippetInfo ret;
 }
