@@ -867,6 +867,17 @@ static immutable PlainSnippet[] plainSnippets = [
 			~ "Reference: [https://dlang.org/spec/statement.html#goto-statement]",
 		null, true
 	),
+	PlainSnippet(
+		[SnippetLevel.method],
+		"with",
+		"with",
+		"with ($1) {\n\t$0\n}",
+		"A with block simplifies repeated access of the same symbol. You can "
+			~ "use it for example to repeatedly access the same enum or to "
+			~ "use an inline-constructed value within a block without giving "
+			~ "it a name\n\n"
+			~ "Reference: [https://dlang.org/spec/statement.html#with-statement]"
+	),
 ];
 //dfmt on
 
