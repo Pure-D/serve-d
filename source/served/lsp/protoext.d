@@ -4,6 +4,8 @@ import served.lsp.protocol;
 
 import mir.serde;
 
+@serdeIgnoreUnexpectedKeys:
+
 struct AddImportParams
 {
 	/// Text document to look in
@@ -218,9 +220,9 @@ struct SerializablePlainSnippet
 	/// Markdown documentation for this snippet
 	string documentation;
 	/// Plain text to insert assuming global level indentation. Optional if snippet is a simple string only using plain variables and snippet locations.
-	string plain;
+	@serdeOptional string plain;
 	/// true if this snippet shouldn't be formatted before inserting.
-	bool unformatted;
+	@serdeOptional bool unformatted;
 }
 
 /// Parameters to pass when updating dub imports

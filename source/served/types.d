@@ -28,6 +28,8 @@ import std.string;
 import fs = std.file;
 import io = std.stdio;
 
+import mir.serde;
+
 import workspaced.api;
 
 deprecated("import stdlib_detect directly")
@@ -64,11 +66,16 @@ enum ManyProjectsAction : string
 
 // alias to avoid name clashing
 alias UserConfiguration = Configuration;
+@serdeIgnoreUnexpectedKeys
 struct Configuration
 {
+@serdeIgnoreUnexpectedKeys:
+@serdeOptional:
+
 	struct D
 	{
-		JSONValue stdlibPath = JSONValue("auto");
+		@serdeOptional:
+		JsonValue stdlibPath = JsonValue("auto");
 		string dcdClientPath = "dcd-client", dcdServerPath = "dcd-server";
 		string dubPath = "dub";
 		string dmdPath = "dmd";
@@ -102,6 +109,7 @@ struct Configuration
 
 	struct DFmt
 	{
+		@serdeOptional:
 		bool alignSwitchStatements = true;
 		string braceStyle = "allman";
 		bool outdentAttributes = true;
@@ -119,17 +127,20 @@ struct Configuration
 
 	struct DScanner
 	{
+		@serdeOptional:
 		string[] ignoredKeys;
 	}
 
 	struct Editor
 	{
+		@serdeOptional:
 		int[] rulers;
 		int tabSize;
 	}
 
 	struct Git
 	{
+		@serdeOptional:
 		string path = "git";
 	}
 
@@ -142,18 +153,18 @@ struct Configuration
 	string[] stdlibPath(string cwd = null)
 	{
 		auto p = d.stdlibPath;
-		if (p.type == JSONType.array)
-			return p.array.map!(a => a.str.userPath).array;
+		if (p.kind == JsonValue.Kind.array)
+			return p.get!(JsonValue[]).map!(a => a.get!string.userPath).array;
 		else
 		{
-			if (p.type != JSONType.string || p.str == "auto")
+			if (p.kind != JsonValue.Kind.string || p.get!string == "auto")
 			{
 				import served.utils.stdlib_detect;
 
 				return autoDetectStdlibPaths(cwd, d.dubCompiler);
 			}
 			else
-				return [p.str.userPath];
+				return [p.get!string.userPath];
 		}
 	}
 
