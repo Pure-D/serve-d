@@ -28,9 +28,9 @@ string serializeJson(T)(auto ref T value)
 
 T deserializeJson(T)(scope const(char)[] text)
 {
-	import mir.deser.json : deserializeDynamicJson;
+	import mir.deser.json : deserializeJson;
 
-	return deserializeDynamicJson!T(text);
+	return deserializeJson!T(text);
 }
 
 unittest
