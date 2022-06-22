@@ -98,6 +98,8 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 	ResponseMessageRaw processRequest(RequestMessageRaw msg)
 	{
 		debug(PerfTraceLog) mixin(traceStatistics(__FUNCTION__));
+		scope (failure)
+			error("failure in message ", msg);
 
 		ResponseMessageRaw res;
 		res.id = msg.id;
