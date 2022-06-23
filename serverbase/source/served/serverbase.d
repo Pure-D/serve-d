@@ -53,9 +53,9 @@ struct LanguageServerConfig
 ///   - `bool shutdownRequested`: a boolean that is set to true before the
 ///     `shutdown` method handler or earlier which will terminate the RPC loop
 ///     gracefully and wait for an `exit` notification to actually exit.
-///   - `@protocolMethod("shutdown") JSONValue shutdown()`: the method called
+///   - `@protocolMethod("shutdown") JsonValue shutdown()`: the method called
 ///     when the client wants to shutdown the server. Can return anything,
-///     recommended return value is `JSONValue(null)`.
+///     recommended return value is `JsonValue(null)`.
 ///   - `parallelMain`: an optional method which is run alongside everything
 ///     else in parallel using fibers. Should yield as much as possible when
 ///     there is nothing to do.

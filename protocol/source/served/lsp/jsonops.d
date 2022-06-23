@@ -286,6 +286,12 @@ private void skipWhite(ref scope return inout(char)[] jsonObject)
 	jsonObject = jsonObject.stripLeft;
 }
 
+/// Split the json object into keys, store the slices from the input string
+/// into a newly created struct which contains all the keys from the `fields`
+/// parameter.
+///
+/// If a paremeter ends with _, the last _ will be removed in the string check,
+/// so that D reserved keywords can be used.
 template parseKeySlices(fields...)
 {
 	auto parseKeySlices(T)(scope return T[] jsonObject)
@@ -340,7 +346,7 @@ template parseKeySlices(fields...)
 			{
 				static foreach (string field; fields)
 				{
-				case '"' ~ field ~ '"':
+				case '"' ~ (field[$ - 1] == '_' ? field[0 .. $ - 1] : field) ~ '"':
 					mixin("ret.", field, " = value;");
 					break RawKeySwitch;
 				}
@@ -352,7 +358,7 @@ template parseKeySlices(fields...)
 						{
 							static foreach (string field; fields)
 							{
-							case field:
+							case (field[$ - 1] == '_' ? field[0 .. $ - 1] : field):
 								mixin("ret.", field, " = value;");
 								break DeserializedSwitch;
 							}

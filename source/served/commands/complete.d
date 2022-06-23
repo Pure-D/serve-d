@@ -993,7 +993,7 @@ Snippet snippetFromCompletionItem(CompletionItem item)
 	snippet.resolved = itemData["resolved"].get!bool;
 	snippet.id = itemData["id"].get!string;
 	snippet.providerId = itemData["providerId"].get!string;
-	snippet.data = itemData["data"].toStdJSONValue;
+	snippet.data = itemData["data"];
 	return snippet;
 }
 

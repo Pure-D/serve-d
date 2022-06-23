@@ -10,7 +10,6 @@ import workspaced.coms;
 
 import std.algorithm : canFind, filter, map, startsWith;
 import std.array : array, appender;
-import std.json : JSONValue;
 import std.path : extension, isAbsolute;
 import std.string : toLower;
 

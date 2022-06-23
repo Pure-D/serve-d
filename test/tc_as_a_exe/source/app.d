@@ -118,7 +118,7 @@ void doTests()
 		configuration: opt(true)
 	};
 	InitializeParams init = {
-		processId: JSONValue(thisProcessID),
+		processId: JsonValue(thisProcessID),
 		rootUri: uriFromFile(cwd),
 		capabilities: {
 			workspace: opt(workspace)

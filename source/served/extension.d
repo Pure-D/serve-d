@@ -18,7 +18,6 @@ import std.datetime.systime : Clock, SysTime;
 import std.experimental.logger;
 import std.format : format;
 import std.functional : toDelegate;
-import std.json : JSONType, JSONValue, parseJSON;
 import std.meta : AliasSeq;
 import std.path : baseName, buildNormalizedPath, buildPath, chainPath, dirName,
 	globMatch, relativePath;
@@ -640,8 +639,7 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 		try
 		{
 			auto packageJson = fs.readText(chainPath(root, "package.json"));
-			auto json = parseJSON(packageJson);
-			if (seemsLikeDubJson(json))
+			if (seemsLikeDubJson(packageJson))
 				rootDub = true;
 		}
 		catch (Exception)
@@ -885,17 +883,29 @@ void removeWorkspace(string workspaceUri)
 	workspace(workspaceUri).disabled = true;
 }
 
-void handleBroadcast(WorkspaceD workspaced, WorkspaceD.Instance instance, JSONValue data)
+class MessageHandler : IMessageHandler
 {
-	if (!instance)
-		return;
-	auto type = "type" in data;
-	if (type && type.type == JSONType.string && type.str == "crash")
+	void warn(WorkspaceD.Instance instance, string component,
+		int id, string message, string details = null)
 	{
-		if (data["component"].str == "dcd")
+		
+	}
+
+	void error(WorkspaceD.Instance instance, string component,
+		int id, string message, string details = null)
+	{
+		
+	}
+
+	void handleCrash(WorkspaceD.Instance instance, string component,
+		ComponentWrapper componentInstance)
+	{
+		if (component == "dcd")
+		{
 			spawnFiber(() {
 				startDCDServer(instance, instance.cwd.uriFromFile);
 			});
+		}
 	}
 }
 
@@ -996,15 +1006,15 @@ string determineOutputFolder()
 }
 
 @protocolMethod("shutdown")
-JSONValue shutdown()
+JsonValue shutdown()
 {
 	if (!backend)
-		return JSONValue(null);
+		return JsonValue(null);
 	backend.shutdown();
 	served.extension.setTimeout({
 		throw new Error("RPC still running 1s after shutdown");
 	}, 1.seconds);
-	return JSONValue(null);
+	return JsonValue(null);
 }
 
 // === Protocol Notifications starting here ===
@@ -1183,7 +1193,7 @@ shared static this()
 {
 	backend = new LazyWorkspaceD();
 
-	backend.onBroadcast = (&handleBroadcast).toDelegate;
+	backend.messageHandler = new MessageHandler();
 	backend.onBindFail = (WorkspaceD.Instance instance, ComponentFactory factory, Exception err) {
 		if (!instance && err.msg.canFind("requires to be instanced"))
 			return;

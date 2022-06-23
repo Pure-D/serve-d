@@ -12,7 +12,6 @@ import rm.rf;
 
 import std.algorithm : endsWith;
 import std.format : format;
-import std.json : JSONValue;
 import std.path : baseName, buildPath, chainPath, isAbsolute;
 
 import fs = std.file;

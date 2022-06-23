@@ -8,7 +8,6 @@ import std.algorithm;
 import std.array : appender;
 import std.conv;
 import std.exception;
-import std.json : JSONValue;
 import std.parallelism;
 import std.regex;
 import std.stdio;
@@ -36,6 +35,13 @@ import dub.recipe.io;
 class DubComponent : ComponentWrapper
 {
 	mixin DefaultComponentWrapper;
+
+	enum WarningId
+	{
+		invalidDefaultConfig,
+		unexpectedError,
+		failedListingImportPaths
+	}
 
 	static void registered()
 	{
@@ -65,12 +71,9 @@ class DubComponent : ComponentWrapper
 			_configuration = _dub.project.getDefaultConfiguration(_platform);
 			if (!_dub.project.configurations.canFind(_configuration))
 			{
-				stderr.writeln("Dub Error: No configuration available");
-				workspaced.broadcast(refInstance, JSONValue([
-							"type": JSONValue("warning"),
-							"component": JSONValue("dub"),
-							"detail": JSONValue("invalid-default-config")
-						]));
+				workspaced.messageHandler.warn(refInstance, "dub",
+					cast(int)WarningId.invalidDefaultConfig,
+					"Dub Error: No configuration available");
 			}
 			else
 				updateImportPaths(false);
@@ -79,13 +82,18 @@ class DubComponent : ComponentWrapper
 		{
 			if (!_dub || !_dub.project)
 				throw e;
-			stderr.writeln("Dub Error (ignored): ", e);
+			workspaced.messageHandler.warn(refInstance, "dub",
+				cast(int)WarningId.unexpectedError,
+				"Dub Error (ignored)",
+				e.toString);
 		}
 		/*catch (AssertError e)
 		{
 			if (!_dub || !_dub.project)
 				throw e;
-			stderr.writeln("Dub Error (ignored): ", e);
+			workspaced.messageHandler.warn(refInstance, "dub",
+				cast(int)WarningId.unexpectedError,
+				"Dub Error (ignored): " ~ e.toString);
 		}*/
 	}
 
@@ -217,11 +225,10 @@ class DubComponent : ComponentWrapper
 		}
 		catch (Exception e)
 		{
-			workspaced.broadcast(refInstance, JSONValue([
-						"type": JSONValue("error"),
-						"component": JSONValue("dub"),
-						"detail": JSONValue("Error while listing import paths: " ~ e.toString)
-					]));
+			workspaced.messageHandler.error(refInstance, "dub",
+				cast(int)WarningId.failedListingImportPaths,
+				"Error while listing import paths",
+				e.toString);
 			_importPaths = [];
 			_stringImportPaths = [];
 			return false;

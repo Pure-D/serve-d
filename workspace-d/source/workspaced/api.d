@@ -8,7 +8,6 @@ import std.algorithm : all;
 import std.array : array;
 import std.conv;
 import std.file : exists, thisExePath;
-import std.json : JSONType, JSONValue;
 import std.path : baseName, chainPath, dirName;
 import std.regex : ctRegex, matchFirst;
 import std.string : indexOf, indexOfAny, strip;
@@ -33,8 +32,6 @@ else
 alias ImportPathProvider = string[] delegate() nothrow;
 ///
 alias IdentifierListProvider = string[] delegate() nothrow;
-///
-alias BroadcastCallback = void delegate(WorkspaceD, WorkspaceD.Instance, JSONValue);
 /// Called when ComponentFactory.create is called and errored (when the .bind call on a component fails)
 /// Params:
 /// 	instance = the instance for which the component was attempted to initialize (or null for global component registration)
@@ -42,6 +39,13 @@ alias BroadcastCallback = void delegate(WorkspaceD, WorkspaceD.Instance, JSONVal
 /// 	error = the stacktrace that was catched on the bind call
 alias ComponentBindFailCallback = void delegate(WorkspaceD.Instance instance,
 		ComponentFactory factory, Exception error);
+
+interface IMessageHandler
+{
+	void warn(WorkspaceD.Instance instance, string component, int id, string message, string details = null);
+	void error(WorkspaceD.Instance instance, string component, int id, string message, string details = null);
+	void handleCrash(WorkspaceD.Instance instance, string component, ComponentWrapper componentInstance);
+}
 
 /// UDA; will never try to call this function from rpc
 enum ignoredFunc;

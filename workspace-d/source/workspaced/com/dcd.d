@@ -8,7 +8,6 @@ import std.array;
 import std.ascii;
 import std.conv;
 import std.datetime;
-import std.experimental.logger;
 import std.experimental.logger : trace;
 import std.json;
 import std.path;
@@ -28,6 +27,13 @@ import served.dcd.client;
 class DCDComponent : ComponentWrapper
 {
 	mixin DefaultComponentWrapper;
+
+	enum WarningId
+	{
+		dcdServerCrash,
+		dcdOutdated,
+		unimplemented
+	}
 
 	enum latestKnownVersion = latestKnownDCDVersion;
 	void load()
@@ -64,7 +70,7 @@ class DCDComponent : ComponentWrapper
 		if (!checkVersion(installedVersion, BuiltinDCDClient.minSupportedServerInclusive)
 				|| checkVersion(installedVersion, BuiltinDCDClient.maxSupportedServerExclusive))
 		{
-			info("Using dcd-client instead of internal workspace-d client");
+			trace("Using dcd-client instead of internal workspace-d client");
 
 			string clientInstalledVersion = clientPath.getVersionAndFixPath;
 			string clientPathInfo = clientPath != "dcd-client" ? "(" ~ clientPath ~ ") " : "";
@@ -77,7 +83,7 @@ class DCDComponent : ComponentWrapper
 		}
 		else
 		{
-			info("using builtin DCD client");
+			trace("using builtin DCD client");
 			client = new BuiltinDCDClient();
 		}
 
@@ -89,10 +95,8 @@ class DCDComponent : ComponentWrapper
 
 		//dfmt off
 		if (isOutdated)
-			workspaced.broadcast(refInstance, JSONValue([
-				"type": JSONValue("outdated"),
-				"component": JSONValue("dcd")
-			]));
+			workspaced.messageHandler.warn(refInstance, "dcd",
+				WarningId.dcdOutdated, "DCD is outdated");
 		//dfmt on
 
 		workspaced.globalConfiguration.set("dcd", "_usingInternal",
@@ -243,19 +247,18 @@ class DCDComponent : ComponentWrapper
 			}
 			catch (Exception e)
 			{
-				error("Reading/clearing stderr from dcd-server crashed (-> killing dcd-server): ", e);
+				workspaced.messageHandler.error(refInstance, "dcd",
+					WarningId.dcdServerCrash,
+					"Reading/clearing stderr from dcd-server crashed (-> killing dcd-server): ",
+					e.toString);
 				serverPipes.pid.kill();
 			}
 
 			auto code = serverPipes.pid.wait();
-			info("DCD-Server stopped with code ", code);
+			trace("DCD-Server stopped with code ", code);
 			if (code != 0)
 			{
-				info("Broadcasting dcd server crash.");
-				workspaced.broadcast(refInstance, JSONValue([
-						"type": JSONValue("crash"),
-						"component": JSONValue("dcd")
-					]));
+				workspaced.messageHandler.handleCrash(refInstance, "dcd", this);
 			}
 		});
 	}
@@ -545,7 +548,7 @@ class DCDComponent : ComponentWrapper
 				DCDCompletions completions;
 				if (!running)
 				{
-					info("DCD not running!");
+					trace("DCD not yet running!");
 					ret.finish(completions);
 					return;
 				}
@@ -581,7 +584,9 @@ class DCDComponent : ComponentWrapper
 				else
 				{
 					completions.type = DCDCompletions.Type.raw;
-					warning("Unknown DCD completion type: ", c.type);
+					workspaced.messageHandler.warn(refInstance, "dcd",
+						WarningId.unimplemented,
+						"Unknown DCD completion type: " ~ c.type.to!string);
 				}
 				ret.finish(completions);
 			}

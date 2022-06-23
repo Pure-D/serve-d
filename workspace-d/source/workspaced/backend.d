@@ -6,7 +6,6 @@ import std.algorithm : canFind, map, max, min, remove, startsWith;
 import std.array : array;
 import std.conv;
 import std.file : exists, mkdir, mkdirRecurse, rmdirRecurse, tempDir, write;
-import std.json : JSONType, JSONValue;
 import std.parallelism : defaultPoolThreads, TaskPool;
 import std.path : buildNormalizedPath, buildPath;
 import std.range : chain;
@@ -326,8 +325,9 @@ class WorkspaceD
 		}
 	}
 
-	/// Event which is called when $(LREF broadcast) is called
-	BroadcastCallback onBroadcast;
+	import std.typecons : BlackHole;
+	/// Called from components to push messages to the app.
+	IMessageHandler messageHandler = new BlackHole!IMessageHandler;
 	/// Called when ComponentFactory.create is called and errored (when the .bind call on a component fails)
 	/// See_Also: $(LREF ComponentBindFailCallback)
 	ComponentBindFailCallback onBindFail;
@@ -363,12 +363,6 @@ class WorkspaceD
 		if (_gthreads)
 			_gthreads.finish(true);
 		_gthreads = null;
-	}
-
-	void broadcast(WorkspaceD.Instance instance, JSONValue value)
-	{
-		if (onBroadcast)
-			onBroadcast(this, instance, value);
 	}
 
 	Instance getInstance(string cwd) nothrow

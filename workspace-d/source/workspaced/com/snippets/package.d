@@ -21,6 +21,9 @@ public import workspaced.com.snippets.plain;
 public import workspaced.com.snippets.smart;
 public import workspaced.com.snippets.dependencies;
 
+// ugly, but works for now
+import mir.algebraic_alias.json : JsonValue = JsonAlgebraic;
+
 /// Component for auto completing snippets with context information and formatting these snippets with dfmt.
 @component("snippets")
 class SnippetsComponent : ComponentWrapper
@@ -703,7 +706,7 @@ struct Snippet
 	/// Internal ID for resolving this snippet
 	string id, providerId;
 	/// User-defined data for helping resolving this snippet
-	JSONValue data;
+	JsonValue data;
 	/// Label for this snippet
 	string title;
 	/// Shortcut to type for this snippet

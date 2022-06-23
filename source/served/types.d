@@ -559,24 +559,26 @@ string userPath(Configuration.Git git)
 	return git.path.length ? userPath(git.path) : "git";
 }
 
-int toInt(JSONValue value)
+int toInt(JsonValue value)
 {
-	if (value.type == JSONType.uinteger)
-		return cast(int) value.uinteger;
-	else
-		return cast(int) value.integer;
+	return cast(int)value.get!long;
 }
 
 __gshared LazyWorkspaceD backend;
 
 /// Quick function to check if a package.json can not not be a dub package file.
 /// Returns: false if fields are used which aren't usually used in dub but in nodejs.
-bool seemsLikeDubJson(JSONValue packageJson)
+bool seemsLikeDubJson(string json)
 {
-	if ("main" in packageJson || "engines" in packageJson || "publisher" in packageJson
-			|| "private" in packageJson || "devDependencies" in packageJson)
+	auto packageJson = json.parseKeySlices!("main", "engines", "publisher",
+		"private_", "devDependencies", "name");
+	if (packageJson.main.length
+		|| packageJson.engines.length
+		|| packageJson.publisher.length
+		|| packageJson.private_.length
+		|| packageJson.devDependencies.length)
 		return false;
-	if ("name" !in packageJson)
+	if (!packageJson.name.length)
 		return false;
 	return true;
 }
@@ -637,7 +639,7 @@ void prettyPrintStruct(alias printFunc, T, int line = __LINE__, string file = __
 					}
 				}
 			}
-			else static if (is(typeof(member) == JSONValue))
+			else static if (is(typeof(member) == JsonValue))
 			{
 				printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
 						__traits(identifier, member), ": ", value.tupleof[i].toString());

@@ -19,7 +19,6 @@ import std.array : array;
 import std.conv : to;
 import std.experimental.logger;
 import std.format : format;
-import std.json : JSONType, JSONValue;
 import std.path : buildNormalizedPath, isAbsolute;
 import std.regex : matchFirst, regex, replaceAll;
 import std.string : indexOf, indexOfAny, join, replace, strip;

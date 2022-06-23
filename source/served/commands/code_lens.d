@@ -15,7 +15,6 @@ import std.algorithm : startsWith;
 import std.conv : to;
 import std.datetime.stopwatch : StopWatch;
 import std.datetime.systime : Clock, SysTime;
-import std.json : JSONType, JSONValue;
 import std.regex : matchAll;
 
 @protocolMethod("textDocument/codeLens")
