@@ -309,6 +309,7 @@ string evaluateExpressionString(const Token token)
 			case tok!"dstringLiteral":
 				if (t.text.isStringLiteral)
 				{
+					import std.utf: UTFException;
 					try {
 						ret ~= unescapeString(t.text);
 					}
