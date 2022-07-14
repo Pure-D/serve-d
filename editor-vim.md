@@ -39,6 +39,10 @@ project root or move it further up the folder hierarchy, if you know
 what you are doing.
 
 ## Using coc's
+```
+CocInstall coc-dlang
+```
+### or add serve-d manually to coc-settings.json
 
 First [download or build serve-d](README.md#Installation)
 
