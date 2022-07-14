@@ -39,14 +39,18 @@ project root or move it further up the folder hierarchy, if you know
 what you are doing.
 
 ## Using coc's
+
+### Using `CocInstall`
+
 ```
-CocInstall coc-dlang
+:CocInstall coc-dlang
 ```
-### or add serve-d manually to coc-settings.json
+
+### Manually through coc-settings.json
 
 First [download or build serve-d](README.md#Installation)
 
-A coc-settings.json files looking like this works well.
+A `coc-settings.json` file looking like this works well (you can open it with `:CocConfig`)
 
 ```js
 {
