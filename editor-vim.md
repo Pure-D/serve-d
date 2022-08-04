@@ -70,3 +70,15 @@ A `coc-settings.json` file looking like this works well (you can open it with `:
 	"suggest.noselect": false
 }
 ```
+
+## Using nvim-lspconfig
+
+Neovim has a builtin LSP client and official LSP configs for it,
+[here](https://github.com/neovim/nvim-lspconfig).
+
+After installing `nvim-lspconfig` using your preferred plugin manager, you must
+load serve-d, like the following:
+
+```lua
+require'lspconfig'.serve_d.setup{}
+```
