@@ -3,7 +3,7 @@
 
 Requirments:
     - LSP Package: https://lsp.sublimetext.io/
-    
+
 
 Client Configuration:
 
