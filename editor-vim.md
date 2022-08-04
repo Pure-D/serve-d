@@ -5,10 +5,10 @@
 [Download or build serve-d](README.md#Installation) and edit your `.vimrc`.
 
 ```vimrc
-let g:ycm_language_server = [ 
-            \ { 
-            \     'name': 'd', 
-            \     'cmdline': ['path/to/your/serve-d/binary'], 
+let g:ycm_language_server = [
+            \ {
+            \     'name': 'd',
+            \     'cmdline': ['path/to/your/serve-d/binary'],
             \     'filetypes': ['d'],
             \ }]
 ```
