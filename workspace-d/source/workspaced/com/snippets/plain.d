@@ -232,7 +232,7 @@ static immutable PlainSnippet[] plainSnippets = [
 		"string toString() in struct",
 		"string toString() const @safe pure nothrow {\n\t$0\n}",
 		"Overriding how objects are serialized to strings with std.conv and writeln.\n\n"
-			~ "Reference: [https://dlang.org/phobos/std_format.html#.formatValue]"
+			~ "Reference: [https://dlang.org/phobos/std_format_write.html]"
 	),
 	PlainSnippet(
 		[SnippetLevel.type, SnippetLevel.mixinTemplate],
@@ -240,7 +240,7 @@ static immutable PlainSnippet[] plainSnippets = [
 		"string toString() in struct using std.conv:text",
 		"string toString() const @safe {\n\timport std.conv : text;\n\n\treturn text($0);\n}",
 		"Overriding how objects are serialized to strings with std.conv and writeln.\n\n"
-			~ "Reference: [https://dlang.org/phobos/std_format.html#.formatValue]"
+			~ "Reference: [https://dlang.org/phobos/std_format_write.html]"
 	),
 	// these don't get added as they are too error-prone (get silently ignored when there is a compilation error inside of them)
 	// PlainSnippet(
@@ -250,7 +250,7 @@ static immutable PlainSnippet[] plainSnippets = [
 	// 	"void toString(W)(ref W w) {\n\t$0\n}",
 	// 	"Overriding how objects are serialized to strings with std.conv and writeln.\n\n"
 	// 		~ "This overload uses an appender as the first argument which allows the developer to avoid concatenation and GC use.\n\n"
-	// 		~ "Reference: [https://dlang.org/phobos/std_format.html#.formatValue]"
+	// 		~ "Reference: [https://dlang.org/phobos/std_format_write.html]"
 	// ),
 	// PlainSnippet(
 	// 	[SnippetLevel.type, SnippetLevel.mixinTemplate],
@@ -259,7 +259,7 @@ static immutable PlainSnippet[] plainSnippets = [
 	// 	"void toString(W)(ref W w, scope const ref FormatSpec fmt) {\n\t$0\n}",
 	// 	"Overriding how objects are serialized to strings with std.conv and writeln.\n\n"
 	// 		~ "This overload uses an appender as the first argument which allows the developer to avoid concatenation and GC use.\n\n"
-	// 		~ "Reference: [https://dlang.org/phobos/std_format.html#.formatValue]"
+	// 		~ "Reference: [https://dlang.org/phobos/std_format_write.html]"
 	// ),
 	PlainSnippet(
 		[SnippetLevel.type, SnippetLevel.mixinTemplate],
@@ -267,7 +267,7 @@ static immutable PlainSnippet[] plainSnippets = [
 		"string toString() in class",
 		"override string toString() const @safe pure nothrow {\n\t$0\n}",
 		"Overriding how objects are serialized to strings with std.conv and writeln.\n\n"
-			~ "Reference: [https://dlang.org/phobos/std_format.html#.formatValue]"
+			~ "Reference: [https://dlang.org/phobos/std_format_write.html]"
 	),
 	PlainSnippet(
 		[SnippetLevel.type, SnippetLevel.mixinTemplate],
@@ -275,7 +275,7 @@ static immutable PlainSnippet[] plainSnippets = [
 		"string toString() in class using std.conv:text",
 		"override string toString() const @safe {\n\timport std.conv : text;\n\n\treturn text($0);\n}",
 		"Overriding how objects are serialized to strings with std.conv and writeln.\n\n"
-			~ "Reference: [https://dlang.org/phobos/std_format.html#.formatValue]"
+			~ "Reference: [https://dlang.org/phobos/std_format_write.html]"
 	),
 	PlainSnippet(
 		[SnippetLevel.type, SnippetLevel.mixinTemplate],
