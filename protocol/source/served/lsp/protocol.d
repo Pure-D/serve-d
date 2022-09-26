@@ -67,23 +67,6 @@ template Variant(T...)
 static assert(isVariant!(Variant!(int, string)),
 	"isVariant suffers from D issue 21975, please upgrade compiler (fixed since frontend 2.100.0)");
 
-template MyEnumProxyImpl(T)
-{
-	@serdeProxy!T
-	struct MyEnumProxyImpl
-	{
-		T value;
-		alias value this;
-
-		this(T value)
-		{
-			this.value = value;
-		}
-	}
-}
-
-alias serdeEnumProxy(T) = serdeProxy!(MyEnumProxyImpl!T);
-
 private enum getJsonKey(T, string member) = ({
 	enum keys = getUDAs!(__traits(getMember, T, member), serdeKeys);
 	static if (keys.length)
@@ -113,7 +96,11 @@ enum getRequiredKeys(T) = ({
 @serdeFallbackStruct
 @serdeProxy!JsonValue
 struct StructVariant(AllowedTypes...)
+if (AllowedTypes.length > 0)
 {
+	import mir.ion.exception;
+	import mir.ion.value;
+
 	import std.algorithm;
 	import std.array;
 
@@ -122,53 +109,11 @@ struct StructVariant(AllowedTypes...)
 
 	enum commonKeys = setIntersection(staticMap!(getRequiredKeys, AllowedTypes)).array;
 
-	static bool testValid(JsonValue value)
-	{
-		static if (AllowedTypes.length == 0)
-		{
-			return value.kind == JsonValue.Kind.object;
-		}
-		else
-		{
-			if (value.kind != JsonValue.Kind.object)
-				return false;
-
-			auto keys = value.get!(StringMap!JsonValue).keys;
-			static foreach (key; commonKeys)
-				if (!keys.canFind(key))
-					return false;
-
-			static foreach (T; AllowedTypes)
-				if (valueMatchesType!T(value))
-					return true;
-
-			return false;
-		}
-	}
-
-	static void enforceValid(JsonValue value)
-	{
-		if (!testValid(value))
-			throw new Exception({
-				if (value.kind != JsonValue.Kind.object)
-					return value.serializeJson ~ " is not an object";
-				
-				string reason;
-				auto keys = value.get!(StringMap!JsonValue).keys;
-				static foreach (key; commonKeys)
-					if (!keys.canFind(key))
-						reason ~= "\nrequired common key '" ~ key ~ "' is missing";
-				return value.serializeJson ~ " is not compatible with types " ~ AllowedTypes.stringof ~ reason;
-			} ());
-	}
-
-	static bool valueMatchesType(T)(JsonValue value)
-	in (value.kind == JsonValue.Kind.object)
+	private static bool valueMatchesType(T)(IonStructWithSymbols struct_)
 	{
 		enum requiredKeys = getRequiredKeys!T;
 		bool[requiredKeys.length] hasRequired;
-		auto keys = value.get!(StringMap!JsonValue).keys;
-		foreach (key; keys)
+		foreach (error, key, value; struct_)
 		{
 			Switch: switch (key)
 			{
@@ -193,13 +138,12 @@ struct StructVariant(AllowedTypes...)
 		return true;
 	}
 
-	static string mismatchMessage(T)(JsonValue value)
+	static string mismatchMessage(T)(IonStructWithSymbols struct_)
 	{
 		string reasons;
 		enum requiredKeys = getRequiredKeys!T;
 		bool[requiredKeys.length] hasRequired;
-		auto keys = value.get!(StringMap!JsonValue).keys;
-		foreach (key; keys)
+		foreach (error, key, value; struct_)
 		{
 			Switch: switch (key)
 			{
@@ -224,16 +168,10 @@ struct StructVariant(AllowedTypes...)
 		return reasons.length ? reasons[0 .. $ - 1] : null;
 	}
 
-	private JsonValue _value;
+	MirAlgebraic!AllowedTypes value;
 	alias value this;
-	auto value() inout @property { return _value; }
-	auto value(JsonValue value) @property
-	{
-		enforceValid(value);
-		return _value = value;
-	}
 
-	this(JsonValue v)
+	this(MirAlgebraic!AllowedTypes v)
 	{
 		value = v;
 	}
@@ -241,39 +179,123 @@ struct StructVariant(AllowedTypes...)
 	this(T)(T v)
 	if (isAllowedType!T)
 	{
-		value = v.toJsonValue;
+		value = v;
 	}
 
 	ref typeof(this) opAssign(T)(T rhs)
 	{
 		static if (is(T : typeof(this)))
 			value = rhs.value;
-		else static if (is(T : JsonValue))
-			value = rhs;
 		else static if (isAllowedType!T)
-			value = rhs.toJsonValue;
+			value = rhs;
 		else
 			static assert(false, "unsupported assignment of type " ~ T.stringof ~ " to " ~ typeof(this).stringof);
 		return this;
 	}
 
-	bool tryExtract(T)(out T val) const
-	if (isAllowedType!T)
+	void serialize(S)(scope ref S serializer) const
 	{
-		if (!valueMatchesType!T(value))
-			return false;
+		import mir.ser : serializeValue;
 
-		val = value.jsonValueTo!T;
-		return true;
+		serializeValue(serializer, value);
+	}
+
+	/**
+	Returns: error msg if any
+	*/
+	@safe pure scope
+	IonException deserializeFromIon(scope const char[][] symbolTable, IonDescribedValue value)
+	{
+		import mir.deser.ion : deserializeIon;
+		import mir.ion.type_code : IonTypeCode;
+
+		if (value.descriptor.type != IonTypeCode.struct_)
+			return ionException(IonErrorCode.expectedStructValue);
+
+		bool[commonKeys.length] hasRequired;
+
+		auto struct_ = value.get!(IonStruct).withSymbols(symbolTable);
+		foreach (error, key, value; struct_)
+		{
+			if (error)
+				return error.ionException;
+
+		Switch:
+			switch (key)
+			{
+				static foreach (i, member; commonKeys)
+				{
+			case member:
+					hasRequired[i] = true;
+					break Switch;
+				}
+			default:
+				break;
+			}
+		}
+
+		foreach (i, has; hasRequired)
+			if (!has)
+				return new IonException({
+					string reason;
+					foreach (i, has; hasRequired)
+						if (!has)
+							reason ~= "\nrequired common key '" ~ commonKeys[i] ~ "' is missing";
+					return "ion value is not compatible with StructVariant with types " ~ AllowedTypes.stringof ~ reason;
+				}());
+
+		static foreach (T; AllowedTypes)
+			if (valueMatchesType!T(struct_))
+				{
+				this.value = deserializeIon!T(symbolTable, value);
+				return null;
+			}
+
+		return new IonException({
+			string reason;
+			static foreach (T; AllowedTypes)
+				reason ~= "\n\t" ~ T.stringof ~ ": " ~ mismatchMessage!T(struct_);
+			return "ion value is not compatible with StructVariant with types " ~ AllowedTypes.stringof ~ ":" ~ reason;
+		}());
+	}
+
+	bool tryExtract(T)(out T ret)
+	{
+		return value.match!(
+			(T exact) { ret = exact; return true; },
+			(other) {
+				bool success = true;
+				static foreach (key; __traits(allMembers, T))
+				{
+					static if (__traits(hasMember, other, key))
+						__traits(getMember, ret, key) = __traits(getMember, other, key);
+					else
+						success = false;
+				}
+				if (!success)
+					ret = T.init;
+				return success;
+			}
+		);
 	}
 
 	T extract(T)() const
 	if (isAllowedType!T)
 	{
-		if (!valueMatchesType!T(value))
-			throw new Exception(mismatchMessage!T(value));
-
-		return value.jsonValueTo!T;
+		return value.match!(
+			(T exact) => exact,
+			(other) {
+				T ret;
+				static foreach (key; __traits(allMembers, T))
+				{
+					static if (__traits(hasMember, other, key))
+						__traits(getMember, ret, key) = __traits(getMember, other, key);
+					else
+						throw new Exception("can't extract " ~ T.stringof ~ " from effective " ~ (Unqual!(typeof(other))).stringof);
+				}
+				return ret;
+			}
+		);
 	}
 }
 
@@ -307,9 +329,9 @@ unittest
 	Named extractedNamed;
 	Person extractedPerson;
 	Place extractedPlace;
-	assert(var.tryExtract!Named(extractedNamed), var.mismatchMessage!Named(var.value));
-	assert(var.tryExtract!Person(extractedPerson), var.mismatchMessage!Person(var.value));
-	assert(!var.tryExtract!Place(extractedPlace), var.mismatchMessage!Place(var.value));
+	assert(var.tryExtract!Named(extractedNamed));//, var.mismatchMessage!Named(var.value));
+	assert(var.tryExtract!Person(extractedPerson));//, var.mismatchMessage!Person(var.value));
+	assert(!var.tryExtract!Place(extractedPlace));//, var.mismatchMessage!Place(var.value));
 
 	try
 	{
@@ -318,28 +340,27 @@ unittest
 	}
 	catch (Exception e)
 	{
-		assert(e.msg == "missing required key lat\nmissing required key lon", e.msg);
+		// assert(e.msg == "missing required key lat\nmissing required key lon", e.msg);
+		assert(e.msg == "can't extract Place from effective Person", e.msg);
 	}
 
 	assert(extractedNamed.name == "Bob");
 	assert(extractedPerson == Person("Bob", 32));
 	assert(extractedPlace is Place.init);
 
-	var = JsonValue(["name": JsonValue("new name")]);
+	var = `{"name":"new name"}`.deserializeJson!(typeof(var));
 	assert(var.extract!Named.name == "new name");
 	assert(!var.tryExtract!Person(extractedPerson));
 	assert(!var.tryExtract!Place(extractedPlace));
 
-	assert(!var.testValid(JsonValue(["nam": JsonValue("name")])));
-
 	assert(var.extract!Named.name == "new name");
 	assertThrown({
-		var = JsonValue(["nam": JsonValue("name")]);
+		var = `{"nam":"name"}`.deserializeJson!(typeof(var));
 	}());
 	assert(var.extract!Named.name == "new name");
 
 	assertThrown({
-		var = JsonValue("hello");
+		var = `"hello"`.deserializeJson!(typeof(var));
 	}());
 }
 
@@ -365,26 +386,26 @@ unittest
 
 	Person extractedPerson;
 	Place extractedPlace;
-	assert(var.tryExtract!Person(extractedPerson), var.mismatchMessage!Person(var.value));
-	assert(!var.tryExtract!Place(extractedPlace), var.mismatchMessage!Place(var.value));
+	assert(var.tryExtract!Person(extractedPerson));//, var.mismatchMessage!Person(var.value));
+	assert(!var.tryExtract!Place(extractedPlace));//, var.mismatchMessage!Place(var.value));
 
 	assert(extractedPerson == Person("Bob", 32));
 	assert(extractedPlace is Place.init);
 
-	var = JsonValue(["name": JsonValue("new name"), "lat": JsonValue(0), "lon": JsonValue(1.5f)]);
+	var = `{"name": "new name", "lat": 0, "lon": 1.5}`.deserializeJson!(typeof(var));
 
-	assert(!var.tryExtract!Person(extractedPerson), var.mismatchMessage!Person(var.value));
-	assert(var.tryExtract!Place(extractedPlace), var.mismatchMessage!Place(var.value));
+	assert(!var.tryExtract!Person(extractedPerson));//, var.mismatchMessage!Person(var.value));
+	assert(var.tryExtract!Place(extractedPlace));//, var.mismatchMessage!Place(var.value));
 
 	assert(extractedPerson is Person.init);
 	assert(extractedPlace == Place("new name", 0, 1.5));
 
 	assertThrown({
-		var = JsonValue(["name": JsonValue("broken name")]);
+		var = `{"name":"broken name"}`.deserializeJson!(typeof(var));
 	}());
 	assert(var.extract!Place.name == "new name");
 
-	var = JsonValue(["name": JsonValue("Alice"), "age": JsonValue(64)]);
+	var = `{"name":"Alice","age":64}`.deserializeJson!(typeof(var));
 	assert(var.extract!Person == Person("Alice", 64));
 }
 
@@ -966,13 +987,13 @@ private struct SerializableTextRange
 	Position start;
 	Position end;
 
-	this(Position start, Position end)
+	this(Position start, Position end) @safe pure nothrow @nogc
 	{
 		this.start = start;
 		this.end = end;
 	}
 
-	this(TextRange r)
+	this(TextRange r) @safe pure nothrow @nogc
 	{
 		start = r.start;
 		end = r.end;
