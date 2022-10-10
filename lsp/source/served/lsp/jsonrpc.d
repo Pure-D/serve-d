@@ -34,22 +34,17 @@ class RPCProcessor : Fiber
 	}
 
 	/// Sends an RPC response or error.
-	/// If `id`, `result` or `error` is not given on the response message, they won't be sent.
-	/// However according to the RPC specification, `id` must be set in order for this to be a response object.
+	/// If `result` or `error` is not given on the response message, they won't be sent.
 	/// Otherwise on success `result` must be set or on error `error` must be set.
 	/// This also logs the error to stderr if it is given.
 	/// Params:
 	///   res = the response message to send.
 	void send(ResponseMessage res)
 	{
-		const(char)[][8] buf;
+		const(char)[][7] buf;
 		int len;
-		buf[len++] = `{"jsonrpc":"2.0"`;
-		if (!res.id.isNone)
-		{
-			buf[len++] = `,"id":`;
-			buf[len++] = res.id.serializeJson;
-		}
+		buf[len++] = `{"jsonrpc":"2.0","id":`;
+		buf[len++] = res.id.serializeJson;
 
 		if (!res.result.isNone)
 		{
@@ -70,14 +65,10 @@ class RPCProcessor : Fiber
 	/// ditto
 	void send(ResponseMessageRaw res)
 	{
-		const(char)[][8] buf;
+		const(char)[][7] buf;
 		int len;
-		buf[len++] = `{"jsonrpc":"2.0"`;
-		if (!res.id.isNone)
-		{
-			buf[len++] = `,"id":`;
-			buf[len++] = res.id.serializeJson;
-		}
+		buf[len++] = `{"jsonrpc":"2.0","id":`;
+		buf[len++] = res.id.serializeJson;
 
 		if (res.resultJson.length)
 		{
@@ -489,7 +480,7 @@ private:
 					trace(content);
 					auto idx = content.indexOf("\"id\":");
 					auto endIdx = content.indexOf(",", idx);
-					Nullable!RequestToken fallback;
+					RequestToken fallback;
 					if (!content.startsWith("[") && idx != -1 && endIdx != -1)
 						fallback = deserializeJson!RequestToken(content[idx .. endIdx].strip);
 					send(ResponseMessage(fallback, ResponseError(ErrorCode.parseError,

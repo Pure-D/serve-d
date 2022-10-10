@@ -570,6 +570,8 @@ __gshared LazyWorkspaceD backend;
 /// Returns: false if fields are used which aren't usually used in dub but in nodejs.
 bool seemsLikeDubJson(string json)
 {
+	if (!json.seemsLikeJsonObject)
+		return false;
 	auto packageJson = json.parseKeySlices!("main", "engines", "publisher",
 		"private_", "devDependencies", "name");
 	if (packageJson.main.length

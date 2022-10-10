@@ -479,7 +479,7 @@ CompletionList provideDMLSourceComplete(TextDocumentPositionParams params,
 		translated.sortText = ((item.type == CompletionType.Class ? "1." : "0.") ~ item.value).opt;
 		translated.label = item.value;
 		if (item.documentation.length)
-			translated.documentation = MarkupContent(item.documentation).opt;
+			translated.documentation = MarkupContent(item.documentation);
 		if (item.enumName.length)
 			translated.detail = item.enumName.opt;
 
@@ -600,9 +600,9 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 					ret.labelDetails = CompletionItemLabelDetails(ret.detail);
 			}
 			if (a.documentation.length)
-				ret.documentation = MarkupContent(a.documentation).opt;
+				ret.documentation = MarkupContent(a.documentation);
 			if (a.preselected)
-				ret.preselect = true.opt;
+				ret.preselect = true;
 			return ret;
 		}).array;
 
@@ -940,22 +940,22 @@ CompletionItem snippetToCompletionItem(Snippet snippet)
 	CompletionItem item;
 	item.label = snippet.shortcut;
 	item.sortText = opt(sortPrefixSnippets ~ snippet.shortcut);
-	item.detail = snippet.title.opt;
-	item.kind = CompletionItemKind.snippet.opt;
+	item.detail = snippet.title;
+	item.kind = CompletionItemKind.snippet;
 	item.documentation = MarkupContent(MarkupKind.markdown,
 			snippet.documentation ~ "\n\n```d\n" ~ snippet.snippet ~ "\n```\n");
-	item.filterText = snippet.shortcut.opt;
+	item.filterText = snippet.shortcut;
 	if (capabilities
 		.textDocument.orDefault
 		.completion.orDefault
 		.completionItem.orDefault
 		.snippetSupport.orDefault)
 	{
-		item.insertText = snippet.snippet.opt;
-		item.insertTextFormat = InsertTextFormat.snippet.opt;
+		item.insertText = snippet.snippet;
+		item.insertTextFormat = InsertTextFormat.snippet;
 	}
 	else
-		item.insertText = snippet.plain.opt;
+		item.insertText = snippet.plain;
 
 	item.data = JsonValue([
 		"resolved": JsonValue(snippet.resolved),
@@ -972,7 +972,7 @@ Snippet snippetFromCompletionItem(CompletionItem item)
 	snippet.shortcut = item.label;
 	snippet.title = item.detail.deref;
 	snippet.documentation = item.documentation.match!(
-		(NoneType _) => cast(string)(null),
+		() => cast(string)(null),
 		(string s) => s,
 		(MarkupContent c) => c.value
 	);
@@ -1204,7 +1204,7 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 				.array;
 			auto docs = a.map!"a.documentation"
 				.filter!(a => a.match!(
-					(NoneType n) => false,
+					() => false,
 					(string s) => s.length > 0,
 					(MarkupContent s) => s.value.length > 0,
 				))
@@ -1217,7 +1217,7 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 			if (docs.length)
 				ret.documentation = MarkupContent(MarkupKind.markdown,
 					docs.map!(a => a.match!(
-						(NoneType n) => assert(false),
+						() => assert(false),
 						(string s) => s,
 						(MarkupContent s) => s.value,
 					)).join("\n\n"));
@@ -1291,7 +1291,7 @@ private void migrateLabelDetailsSupport(ref CompletionItem item)
 			item.label ~= detail.detail.deref;
 		}
 
-		item.labelDetails.nullify();
+		item.labelDetails = item.labelDetails._void;
 	}
 }
 

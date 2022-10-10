@@ -208,7 +208,7 @@ void addDScannerDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 {
 	import dscanner.analysis.imports_sortedness : ImportSortednessCheck;
 
-	string key = diagnostic.code.match!((string s) => s, _ => null);
+	string key = diagnostic.code.orDefault.match!((string s) => s, _ => cast(string)(null));
 
 	info("Diagnostic: ", diagnostic);
 
@@ -220,7 +220,7 @@ void addDScannerDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 
 	if (key.length)
 	{
-		JsonValue code = diagnostic.code.match!((NoneType n) => JsonValue(null), j => j);
+		JsonValue code = diagnostic.code.match!(() => JsonValue(null), j => j);
 		if (key.startsWith("dscanner."))
 			key = key["dscanner.".length .. $];
 		ret ~= CodeAction(Command("Ignore " ~ key ~ " warnings (this line)",
@@ -233,7 +233,7 @@ void addDScannerDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 void addSyntaxDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 	Document document, Diagnostic diagnostic, CodeActionParams params)
 {
-	string key = diagnostic.code.match!((string s) => s, _ => null);
+	string key = diagnostic.code.orDefault.match!((string s) => s, _ => cast(string)(null));
 	switch (key)
 	{
 	case "workspaced.foreach-auto":

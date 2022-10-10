@@ -12,6 +12,7 @@ dependency "emsi_containers" version="0.8.0"
 dependency "dscanner" version="0.12.0"
 dependency "libdparse" version="0.19.0"
 dependency "standardpaths" version="0.8.2"
+dependency "mir-algorithm" version="~>3.14"
 
 configuration "library" {
 	targetType "library"

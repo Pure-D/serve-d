@@ -102,7 +102,9 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			error("failure in message ", msg);
 
 		ResponseMessageRaw res;
-		res.id = msg.id;
+		if (msg.id.isNone)
+			throw new Exception("Called processRequest on a notification");
+		res.id = msg.id.deref;
 		if (msg.method == "initialize" && !serverInitializeCalled)
 		{
 			trace("Initializing");
@@ -312,14 +314,16 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			}
 			catch (Exception e)
 			{
-				res.id = msg.id;
+				if (!msg.id.isNone)
+					res.id = msg.id.deref;
 				auto err = ResponseError(e);
 				err.code = ErrorCode.internalError;
 				res.error = err;
 			}
 			catch (Throwable e)
 			{
-				res.id = msg.id;
+				if (!msg.id.isNone)
+					res.id = msg.id.deref;
 				auto err = ResponseError(e);
 				err.code = ErrorCode.internalError;
 				res.error = err;

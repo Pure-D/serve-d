@@ -73,7 +73,7 @@ SignatureHelp convertDCDCalltips(DCDExtComponent dcdext, string[] calltips,
 					];
 				else
 					paramLabel = calltip[param.contentRange[0] .. param.contentRange[1]];
-				Variant!(NoneType, string, MarkupContent) paramDocs;
+				Variant!(void, string, MarkupContent) paramDocs;
 				if (docs != Comment.init)
 				{
 					auto docString = getParamDocumentation(docs, paramName);

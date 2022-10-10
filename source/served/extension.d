@@ -406,11 +406,12 @@ InitializeResult initialize(InitializeParams params)
 	trace("initialize params:");
 	prettyPrintStruct!trace(params);
 
-	if (params.workspaceFolders.match!(
-		(WorkspaceFolder[] f) => f.length > 0,
-		_ => false
-	))
-		workspaces = params.workspaceFolders.get!(WorkspaceFolder[])
+	// need to use 2 .get on workspaceFolders because it's an Optional!(Nullable!(T[]))
+	if (params.workspaceFolders.isSet
+		&& !params.workspaceFolders.get.isNull
+		&& params.workspaceFolders.get.get.length > 0
+	)
+		workspaces = params.workspaceFolders.get.get
 			.map!(a => Workspace(a, served.types.Configuration.init))
 			.array;
 	else if (params.rootUri.length)

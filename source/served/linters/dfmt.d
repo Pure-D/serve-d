@@ -80,7 +80,7 @@ private Diagnostic[] lintDfmt(DfmtComponent dfmt, ref Document document)
 				break;
 			case DfmtInstruction.Type.unknown:
 				d.message = "Not a valid dfmt command (try `//dfmt off` or `//dfmt on` instead)";
-				d.code = "unknown-comment";
+				d.code = JsonValue("unknown-comment");
 				d.severity = DiagnosticSeverity.warning;
 				diagnostics ~= d;
 				break;

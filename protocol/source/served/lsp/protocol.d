@@ -10,62 +10,14 @@ import std.meta;
 import std.traits;
 
 import mir.serde;
+import mir.deser : serdeProxyCast;
 
-import mir.algebraic : MirAlgebraic = Algebraic;
-public import mir.algebraic : isVariant = isLikeVariant, match, Nullable;
+public import mir.algebraic : Variant, isVariant, match, Nullable;
 
 public import served.lsp.jsonops;
 
 version (unittest)
 	import std.exception;
-
-template Variant(T...)
-{
-	@serdeProxy!(MirAlgebraic!T)
-	struct Variant
-	{
-		static foreach (S; T)
-		{
-			static if (!is(S : NoneType)
-				&& is(S == struct)
-				&& !hasUDA!(S, serdeFallbackStruct)
-				&& !isVariant!S)
-				static assert(false, "included " ~ S.stringof ~ " in Variant, which is not a serdeFallbackStruct");
-		}
-
-		// using algebraic because its .init value is predictable (first type)
-		MirAlgebraic!T value;
-		alias value this;
-
-		this(T)(T v)
-		{
-			value = typeof(value)(v);
-		}
-
-		ref typeof(this) opAssign(T)(T rhs)
-		{
-			static if (is(T : typeof(this)))
-				value = rhs.value;
-			else
-				value = typeof(value)(rhs);
-			return this;
-		}
-
-		bool serdeIgnoreOut() const
-		{
-			return value.match!((v) {
-				static if (is(typeof(v) : NoneType)
-					|| __traits(compiles, v.serdeIgnoreOut))
-					return v.serdeIgnoreOut;
-				else
-					return false;
-			});
-		}
-	}
-}
-
-static assert(isVariant!(Variant!(int, string)),
-	"isVariant suffers from D issue 21975, please upgrade compiler (fixed since frontend 2.100.0)");
 
 private enum getJsonKey(T, string member) = ({
 	enum keys = getUDAs!(__traits(getMember, T, member), serdeKeys);
@@ -168,10 +120,10 @@ if (AllowedTypes.length > 0)
 		return reasons.length ? reasons[0 .. $ - 1] : null;
 	}
 
-	MirAlgebraic!AllowedTypes value;
+	Variant!AllowedTypes value;
 	alias value this;
 
-	this(MirAlgebraic!AllowedTypes v)
+	this(Variant!AllowedTypes v)
 	{
 		value = v;
 	}
@@ -409,40 +361,98 @@ unittest
 	assert(var.extract!Person == Person("Alice", 64));
 }
 
-/// For use with Variant to not serialize anything at all.
-struct NoneType
-{
-	enum serdeIgnoreOut = true;
-	void serialize(S)(ref S serializer) const { assert(false, "serialize called on NoneType"); }
-}
-
-alias Optional(T) = Variant!(NoneType, T);
-alias OptionalJsonValue = Optional!JsonValue;
+alias Optional(T) = Variant!(void, T);
+alias OptionalJsonValue = Variant!(void, JsonValue);
 template TypeFromOptional(T)
 {
-	alias Reduced = FilterNonNoneType!(T.AllowedTypes);
-	static assert(Reduced.length == 1, "got optional without exactly a single type: " ~ T.AllowedTypes.stringof);
-	static assert(!isVariant!(Reduced[0]), "failed to reduce " ~ T.stringof ~ " - " ~ Reduced[0].stringof);
-	alias TypeFromOptional = Reduced[0];
+	alias Reduced = T.AllowedTypes;
+	static assert(Reduced.length == 2, "got optional without exactly a single type: " ~ T.AllowedTypes.stringof);
+	static assert(is(Reduced[0] == void), "got non-optional variant: " ~ T.AllowedTypes.stringof);
+	alias TypeFromOptional = Reduced[1];
 }
 
-private template FilterNonNoneType(T...)
+struct NullableOptional(T)
 {
-	static if (!T.length)
-		alias FilterNonNoneType = AliasSeq!();
-	else static if (is(immutable T[0] == immutable NoneType))
-		alias FilterNonNoneType = AliasSeq!(FilterNonNoneType!(T[1 .. $]));
-	else
-		alias FilterNonNoneType = AliasSeq!(T[0], FilterNonNoneType!(T[1 .. $]));
+	import mir.ion.exception;
+	import mir.ion.value;
+
+	bool isSet = false;
+	Nullable!T embed;
+
+	this(T value)
+	{
+		isSet = true;
+		embed = value;
+	}
+
+	this(typeof(null))
+	{
+		isSet = true;
+		embed = null;
+	}
+
+	void unset()
+	{
+		isSet = false;
+	}
+
+	auto opAssign(T value)
+	{
+		isSet = true;
+		embed = value;
+		return this;
+	}
+
+	auto opAssign(typeof(null))
+	{
+		isSet = true;
+		embed = null;
+		return this;
+	}
+
+	bool serdeIgnoreOut() const @safe
+	{
+		return !isSet;
+	}
+
+	auto get() inout @safe
+	{
+		assert(isSet, "attempted to .get on an unset value");
+		return embed;
+	}
+
+	// and use custom serializer to serialize as int
+	void serialize(S)(scope ref S serializer) const
+	{
+		import mir.ser : serializeValue;
+
+		assert(isSet, "attempted to serialize unset value");
+
+		if (embed.isNull)
+			serializer.putValue(null);
+		else
+			serializeValue(serializer, embed.get);
+	}
+
+	@trusted pure scope
+	IonException deserializeFromIon(scope const char[][] symbolTable, IonDescribedValue value)
+	{
+		import mir.deser.ion: deserializeIon;
+		import mir.ion.type_code : IonTypeCode;
+
+		isSet = true;
+		if (value == null)
+			embed = null;
+		else
+			embed = deserializeIon!T(symbolTable, value);
+		return null;
+	}
 }
 
 bool isNone(T)(T v)
 if (isVariant!T)
 {
-	return v.match!(
-		(NoneType none) => true,
-		_ => false
-	);
+	return v._is!void;
 }
 
 ///
@@ -450,7 +460,7 @@ auto deref(T)(scope return inout T v)
 if (isVariant!T)
 {
 	return v.match!(
-		(NoneType none) {
+		() {
 			throw new Exception("Attempted to get unset " ~ T.stringof);
 			return assert(false); // changes return type to bottom_t
 		},
@@ -461,9 +471,9 @@ if (isVariant!T)
 /// ditto
 JsonValue deref(scope return inout OptionalJsonValue v)
 {
-	if (v.value._is!NoneType)
+	if (v._is!void)
 		throw new Exception("Attempted to get unset JsonValue");
-	return v.value.get!JsonValue;
+	return v.get!JsonValue;
 }
 
 /// Returns the deref value from this optional or TypeFromOptional!T.init if
@@ -471,10 +481,26 @@ JsonValue deref(scope return inout OptionalJsonValue v)
 TypeFromOptional!T orDefault(T)(scope return T v)
 if (isVariant!T)
 {
-	return v.match!(
-		(NoneType none) => TypeFromOptional!T.init,
-		ret => ret
-	);
+	if (v._is!void)
+		return TypeFromOptional!T.init;
+	else
+		return v.get!(TypeFromOptional!T);
+}
+
+///
+unittest
+{
+	static assert(is(TypeFromOptional!OptionalJsonValue == JsonValue));
+	OptionalJsonValue someJson;
+	assert(someJson.orDefault == JsonValue.init);
+	someJson = JsonValue(5);
+	assert(someJson.orDefault == JsonValue(5));
+
+	static assert(is(TypeFromOptional!(Optional!int) == int));
+	Optional!int someInt;
+	assert(someInt.orDefault == 0);
+	someInt = 5;
+	assert(someInt.orDefault == 5);
 }
 
 ///
@@ -482,7 +508,7 @@ T expect(T, ST)(ST v)
 if (isVariant!ST)
 {
 	return v.match!(
-		(NoneType none) {
+		() {
 			if (false) return T.init;
 			throw new Exception("Attempted to get unset Optional!" ~ T.stringof);
 		},
@@ -492,13 +518,6 @@ if (isVariant!ST)
 			throw new Exception("Attempted to get " ~ T.stringof ~ " from Variant of type " ~ typeof(v).stringof);
 		}
 	);
-}
-
-///
-void nullify(T)(scope return ref T v)
-if (isVariant!T)
-{
-	v = NoneType.init;
 }
 
 ///
@@ -536,9 +555,9 @@ unittest
 	assertThrown(optInt.expect!string);
 	assertThrown(optString1.expect!int);
 
-	optInt.nullify();
-	optString1.nullify();
-	optString2.nullify();
+	optInt = typeof(optInt)._void;
+	optString1 = typeof(optString1)._void;
+	optString2 = typeof(optString2)._void;
 
 	assert(optInt.isNone);
 	assert(optString1.isNone);
@@ -578,7 +597,7 @@ unittest
 @serdeFallbackStruct
 struct RequestToken
 {
-	Variant!(long, string) value;
+	Variant!(typeof(null), long, string) value;
 	alias value this;
 
 	this(T)(T v)
@@ -630,9 +649,11 @@ unittest
 {
 	assert(deserializeJson!RequestToken(`"hello"`) == RequestToken("hello"));
 	assert(deserializeJson!RequestToken(`4000`) == RequestToken(4000));
+	assert(deserializeJson!RequestToken(`null`) == RequestToken(null));
 
 	assert(`"hello"` == RequestToken("hello").serializeJson);
 	assert(`4000` == RequestToken(4000).serializeJson);
+	assert(`null` == RequestToken(null).serializeJson);
 
 	auto tok = RequestToken.random();
 	auto other = RequestToken.random();
@@ -771,18 +792,6 @@ struct ResponseMessage
 		this.error = error;
 	}
 
-	this(Nullable!RequestToken id, JsonValue result)
-	{
-		this.id = id;
-		this.result = result;
-	}
-
-	this(Nullable!RequestToken id, ResponseError error)
-	{
-		this.id = id;
-		this.error = error;
-	}
-
 	this(typeof(null) id, JsonValue result)
 	{
 		this.id = null;
@@ -796,7 +805,7 @@ struct ResponseMessage
 	}
 
 	///
-	@serdeOptional Nullable!RequestToken id;
+	RequestToken id;
 	///
 	@serdeOptional OptionalJsonValue result;
 	///
@@ -810,7 +819,7 @@ unittest
 
 	string buf;
 	buf ~= `{"jsonrpc":"2.0"`;
-	if (!res.id.isNone)
+	if (!res.id.isNull)
 	{
 		buf ~= `,"id":`;
 		buf ~= res.id.serializeJson;
@@ -837,7 +846,7 @@ unittest
 struct ResponseMessageRaw
 {
 	///
-	Optional!RequestToken id;
+	RequestToken id;
 	/// empty string/null if not set, otherwise JSON string of result
 	string resultJson;
 	///
@@ -1324,24 +1333,227 @@ struct InitializeParams
 	@serdeOptional OptionalJsonValue initializationOptions;
 	ClientCapabilities capabilities;
 	@serdeOptional Optional!string trace;
-	@serdeOptional Variant!(NoneType, typeof(null), WorkspaceFolder[]) workspaceFolders;
+	@serdeOptional NullableOptional!(WorkspaceFolder[]) workspaceFolders;
 	@serdeOptional Optional!InitializeParamsClientInfo clientInfo;
 	@serdeOptional Optional!string locale;
 }
 
 unittest
 {
-	Variant!(NoneType, typeof(null), WorkspaceFolder[]) workspaceFolders;
-	assert(workspaceFolders.serdeIgnoreOut);
-	workspaceFolders = null;
-	assert(!workspaceFolders.serdeIgnoreOut);
-
 	InitializeParams p = {
 		processId: 1234,
 		rootUri: "file:///root/path",
 		capabilities: ClientCapabilities.init
 	};
 	assert(p.serializeJson == `{"processId":1234,"rootUri":"file:///root/path","capabilities":{}}`, p.serializeJson);
+
+	p = `{
+		"processId":29980,
+		"clientInfo": {
+			"name":"Code - OSS",
+			"version":"1.68.0"
+		},
+		"locale":"en-gb",
+		"rootPath":"/home/webfreak/dev/serve-d",
+		"rootUri":"file:///home/webfreak/dev/serve-d",
+		"capabilities":{
+			"workspace":{
+				"applyEdit":true,
+				"workspaceEdit":{
+					"documentChanges":true,
+					"resourceOperations":["create","rename","delete"],
+					"failureHandling":"textOnlyTransactional",
+					"normalizesLineEndings":true,
+					"changeAnnotationSupport":{"groupsOnLabel":true}
+				},
+				"didChangeConfiguration":{
+					"dynamicRegistration":true
+				},
+				"didChangeWatchedFiles":{
+					"dynamicRegistration":true
+				},
+				"symbol":{
+					"dynamicRegistration":true,
+					"symbolKind":{
+						"valueSet":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26]
+					},
+					"tagSupport":{"valueSet":[1]}
+				},
+				"codeLens":{
+					"refreshSupport":true
+				},
+				"executeCommand":{
+					"dynamicRegistration":true
+				},
+				"configuration":true,
+				"workspaceFolders":true,
+				"semanticTokens":{"refreshSupport":true},
+				"fileOperations":{
+					"dynamicRegistration":true,
+					"didCreate":true,
+					"didRename":true,
+					"didDelete":true,
+					"willCreate":true,
+					"willRename":true,
+					"willDelete":true
+				}
+			},
+			"textDocument":{
+				"publishDiagnostics":{
+					"relatedInformation":true,
+					"versionSupport":false,
+					"tagSupport":{"valueSet":[1,2]},
+					"codeDescriptionSupport":true,
+					"dataSupport":true
+				},
+				"synchronization":{
+					"dynamicRegistration":true,
+					"willSave":true,
+					"willSaveWaitUntil":true,
+					"didSave":true
+				},
+				"completion":{
+					"dynamicRegistration":true,
+					"contextSupport":true,
+					"completionItem":{
+						"snippetSupport":true,
+						"commitCharactersSupport":true,
+						"documentationFormat":["markdown","plaintext"],
+						"deprecatedSupport":true,
+						"preselectSupport":true,
+						"tagSupport":{"valueSet":[1]},
+						"insertReplaceSupport":true,
+						"resolveSupport":{
+							"properties":["documentation","detail","additionalTextEdits"]
+						},
+						"insertTextModeSupport":{
+							"valueSet":[1,2]
+						},
+						"labelDetailsSupport":true
+					},
+					"insertTextMode":2,
+					"completionItemKind":{
+						"valueSet":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25]
+					}
+				},
+				"hover":{
+					"dynamicRegistration":true,
+					"contentFormat":["markdown","plaintext"]
+				},
+				"signatureHelp":{
+					"dynamicRegistration":true,
+					"signatureInformation":{
+						"documentationFormat":["markdown","plaintext"],
+						"parameterInformation":{"labelOffsetSupport":true},
+						"activeParameterSupport":true
+					},
+					"contextSupport":true
+				},
+				"definition":{
+					"dynamicRegistration":true,
+					"linkSupport":true
+				},
+				"references":{
+					"dynamicRegistration":true
+				},
+				"documentHighlight":{
+					"dynamicRegistration":true
+				},
+				"documentSymbol":{
+					"dynamicRegistration":true,
+					"symbolKind":{"valueSet":[1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25,26]},
+					"hierarchicalDocumentSymbolSupport":true,
+					"tagSupport":{"valueSet":[1]},
+					"labelSupport":true
+				},
+				"codeAction":{
+					"dynamicRegistration":true,
+					"isPreferredSupport":true,
+					"disabledSupport":true,
+					"dataSupport":true,
+					"resolveSupport":{"properties":["edit"]},
+					"codeActionLiteralSupport":{
+						"codeActionKind":{
+							"valueSet":["","quickfix","refactor","refactor.extract","refactor.inline","refactor.rewrite","source","source.organizeImports"]
+						}
+					},
+					"honorsChangeAnnotations":false
+				},
+				"codeLens":{
+					"dynamicRegistration":true
+				},
+				"formatting":{"dynamicRegistration":true},
+				"rangeFormatting":{"dynamicRegistration":true},
+				"onTypeFormatting":{"dynamicRegistration":true},
+				"rename":{
+					"dynamicRegistration":true,
+					"prepareSupport":true,
+					"prepareSupportDefaultBehavior":1,
+					"honorsChangeAnnotations":true
+				},
+				"documentLink":{
+					"dynamicRegistration":true,
+					"tooltipSupport":true
+				},
+				"typeDefinition":{
+					"dynamicRegistration":true,
+					"linkSupport":true
+				},
+				"implementation":{
+					"dynamicRegistration":true,
+					"linkSupport":true
+				},
+				"colorProvider":{"dynamicRegistration":true},
+				"foldingRange":{"dynamicRegistration":true,"rangeLimit":5000,"lineFoldingOnly":true},
+				"declaration":{"dynamicRegistration":true,"linkSupport":true},
+				"selectionRange":{"dynamicRegistration":true},
+				"callHierarchy":{"dynamicRegistration":true},
+				"semanticTokens":{
+					"dynamicRegistration":true,
+					"tokenTypes":["namespace","type","class","enum","interface","struct","typeParameter","parameter","variable","property","enumMember","event","function","method","macro","keyword","modifier","comment","string","number","regexp","operator"],
+					"tokenModifiers":["declaration","definition","readonly","static","deprecated","abstract","async","modification","documentation","defaultLibrary"],
+					"formats":["relative"],
+					"requests":{"range":true,"full":{"delta":true}},
+					"multilineTokenSupport":false,
+					"overlappingTokenSupport":false
+				},
+				"linkedEditingRange":{"dynamicRegistration":true}
+			},
+			"window":{
+				"showMessage":{
+					"messageActionItem":{"additionalPropertiesSupport":true}
+				},
+				"showDocument":{"support":true},
+				"workDoneProgress":true
+			},
+			"general":{
+				"staleRequestSupport":{
+					"cancel":true,
+					"retryOnContentModified":["textDocument/semanticTokens/full","textDocument/semanticTokens/range","textDocument/semanticTokens/full/delta"]
+				},
+				"regularExpressions":{"engine":"ECMAScript","version":"ES2020"},
+				"markdown":{"parser":"marked","version":"1.1.0"}
+			}
+		},
+		"trace":"off",
+		"workspaceFolders":[
+			{
+				"uri":"file:///home/webfreak/dev/serve-d",
+				"name":"serve-d"
+			}
+		]
+	}`.deserializeJson!InitializeParams;
+
+	assert(p.processId == 29980);
+	assert(p.clientInfo == InitializeParamsClientInfo("Code - OSS", "1.68.0".opt));
+	assert(p.locale == "en-gb");
+	assert(p.rootPath == "/home/webfreak/dev/serve-d");
+	assert(p.rootUri == "file:///home/webfreak/dev/serve-d");
+	assert(p.trace == "off");
+	auto folders = p.workspaceFolders.get.get; // double get cuz this one is special because it can be omitted as well as null
+	assert(folders.length == 1);
+	assert(folders[0].uri == "file:///home/webfreak/dev/serve-d");
+	assert(folders[0].name == "serve-d");
 }
 
 @serdeFallbackStruct
@@ -1654,39 +1866,39 @@ struct TextDocumentSyncOptions
 	@serdeOptional Optional!TextDocumentSyncKind change;
 	@serdeOptional Optional!bool willSave;
 	@serdeOptional Optional!bool willSaveWaitUntil;
-	@serdeOptional Variant!(NoneType, bool, SaveOptions) save;
+	@serdeOptional Variant!(void, bool, SaveOptions) save;
 }
 
 @serdeFallbackStruct
 struct ServerCapabilities
 {
-	@serdeOptional Variant!(NoneType, TextDocumentSyncOptions, TextDocumentSyncKind) textDocumentSync;
-	@serdeOptional Variant!(NoneType, CompletionOptions) completionProvider;
-	@serdeOptional Variant!(NoneType, bool, HoverOptions) hoverProvider;
-	@serdeOptional Variant!(NoneType, SignatureHelpOptions) signatureHelpProvider;
-	@serdeOptional Variant!(NoneType, bool, StructVariant!(DeclarationOptions, DeclarationRegistrationOptions)) declarationProvider;
-	@serdeOptional Variant!(NoneType, bool, DefinitionOptions) definitionProvider;
-	@serdeOptional Variant!(NoneType, bool, StructVariant!(TypeDefinitionOptions, TypeDefinitionRegistrationOptions)) typeDefinitionProvider;
-	@serdeOptional Variant!(NoneType, bool, StructVariant!(ImplementationOptions, ImplementationRegistrationOptions)) implementationProvider;
-	@serdeOptional Variant!(NoneType, bool, ReferenceOptions) referencesProvider;
-	@serdeOptional Variant!(NoneType, bool, DocumentHighlightOptions) documentHighlightProvider;
-	@serdeOptional Variant!(NoneType, bool, DocumentSymbolOptions) documentSymbolProvider;
-	@serdeOptional Variant!(NoneType, bool, CodeActionOptions) codeActionProvider;
-	@serdeOptional Variant!(NoneType, CodeLensOptions) codeLensProvider;
-	@serdeOptional Variant!(NoneType, DocumentLinkOptions) documentLinkProvider;
-	@serdeOptional Variant!(NoneType, bool, StructVariant!(DocumentColorOptions, DocumentColorRegistrationOptions)) colorProvider;
-	@serdeOptional Variant!(NoneType, bool, DocumentFormattingOptions) documentFormattingProvider;
-	@serdeOptional Variant!(NoneType, bool, DocumentRangeFormattingOptions) documentRangeFormattingProvider;
-	@serdeOptional Variant!(NoneType, DocumentOnTypeFormattingOptions) documentOnTypeFormattingProvider;
-	@serdeOptional Variant!(NoneType, bool, RenameOptions) renameProvider;
-	@serdeOptional Variant!(NoneType, bool, StructVariant!(FoldingRangeOptions, FoldingRangeRegistrationOptions)) foldingRangeProvider;
-	@serdeOptional Variant!(NoneType, ExecuteCommandOptions) executeCommandProvider;
-	@serdeOptional Variant!(NoneType, bool, StructVariant!(SelectionRangeOptions, SelectionRangeRegistrationOptions)) selectionRangeProvider;
-	@serdeOptional Variant!(NoneType, bool, StructVariant!(LinkedEditingRangeOptions, LinkedEditingRangeRegistrationOptions)) linkedEditingRangeProvider;
-	@serdeOptional Variant!(NoneType, bool, StructVariant!(CallHierarchyOptions, CallHierarchyRegistrationOptions)) callHierarchyProvider;
-	@serdeOptional Variant!(NoneType, StructVariant!(SemanticTokensOptions, SemanticTokensRegistrationOptions)) semanticTokensProvider;
-	@serdeOptional Variant!(NoneType, bool, StructVariant!(MonikerOptions, MonikerRegistrationOptions)) monikerProvider;
-	@serdeOptional Variant!(NoneType, bool, WorkspaceSymbolOptions) workspaceSymbolProvider;
+	@serdeOptional Variant!(void, TextDocumentSyncOptions, TextDocumentSyncKind) textDocumentSync;
+	@serdeOptional Variant!(void, CompletionOptions) completionProvider;
+	@serdeOptional Variant!(void, bool, HoverOptions) hoverProvider;
+	@serdeOptional Variant!(void, SignatureHelpOptions) signatureHelpProvider;
+	@serdeOptional Variant!(void, bool, StructVariant!(DeclarationOptions, DeclarationRegistrationOptions)) declarationProvider;
+	@serdeOptional Variant!(void, bool, DefinitionOptions) definitionProvider;
+	@serdeOptional Variant!(void, bool, StructVariant!(TypeDefinitionOptions, TypeDefinitionRegistrationOptions)) typeDefinitionProvider;
+	@serdeOptional Variant!(void, bool, StructVariant!(ImplementationOptions, ImplementationRegistrationOptions)) implementationProvider;
+	@serdeOptional Variant!(void, bool, ReferenceOptions) referencesProvider;
+	@serdeOptional Variant!(void, bool, DocumentHighlightOptions) documentHighlightProvider;
+	@serdeOptional Variant!(void, bool, DocumentSymbolOptions) documentSymbolProvider;
+	@serdeOptional Variant!(void, bool, CodeActionOptions) codeActionProvider;
+	@serdeOptional Variant!(void, CodeLensOptions) codeLensProvider;
+	@serdeOptional Variant!(void, DocumentLinkOptions) documentLinkProvider;
+	@serdeOptional Variant!(void, bool, StructVariant!(DocumentColorOptions, DocumentColorRegistrationOptions)) colorProvider;
+	@serdeOptional Variant!(void, bool, DocumentFormattingOptions) documentFormattingProvider;
+	@serdeOptional Variant!(void, bool, DocumentRangeFormattingOptions) documentRangeFormattingProvider;
+	@serdeOptional Variant!(void, DocumentOnTypeFormattingOptions) documentOnTypeFormattingProvider;
+	@serdeOptional Variant!(void, bool, RenameOptions) renameProvider;
+	@serdeOptional Variant!(void, bool, StructVariant!(FoldingRangeOptions, FoldingRangeRegistrationOptions)) foldingRangeProvider;
+	@serdeOptional Variant!(void, ExecuteCommandOptions) executeCommandProvider;
+	@serdeOptional Variant!(void, bool, StructVariant!(SelectionRangeOptions, SelectionRangeRegistrationOptions)) selectionRangeProvider;
+	@serdeOptional Variant!(void, bool, StructVariant!(LinkedEditingRangeOptions, LinkedEditingRangeRegistrationOptions)) linkedEditingRangeProvider;
+	@serdeOptional Variant!(void, bool, StructVariant!(CallHierarchyOptions, CallHierarchyRegistrationOptions)) callHierarchyProvider;
+	@serdeOptional Variant!(void, StructVariant!(SemanticTokensOptions, SemanticTokensRegistrationOptions)) semanticTokensProvider;
+	@serdeOptional Variant!(void, bool, StructVariant!(MonikerOptions, MonikerRegistrationOptions)) monikerProvider;
+	@serdeOptional Variant!(void, bool, WorkspaceSymbolOptions) workspaceSymbolProvider;
 
 	@serdeOptional Optional!ServerWorkspaceCapabilities workspace;
 	@serdeOptional OptionalJsonValue experimental;
@@ -1715,7 +1927,7 @@ struct ServerWorkspaceCapabilities
 struct WorkspaceFoldersServerCapabilities
 {
 	@serdeOptional Optional!bool supported;
-	@serdeOptional Variant!(NoneType, bool, string) changeNotifications;
+	@serdeOptional Variant!(void, bool, string) changeNotifications;
 }
 
 @serdeFallbackStruct
@@ -2102,19 +2314,19 @@ unittest
 	);
 	assert(s.deserializeJson!InsertReplaceEdit == v);
 
-	Variant!(NoneType, InsertReplaceEdit) var = v;
+	Variant!(void, InsertReplaceEdit) var = v;
 	assert(s.deserializeJson!(typeof(var)) == var);
 
-	Variant!(NoneType, StructVariant!(TextEdit, InsertReplaceEdit)) var2 = v;
+	Variant!(void, StructVariant!(TextEdit, InsertReplaceEdit)) var2 = v;
 	assert(s.deserializeJson!(typeof(var2)) == var2);
 
 	struct Struct
 	{
-		Variant!(NoneType, StructVariant!(TextEdit, InsertReplaceEdit)) edit;
+		Variant!(void, StructVariant!(TextEdit, InsertReplaceEdit)) edit;
 	}
 
 	Struct str;
-	str.edit = v;
+	str.edit = StructVariant!(TextEdit, InsertReplaceEdit)(v);
 	auto strS = `{"edit":` ~ s ~ `}`;
 	assert(str.serializeJson == strS);
 	assert(strS.deserializeJson!Struct == str, strS.deserializeJson!Struct.to!string ~ " !=\n" ~ str.to!string);
@@ -2153,14 +2365,14 @@ struct CompletionItem
 	@serdeOptional Optional!CompletionItemKind kind;
 	@serdeOptional Optional!(CompletionItemTag[]) tags;
 	@serdeOptional Optional!string detail;
-	@serdeOptional Variant!(NoneType, string, MarkupContent) documentation;
+	@serdeOptional Variant!(void, string, MarkupContent) documentation;
 	@serdeOptional Optional!bool preselect;
 	@serdeOptional Optional!string sortText;
 	@serdeOptional Optional!string filterText;
 	@serdeOptional Optional!string insertText;
 	@serdeOptional Optional!InsertTextFormat insertTextFormat;
 	@serdeOptional Optional!InsertTextMode insertTextMode;
-	@serdeOptional Variant!(NoneType, StructVariant!(TextEdit, InsertReplaceEdit)) textEdit;
+	@serdeOptional Variant!(void, StructVariant!(TextEdit, InsertReplaceEdit)) textEdit;
 	@serdeOptional Optional!(TextEdit[]) additionalTextEdits;
 	@serdeOptional Optional!(string[]) commitCharacters;
 	@serdeOptional Optional!Command command;
@@ -2205,6 +2417,46 @@ unittest
 
 	foreach (v; values)
 		assert(deserializeJson!CompletionItem(v.serializeJson) == v, v.to!string ~ " !=\n" ~ v.serializeJson.deserializeJson!CompletionItem.to!string);
+}
+
+unittest
+{
+	auto str = `{
+		"label":"toStringText",
+		"detail":"string toString() in struct using std.conv:text",
+		"documentation":{
+			"kind":"markdown",
+			"value":"doc text"
+		},
+		"filterText":"toStringText",
+		"insertTextFormat":2,
+		"insertText":"myInsertText",
+		"kind":15,
+		"sortText":"2_5_toStringText",
+		"data":{
+			"level":"type",
+			"column":5,
+			"format":"dfmt args",
+			"uri":"file:///home/webfreak/dev/serve-d/source/served/lsp/protoext.d",
+			"line":305
+		}
+	}`;
+
+	CompletionItem item = str.deserializeJson!CompletionItem;
+	assert(item.label == "toStringText");
+	assert(item.detail.deref == "string toString() in struct using std.conv:text");
+	assert(item.documentation.get!MarkupContent == MarkupContent(MarkupKind.markdown, "doc text"));
+	assert(item.filterText.deref == "toStringText");
+	assert(item.insertTextFormat.deref == InsertTextFormat.snippet);
+	assert(item.insertText.deref == "myInsertText");
+	assert(item.kind.deref == CompletionItemKind.snippet);
+	assert(item.sortText.deref == "2_5_toStringText");
+	auto data = item.data.deref.get!(StringMap!JsonValue);
+	assert(data["level"].get!string == "type");
+	assert(data["column"].get!long == 5);
+	assert(data["format"].get!string == "dfmt args");
+	assert(data["uri"].get!string == "file:///home/webfreak/dev/serve-d/source/served/lsp/protoext.d");
+	assert(data["line"].get!long == 305);
 }
 
 @serdeEnumProxy!int
@@ -2267,15 +2519,64 @@ struct HoverParams
 @serdeFallbackStruct
 struct Hover
 {
-	Variant!MarkupContent contents;
+	Variant!(StructVariant!(MarkedString, MarkupContent), MarkedString[]) contents;
 	@serdeOptional Optional!TextRange range;
 }
 
 @serdeFallbackStruct
 struct MarkedString
 {
+	import mir.ion.exception;
+	import mir.ion.value;
+	import mir.deser.ion : deserializeIon;
+	import mir.ion.type_code : IonTypeCode;
+
 	string value;
 	string language;
+
+	private static struct SerializeHelper
+	{
+		string value;
+		string language;
+	}
+
+	void serialize(S)(scope ref S serializer) const
+	{
+		import mir.ser : serializeValue;
+
+		if (language.length)
+		{
+			auto helper = SerializeHelper(value, language);
+			serializeValue(serializer, helper);
+		}
+		else
+			serializer.putValue(value);
+	}
+
+	/**
+	Returns: error msg if any
+	*/
+	@safe pure scope
+	IonException deserializeFromIon(scope const char[][] symbolTable, IonDescribedValue value)
+	{
+		import mir.deser.ion : deserializeIon;
+		import mir.ion.type_code : IonTypeCode;
+
+		if (value.descriptor.type == IonTypeCode.string)
+		{
+			this.value = deserializeIon!string(symbolTable, value);
+			this.language = null;
+		}
+		else if (value.descriptor.type == IonTypeCode.struct_)
+		{
+			auto p = deserializeIon!SerializeHelper(symbolTable, value);
+			this.value = p.value;
+			this.language = p.language;
+		}
+		else
+			return ionException(IonErrorCode.jsonUnexpectedValue);
+		return null;
+	}
 }
 
 @serdeEnumProxy!string
@@ -2427,7 +2728,7 @@ struct SignatureHelp
 struct SignatureInformation
 {
 	string label;
-	@serdeOptional Variant!(NoneType, string, MarkupContent) documentation;
+	@serdeOptional Variant!(void, string, MarkupContent) documentation;
 	@serdeOptional Optional!(ParameterInformation[]) parameters;
 	@serdeOptional Optional!uint activeParameter;
 }
@@ -2436,7 +2737,7 @@ struct SignatureInformation
 struct ParameterInformation
 {
 	Variant!(string, uint[2]) label;
-	@serdeOptional Variant!(NoneType, string, MarkupContent) documentation;
+	@serdeOptional Variant!(void, string, MarkupContent) documentation;
 }
 
 @serdeFallbackStruct
@@ -3323,8 +3624,8 @@ struct SemanticTokensClientCapabilities
 	@serdeIgnoreUnexpectedKeys
 	static struct Requests
 	{
-		@serdeOptional Variant!(NoneType, bool, SemanticTokensRange) range;
-		@serdeOptional Variant!(NoneType, bool, SemanticTokensFull) full;
+		@serdeOptional Variant!(void, bool, SemanticTokensRange) range;
+		@serdeOptional Variant!(void, bool, SemanticTokensFull) full;
 	}
 
 	@serdeOptional Optional!bool dynamicRegistration;
@@ -3342,8 +3643,8 @@ struct SemanticTokensOptions
 	mixin WorkDoneProgressOptions;
 
 	SemanticTokensLegend legend;
-	@serdeOptional Variant!(NoneType, bool, SemanticTokensRange) range;
-	@serdeOptional Variant!(NoneType, bool, SemanticTokensFull) full;
+	@serdeOptional Variant!(void, bool, SemanticTokensRange) range;
+	@serdeOptional Variant!(void, bool, SemanticTokensFull) full;
 }
 
 @serdeFallbackStruct
@@ -3354,8 +3655,8 @@ struct SemanticTokensRegistrationOptions
 	mixin StaticRegistrationOptions;
 
 	SemanticTokensLegend legend;
-	@serdeOptional Variant!(NoneType, bool, SemanticTokensRange) range;
-	@serdeOptional Variant!(NoneType, bool, SemanticTokensFull) full;
+	@serdeOptional Variant!(void, bool, SemanticTokensRange) range;
+	@serdeOptional Variant!(void, bool, SemanticTokensFull) full;
 }
 
 @serdeFallbackStruct
