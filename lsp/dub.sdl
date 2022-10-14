@@ -2,4 +2,5 @@ name "lsp"
 
 dependency "serve-d:protocol" path=".."
 dependency "eventsystem" version="~>1.2.0"
-dependency "mir-ion" version="~>2.0.14"
+dependency "mir-algorithm" version="~>3.16.8"
+dependency "mir-ion" version="~>2.0.16"

@@ -8,7 +8,7 @@
 		"libddoc": "0.8.0",
 		"rm-rf": "~>0.1.0",
 		"diet-complete": "~>0.0.3",
-		"emsi_containers": "0.8.0",
+		"emsi_containers": "0.9.0",
 		"serve-d:http": "*",
 		"serve-d:lsp": "*",
 		"serve-d:serverbase": "*",

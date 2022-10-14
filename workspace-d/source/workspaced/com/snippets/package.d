@@ -70,7 +70,7 @@ class SnippetsComponent : ComponentWrapper
 		// maybe more expensive lookups with DCD in the future
 		enum LoopVariableAnalyzeMaxCost = 90;
 
-		scope tokens = getTokensForParser(cast(ubyte[]) code, config, &workspaced.stringCache);
+		scope tokens = getTokensForParser(cast(const(ubyte)[]) code, config, &workspaced.stringCache);
 		auto loc = tokens.tokenIndexAtByteIndex(position);
 
 		// first check if at end of identifier, move current location to that

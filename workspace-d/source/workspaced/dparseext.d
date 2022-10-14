@@ -10,7 +10,6 @@ import dparse.lexer;
 import dparse.parser;
 import dparse.rollback_allocator;
 import dsymbol.builtin.names;
-import dsymbol.modulecache : ASTAllocator, ModuleCache;
 
 string makeString(in IdentifierOrTemplateChain c)
 {

@@ -28,7 +28,7 @@ import dparse.lexer;
 import dparse.parser;
 import dparse.rollback_allocator;
 import dsymbol.builtin.names;
-import dsymbol.modulecache : ASTAllocator, ModuleCache;
+import dsymbol.modulecache : ModuleCache;
 
 import workspaced.api;
 import workspaced.dparseext;
@@ -85,8 +85,7 @@ class DscannerComponent : ComponentWrapper
 				}
 
 				MessageSet results;
-				auto alloc = scoped!ASTAllocator();
-				auto moduleCache = ModuleCache(alloc);
+				ModuleCache moduleCache;
 				results = analyze(file, m, config, moduleCache, tokens, true);
 				if (results is null)
 				{
