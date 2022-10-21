@@ -585,7 +585,6 @@ private:
 	}
 }
 
-version (Posix)
 unittest
 {
 	import served.lsp.protocol;
