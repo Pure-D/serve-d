@@ -1,9 +1,11 @@
 module served.lsp.jsonrpc;
 
+// version = TracePackets;
+
 import core.exception;
 import core.thread;
 
-import std.container : DList, SList;
+import std.container : DList;
 import std.conv;
 import std.experimental.logger;
 import std.json;
@@ -137,8 +139,15 @@ class RPCProcessor : Fiber
 	/// ditto
 	void sendRawPacket(scope const(char)[][] parts)
 	{
-		// Log on client side instead! (vscode setting: "serve-d.trace.server": "verbose")
-		//trace(content);
+		// Consider turning on logging on client side instead!
+		// (vscode setting: "serve-d.trace.server": "verbose")
+		version (TracePackets)
+		{
+			import std.algorithm;
+
+			trace(">> ", parts.join);
+		}
+
 		size_t len = 0;
 		foreach (part; parts)
 			len += part.length;
@@ -284,21 +293,21 @@ class RPCProcessor : Fiber
 	/// This is a small wrapper to call `awaitResponse(sendMethod(method, value))`
 	///
 	/// Returns: The response deserialized from the RPC.
-	ResponseMessageRaw sendRequest(T)(string method, T value)
+	ResponseMessageRaw sendRequest(T)(string method, T value, Duration timeout = Duration.max)
 	{
-		return awaitResponse(sendMethod(method, value));
+		return awaitResponse(sendMethod(method, value), timeout);
 	}
 
 	/// ditto
-	deprecated ResponseMessageRaw sendRequest(string method, JSONValue value)
+	deprecated ResponseMessageRaw sendRequest(string method, JSONValue value, Duration timeout = Duration.max)
 	{
-		return awaitResponse(sendMethod(method, value));
+		return awaitResponse(sendMethod(method, value), timeout);
 	}
 
 	/// ditto
-	ResponseMessageRaw sendRequest(string method, JsonValue value)
+	ResponseMessageRaw sendRequest(string method, JsonValue value, Duration timeout = Duration.max)
 	{
-		return awaitResponse(sendMethod(method, value));
+		return awaitResponse(sendMethod(method, value), timeout);
 	}
 
 	/// Calls the `window/logMessage` method with all arguments concatenated together using text()
@@ -363,10 +372,19 @@ class RPCProcessor : Fiber
 
 	/// Waits until the given responseToken wait handler is resolved, then
 	/// return its result and makes the memory reusable.
-	private ResponseMessageRaw resolveWait(size_t i)
+	private ResponseMessageRaw resolveWait(size_t i, Duration timeout = Duration.max)
 	{
+		import std.datetime.stopwatch;
+
+		StopWatch sw;
+		sw.start();
 		while (!responseTokens[i].got)
+		{
+			if (timeout != Duration.max
+				&& sw.peek > timeout)
+				throw new Exception("RPC response wait timed out");
 			yield(); // yield until main loop placed a response
+		}
 		auto res = responseTokens[i].ret;
 		responseTokens[i].handled = true; // make memory reusable
 		return res;
@@ -377,18 +395,32 @@ class RPCProcessor : Fiber
 		return responseTokens[handle].got;
 	}
 
-	/// Waits for a response message to a request from the other RPC side.
-	/// If this is called after the response has already been sent and processed by yielding after sending the request, this will yield forever and use up memory.
-	/// So it is important, if you are going to await a response, to do it immediately when sending any request.
-	ResponseMessageRaw awaitResponse(RequestToken tok)
+	/**
+		Waits for a response message to a request from the other RPC side.
+
+		If this is called after the response has already been sent and processed
+		by yielding after sending the request, this will yield forever and use
+		up memory.
+
+		So it is important, if you are going to await a response, to do it
+		immediately when sending any request.
+	*/
+	ResponseMessageRaw awaitResponse(RequestToken tok, Duration timeout = Duration.max)
 	{
 		auto i = prepareWait(tok);
-		return resolveWait(i);
+		return resolveWait(i, timeout);
 	}
 
 private:
 	void onData(RequestMessageRaw req)
 	{
+		version (TracePackets)
+		{
+			import std.algorithm;
+
+			trace("<< ", req.id, ": ", req.method, ": ", req.paramsJson);
+		}
+
 		messageQueue.insertBack(req);
 	}
 
