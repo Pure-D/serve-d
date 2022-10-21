@@ -701,6 +701,12 @@ struct RequestMessageRaw
 	/// (omitted), or array (positional parameters) or object JSON string.
 	/// (named parameters)
 	string paramsJson;
+
+	/// Formats this request message into `RequestMessage({method}: {json})`
+	string toString() const @safe pure
+	{
+		return text("RequestMessage(", method, ": ", paramsJson, ")");
+	}
 }
 
 ///
@@ -851,6 +857,15 @@ struct ResponseMessageRaw
 	string resultJson;
 	///
 	Optional!ResponseError error;
+
+	/// Formats this request message into `ResponseMessage({id}: {json/error})`
+	string toString() const @safe
+	{
+		if (error.isNone)
+			return text("ResponseMessage(", id, ": ", resultJson, ")");
+		else
+			return text("ResponseMessage(", id, ": ", error.deref, ")");
+	}
 }
 
 alias DocumentUri = string;
