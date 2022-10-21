@@ -16,7 +16,12 @@ pass_count=0
 echo "Compiling serve-d in release mode with ${DC}..."
 
 pushd ..
-dub build --build=release --compiler="${DC}"
+if [ "$DC" = "dmd" ]; then
+	echo "(Debug build because using DMD)"
+	dub build --compiler="${DC}"
+else
+	dub build --build=release --compiler="${DC}"
+fi
 popd
 
 tests="${@:1}"
