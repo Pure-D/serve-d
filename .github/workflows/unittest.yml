@@ -31,12 +31,14 @@ jobs:
 
       - name: serialization tests
         run: dub test :protocol
+        timeout-minutes: 5
         env:
           # shouldn't break other OSes
           MACOSX_DEPLOYMENT_TARGET: '10.12'
 
       - name: LSP tests
         run: dub test :lsp
+        timeout-minutes: 5
         env:
           # shouldn't break other OSes
           MACOSX_DEPLOYMENT_TARGET: '10.12'
