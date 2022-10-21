@@ -145,6 +145,6 @@ void doTests()
 	Fiber.yield();
 	rpc.notifyMethod("exit");
 	pumpEvents();
-	Thread.sleep(100.msecs);
+	Thread.sleep(1.seconds);
 	Fiber.yield();
 }
