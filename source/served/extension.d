@@ -443,11 +443,6 @@ InitializeResult initialize(InitializeParams params)
 	}
 
 	InitializeResult result;
-	ServerInfo serverInfo = {
-		name: "serve-d",
-		version_: format!"v%(%s.%)%s"(Version,
-			VersionSuffix.length ? text('-', VersionSuffix) : VersionSuffix)
-	};
 	CompletionOptions completionProvider = {
 		resolveProvider: doCompleteSnippets,
 		triggerCharacters: [
@@ -486,7 +481,18 @@ InitializeResult initialize(InitializeParams params)
 		workspace: workspaceCapabilities
 	};
 	result.capabilities = serverCapabilities;
-	result.serverInfo = serverInfo;
+
+	version (unittest) {}
+	else
+	{
+		// only included in non-test builds, because served.info is excluded from the unittest configurations
+		ServerInfo serverInfo = {
+			name: "serve-d",
+			version_: format!"v%(%s.%)%s"(Version,
+				VersionSuffix.length ? text('-', VersionSuffix) : VersionSuffix)
+		};
+		result.serverInfo = serverInfo;
+	}
 
 	setTimeout({
 		if (!syncedConfiguration && !syncingConfiguration)
