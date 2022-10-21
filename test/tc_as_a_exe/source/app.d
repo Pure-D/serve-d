@@ -1,6 +1,6 @@
 import std.bitmanip;
-import std.bitmanip;
 import std.conv;
+import std.experimental.logger;
 import std.file;
 import std.functional;
 import std.json;
@@ -17,6 +17,7 @@ import served.lsp.filereader;
 import served.lsp.jsonrpc;
 import served.lsp.protocol;
 import served.lsp.uri;
+import served.lsp.jsonops;
 
 version (assert)
 {
@@ -54,17 +55,19 @@ void main()
 	else
 		string exe = `../../serve-d`;
 
+	globalLogLevel = LogLevel.all;
+
 	cwd = buildNormalizedPath(tempDir, randomUUID.toString);
 	copyDir("template", cwd);
-	writeln("temporary CWD: ", cwd);
+	info("temporary CWD: ", cwd);
 	scope (failure)
-		writeln("Keeping temporary directory for debugging purposes");
+		info("Keeping temporary directory for debugging purposes");
 	scope (success)
 		rmdirRecurse(cwd);
 
-	auto proc = pipeProcess([exe], Redirect.stdin | Redirect.stdout);
+	auto proc = pipeProcess([exe, "--loglevel=all"], Redirect.stdin | Redirect.stdout);
 
-	auto reader = new StdFileReader(proc.stdout);
+	auto reader = newFileReader(proc.stdout);
 	reader.start();
 	scope (exit)
 		reader.stop();
@@ -73,16 +76,23 @@ void main()
 	do
 	{
 		rpc.call();
+		if (testMethod.state == Fiber.State.TERM) {
+			if (rpc.state == Fiber.State.TERM)
+				break;
+			assert(false, "doTests exitted too early ");
+		}
 		testMethod.call();
 		Thread.sleep(1.msecs);
 	}
 	while (rpc.state != Fiber.State.TERM);
 	assert(testMethod.state == Fiber.State.TERM);
+	auto exitCode = proc.pid.wait;
+	assert(exitCode == 0, "serve-d failed with exit code " ~ exitCode.to!string);
 	return;
 }
 
-void delegate(RequestMessage msg) gotRequest;
-void delegate(RequestMessage msg) gotNotify;
+void delegate(RequestMessageRaw msg) gotRequest;
+void delegate(RequestMessageRaw msg) gotNotify;
 
 shared static this()
 {
@@ -90,14 +100,14 @@ shared static this()
 	gotNotify = toDelegate(&defaultNotifyHandler);
 }
 
-void defaultRequestHandler(RequestMessage msg)
+void defaultRequestHandler(RequestMessageRaw msg)
 {
-	assert(false, "Unexpected request " ~ msg.toJSON.toString);
+	assert(false, "Unexpected request " ~ msg.toString);
 }
 
-void defaultNotifyHandler(RequestMessage msg)
+void defaultNotifyHandler(RequestMessageRaw msg)
 {
-	writeln("Ignoring notification " ~ msg.toJSON.toString);
+	info("Ignoring notification " ~ msg.toString);
 }
 
 void pumpEvents()
@@ -118,14 +128,23 @@ void doTests()
 		configuration: opt(true)
 	};
 	InitializeParams init = {
-		processId: JsonValue(thisProcessID),
+		processId: thisProcessID,
 		rootUri: uriFromFile(cwd),
 		capabilities: {
 			workspace: opt(workspace)
 		}
 	};
-	rpc.sendRequest("initialize", init);
+	auto msg = rpc.sendRequest("initialize", init, 10.seconds);
+	info("Response: ", msg.resultJson);
+
+	// TODO: do actual tests here
+
+	info("Shutting down...");
+	rpc.sendRequest("shutdown", init);
 	pumpEvents();
 	Fiber.yield();
-	writeln("done!");
+	rpc.notifyMethod("exit");
+	pumpEvents();
+	Thread.sleep(100.msecs);
+	Fiber.yield();
 }
