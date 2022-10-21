@@ -12,7 +12,7 @@ import core.time : msecs, seconds;
 
 import std.algorithm : any, canFind, endsWith, map;
 import std.array : appender, array;
-import std.conv : to;
+import std.conv : text, to;
 import std.datetime.stopwatch : StopWatch;
 import std.datetime.systime : Clock, SysTime;
 import std.experimental.logger;
@@ -397,6 +397,7 @@ __gshared bool syncingConfiguration = false;
 __gshared bool startedUp = false;
 InitializeResult initialize(InitializeParams params)
 {
+	import served.info;
 	import std.file : chdir;
 
 	if (params.trace == "verbose")
@@ -442,6 +443,11 @@ InitializeResult initialize(InitializeParams params)
 	}
 
 	InitializeResult result;
+	ServerInfo serverInfo = {
+		name: "serve-d",
+		version_: format!"v%(%s.%)%s"(Version,
+			VersionSuffix.length ? text('-', VersionSuffix) : VersionSuffix)
+	};
 	CompletionOptions completionProvider = {
 		resolveProvider: doCompleteSnippets,
 		triggerCharacters: [
@@ -480,6 +486,7 @@ InitializeResult initialize(InitializeParams params)
 		workspace: workspaceCapabilities
 	};
 	result.capabilities = serverCapabilities;
+	result.serverInfo = serverInfo;
 
 	setTimeout({
 		if (!syncedConfiguration && !syncingConfiguration)
