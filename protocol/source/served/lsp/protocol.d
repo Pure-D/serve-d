@@ -1790,6 +1790,44 @@ struct InitializeResult
 	@serdeOptional Optional!ServerInfo serverInfo;
 }
 
+// TODO: deserialization broken here because of TextDocumentSync
+// (see linters at the very bottom of this file)
+version (none)
+unittest
+{
+	auto res = `{
+		"capabilities":{
+			"textDocumentSync":2,
+			"completionProvider":{
+				"resolveProvider":false,
+				"triggerCharacters":[".","=","/","*","+","-"],
+				"completionItem":{"labelDetailsSupport":true}
+			},
+			"hoverProvider":true,
+			"signatureHelpProvider":{
+				"triggerCharacters":["(","[",","]
+			},
+			"definitionProvider":true,
+			"documentHighlightProvider":true,
+			"documentSymbolProvider":true,
+			"codeActionProvider":true,
+			"codeLensProvider":{"resolveProvider":true},
+			"colorProvider":{},
+			"documentFormattingProvider":true,
+			"documentRangeFormattingProvider":true,
+			"workspaceSymbolProvider":true,
+			"workspace":{
+				"workspaceFolders":{
+					"supported":true,
+					"changeNotifications":true
+				}
+			}
+		}
+	}`
+		.deserializeJson!InitializeResult;
+	assert(res.capabilities.textDocumentSync == TextDocumentSyncKind.incremental);
+}
+
 @serdeFallbackStruct
 struct ServerInfo
 {
@@ -1887,7 +1925,7 @@ struct TextDocumentSyncOptions
 @serdeFallbackStruct
 struct ServerCapabilities
 {
-	@serdeOptional Variant!(void, TextDocumentSyncOptions, TextDocumentSyncKind) textDocumentSync;
+	@serdeOptional Variant!(void, TextDocumentSyncKind, TextDocumentSyncOptions) textDocumentSync;
 	@serdeOptional Variant!(void, CompletionOptions) completionProvider;
 	@serdeOptional Variant!(void, bool, HoverOptions) hoverProvider;
 	@serdeOptional Variant!(void, SignatureHelpOptions) signatureHelpProvider;
@@ -3841,4 +3879,56 @@ unittest
 	assert(serializeJson(s) == `{}`);
 	s["hello"] = JsonValue("world");
 	assert(serializeJson(s) == `{"hello":"world"}`);
+}
+
+unittest
+{
+	import std.traits;
+	import mir.algebraic : Algebraic;
+
+	bool hasSerdeEnumProxy(Args...)()
+	{
+		bool ret = false;
+		static foreach (Arg; Args)
+		{
+			static if (is(Arg == enum)
+				&& hasUDA!(Arg, serdeProxyCast))
+				ret = true;
+		}
+		return ret;
+	}
+
+	void LintVariantArgs(string member, Args...)()
+	{
+		static if (hasSerdeEnumProxy!Args)
+		{
+			static if (Args.length != 2
+				|| !(is(Args[0] == void) || is(Args[0] == typeof(null))))
+			{
+				// https://github.com/libmir/mir-ion/issues/36
+				pragma(msg, "WARNING: known-broken deserialization on Variant!", Args.stringof, "\n\ton field ", member);
+			}
+		}
+	}
+
+	void LintStruct(alias T)()
+	{
+		static foreach (member; __traits(allMembers, T))
+		{{
+			static if (is(__traits(getMember, T, member) == struct))
+			{
+				LintStruct!(__traits(getMember, T, member));
+			}
+			else static if (is(typeof(__traits(getMember, T, member))))
+			{
+				static if (is(typeof(__traits(getMember, T, member))
+					: Algebraic!Args, Args...))
+				{
+					LintVariantArgs!(T.stringof ~ "." ~ member, Args);
+				}
+			}
+		}}
+	}
+
+	LintStruct!(served.lsp.protocol);
 }
