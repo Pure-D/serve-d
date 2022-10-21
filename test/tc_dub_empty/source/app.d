@@ -86,9 +86,9 @@ bool tryDub(string path)
 		tryRun!"setConfiguration"(path, dub.configuration);
 		tryRun!"archTypes"(path);
 		tryRun!"archType"(path);
-		tryRun!"setArchType"(path, JSONValue(["arch-type" : JSONValue("x86")]));
+		tryRun!"setArchType"(path, "x86");
 		tryRun!"buildType"(path);
-		tryRun!"setBuildType"(path, JSONValue(["build-type" : JSONValue("debug")]));
+		tryRun!"setBuildType"(path, "debug");
 		tryRun!"compiler"(path);
 		static if (Compiler.vendor == Compiler.Vendor.gnu)
 			tryRun!"setCompiler"(path, "gdc");
