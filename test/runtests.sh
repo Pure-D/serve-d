@@ -38,14 +38,13 @@ for testCase in $tests; do
 		cp ../data/dcd/dcd-client* .
 	fi
 
-	dub upgrade >testout.txt 2>&1
-	dub --compiler="${DC}" >>testout.txt 2>&1
+	dub upgrade 2>&1
+	dub --compiler="${DC}" 2>&1
 	if [[ $? -eq 0 ]]; then
-		echo -e "${YELLOW}$testCase:${NORMAL} ... ${GREEN}Pass${NORMAL}";
+		echo -e "${YELLOW}$testCase:${NORMAL} ... ${GREEN}Test Pass${NORMAL}";
 		let pass_count=pass_count+1
 	else
-		echo -e "${YELLOW}$testCase:${NORMAL} ... ${RED}Fail${NORMAL}";
-		cat testout.txt
+		echo -e "${YELLOW}$testCase:${NORMAL} ... ${RED}Test Fail${NORMAL}";
 		let fail_count=fail_count+1
 	fi
 
