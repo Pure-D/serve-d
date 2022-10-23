@@ -178,5 +178,14 @@ int main(string[] args)
 
 	printVersion(io.stderr);
 
-	return lspRouter.run() ? 0 : 1;
+	auto ret = lspRouter.run() ? 0 : 1;
+	version (Posix)
+	{
+		import core.stdc.stdlib;
+
+		// exit without cleaning up (because of segfault in GC cleanup + OS cleans up for us)
+		exit(ret);
+	}
+	else
+		return ret;
 }
