@@ -22,10 +22,15 @@ version (Windows) class WindowsStdinReader : FileReader
 	override void stop()
 	{
 		wantStop = true;
+		closeEvent.wait(5.seconds);
 	}
 
 	override void run()
 	{
+		closeEvent.reset();
+		scope (exit)
+			closeEvent.set();
+
 		auto stdin = GetStdHandle(STD_INPUT_HANDLE);
 		INPUT_RECORD inputRecord;
 		DWORD nbRead;
@@ -71,13 +76,23 @@ version (Windows) class WindowsStdinReader : FileReader
 	}
 
 	private bool wantStop;
+	private Event closeEvent;
 }
 
 /// A file reader implementation using the POSIX select API using events. Reads
 /// as much content as possible when new data is available at once, making the
 /// file reading operation much more efficient when large chunks of data are
 /// being transmitted.
-version (Posix) class PosixStdinReader : PosixFileReader
+///
+/// This is buggy because it calls `fd.close()` while a `select` is running on
+/// it, which causes undefined behavior. Effectively on Linux this would break
+/// with multiple file readers running at the same time. (as it could be done in
+/// the unittests if not closed properly) There is an `Event` struct used within
+/// `stop()` which avoids breakage through reassigned file descriptors.
+///
+/// Ideally would want to implement Epoll and Kqueue implementations of this
+/// reader instead.
+version (Posix) class BuggyPosixStdinReader : BuggyPosixFileReader
 {
 	this()
 	{
@@ -88,28 +103,35 @@ version (Posix) class PosixStdinReader : PosixFileReader
 }
 
 /// ditto
-version (Posix) class PosixFileReader : FileReader
+version (Posix) class BuggyPosixFileReader : FileReader
 {
 	import core.stdc.errno;
 	import core.sys.posix.sys.select;
 	import core.sys.posix.sys.time;
 	import core.sys.posix.sys.types;
 	import core.sys.posix.unistd;
+	import core.sync.event;
 
 	File stdFile;
+	Event closeEvent;
 
 	this(File stdFile)
 	{
 		this.stdFile = stdFile;
+		this.closeEvent = Event(true, true);
 	}
 
 	override void stop()
 	{
 		stdFile.close();
+		closeEvent.wait(5.seconds);
 	}
 
 	override void run()
 	{
+		closeEvent.reset();
+		scope (exit)
+			closeEvent.set();
 		int fd = stdFile.fileno;
 
 		ubyte[4096] buffer;
@@ -133,7 +155,7 @@ version (Posix) class PosixFileReader : FileReader
 				int err = errno;
 				if (err == EINTR)
 					continue;
-				stderr.writeln("[fatal] PosixStdinReader error ", err, " in select()");
+				stderr.writeln("[fatal] BuggyPosixStdinReader error ", err, " in select()");
 				break;
 			}
 			else if (ret)
@@ -144,7 +166,7 @@ version (Posix) class PosixFileReader : FileReader
 					int err = errno;
 					if (err == EINTR)
 						continue;
-					stderr.writeln("PosixStdinReader error ", errno, " in read()");
+					stderr.writeln("BuggyPosixStdinReader error ", errno, " in read()");
 					break;
 				}
 				else if (len == 0)
@@ -262,7 +284,7 @@ FileReader newStdinReader()
 	version (Windows)
 		return new WindowsStdinReader();
 	else version (Posix)
-		return new PosixStdinReader();
+		return new BuggyPosixStdinReader();
 	else
 		static assert(false, "no stdin reader for this platform implemented");
 }
@@ -271,7 +293,7 @@ FileReader newStdinReader()
 FileReader newFileReader(File stdFile)
 {
 	version (Posix)
-		return new PosixFileReader(stdFile);
+		return new BuggyPosixFileReader(stdFile);
 	else
 		static assert(false, "no generic file reader for this platform implemented");
 }
