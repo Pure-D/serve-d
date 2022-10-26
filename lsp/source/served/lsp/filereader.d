@@ -78,6 +78,12 @@ version (Windows) class WindowsStdinReader : FileReader
 	private Event closeEvent;
 }
 
+version (Windows)
+{
+	private extern(Windows) bool CancelSynchronousIo(void* hThread);
+}
+
+
 /// ditto
 version (Windows) class WindowsFileReader : FileReader
 {
