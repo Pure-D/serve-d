@@ -33,8 +33,6 @@ version (Windows) class WindowsStdinReader : FileReader
 			closeEvent.set();
 
 		auto stdin = GetStdHandle(STD_INPUT_HANDLE);
-		INPUT_RECORD inputRecord;
-		DWORD nbRead;
 		ubyte[4096] buffer;
 
 		while (!wantStop)
@@ -78,6 +76,69 @@ version (Windows) class WindowsStdinReader : FileReader
 
 	private bool wantStop;
 	private Event closeEvent;
+}
+
+/// ditto
+version (Windows) class WindowsFileReader : FileReader
+{
+	import core.sys.windows.windows;
+	import core.sync.event;
+
+	this(File file)
+	{
+		handle = file.windowsHandle;
+		super();
+	}
+
+	override void stop()
+	{
+		wantStop = true;
+		CancelSynchronousIo(thread);
+		closeEvent.wait(5.seconds);
+	}
+
+	override void run()
+	{
+		closeEvent.reset();
+		scope (exit)
+			closeEvent.set();
+
+		ubyte[4096] buffer;
+
+		thread = GetCurrentThread();
+		int errorCount = 0;
+
+		while (!wantStop)
+		{
+			DWORD numRead;
+			if (!ReadFile(handle, buffer.ptr, buffer.length, &numRead, null))
+			{
+				auto error = GetLastError();
+				if (error == ERROR_OPERATION_ABORTED)
+					continue;
+				stderr.writeln("WindowsStdinReader failed with ", error);
+				errorCount++;
+				if (errorCount > 10)
+				{
+					stderr.writeln("Closing WindowsStdinReader because too many errors");
+					break;
+				}
+				continue;
+			}
+			synchronized (mutex)
+				data ~= buffer[0 .. numRead];
+		}
+	}
+
+	override bool isReading()
+	{
+		return isRunning;
+	}
+
+	private bool wantStop;
+	private Event closeEvent;
+	private HANDLE handle;
+	private HANDLE thread;
 }
 
 /// A file reader implementation using the POSIX select API using events. Reads
@@ -289,7 +350,9 @@ FileReader newStdinReader()
 /// ditto
 FileReader newFileReader(File stdFile)
 {
-	version (Posix)
+	version (Windows)
+		return new WindowsFileReader(stdFile);
+	else version (Posix)
 		return new PosixFileReader(stdFile);
 	else
 		static assert(false, "no generic file reader for this platform implemented");
