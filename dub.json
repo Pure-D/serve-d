@@ -3,6 +3,7 @@
 	"description": "Microsoft Language Server Protocol library and D Server",
 	"license": "MIT",
 	"copyright": "Copyright © 2017-2022, webfreak",
+	"dflags": ["-lowmem"],
 	"dependencies": {
 		"eventsystem": "~>1.2.0",
 		"libddoc": "0.8.0",
