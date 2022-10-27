@@ -232,7 +232,7 @@ static immutable PlainSnippet[] plainSnippets = [
 		"string toString() in struct",
 		"string toString() const @safe pure nothrow {\n\t$0\n}",
 		"Overriding how objects are serialized to strings with std.conv and writeln.\n\n"
-			~ "Reference: [https://dlang.org/phobos/std_format.html#.formatValue]"
+			~ "Reference: [https://dlang.org/phobos/std_format_write.html]"
 	),
 	PlainSnippet(
 		[SnippetLevel.type, SnippetLevel.mixinTemplate],
@@ -240,7 +240,7 @@ static immutable PlainSnippet[] plainSnippets = [
 		"string toString() in struct using std.conv:text",
 		"string toString() const @safe {\n\timport std.conv : text;\n\n\treturn text($0);\n}",
 		"Overriding how objects are serialized to strings with std.conv and writeln.\n\n"
-			~ "Reference: [https://dlang.org/phobos/std_format.html#.formatValue]"
+			~ "Reference: [https://dlang.org/phobos/std_format_write.html]"
 	),
 	// these don't get added as they are too error-prone (get silently ignored when there is a compilation error inside of them)
 	// PlainSnippet(
@@ -250,7 +250,7 @@ static immutable PlainSnippet[] plainSnippets = [
 	// 	"void toString(W)(ref W w) {\n\t$0\n}",
 	// 	"Overriding how objects are serialized to strings with std.conv and writeln.\n\n"
 	// 		~ "This overload uses an appender as the first argument which allows the developer to avoid concatenation and GC use.\n\n"
-	// 		~ "Reference: [https://dlang.org/phobos/std_format.html#.formatValue]"
+	// 		~ "Reference: [https://dlang.org/phobos/std_format_write.html]"
 	// ),
 	// PlainSnippet(
 	// 	[SnippetLevel.type, SnippetLevel.mixinTemplate],
@@ -259,7 +259,7 @@ static immutable PlainSnippet[] plainSnippets = [
 	// 	"void toString(W)(ref W w, scope const ref FormatSpec fmt) {\n\t$0\n}",
 	// 	"Overriding how objects are serialized to strings with std.conv and writeln.\n\n"
 	// 		~ "This overload uses an appender as the first argument which allows the developer to avoid concatenation and GC use.\n\n"
-	// 		~ "Reference: [https://dlang.org/phobos/std_format.html#.formatValue]"
+	// 		~ "Reference: [https://dlang.org/phobos/std_format_write.html]"
 	// ),
 	PlainSnippet(
 		[SnippetLevel.type, SnippetLevel.mixinTemplate],
@@ -267,7 +267,7 @@ static immutable PlainSnippet[] plainSnippets = [
 		"string toString() in class",
 		"override string toString() const @safe pure nothrow {\n\t$0\n}",
 		"Overriding how objects are serialized to strings with std.conv and writeln.\n\n"
-			~ "Reference: [https://dlang.org/phobos/std_format.html#.formatValue]"
+			~ "Reference: [https://dlang.org/phobos/std_format_write.html]"
 	),
 	PlainSnippet(
 		[SnippetLevel.type, SnippetLevel.mixinTemplate],
@@ -275,7 +275,7 @@ static immutable PlainSnippet[] plainSnippets = [
 		"string toString() in class using std.conv:text",
 		"override string toString() const @safe {\n\timport std.conv : text;\n\n\treturn text($0);\n}",
 		"Overriding how objects are serialized to strings with std.conv and writeln.\n\n"
-			~ "Reference: [https://dlang.org/phobos/std_format.html#.formatValue]"
+			~ "Reference: [https://dlang.org/phobos/std_format_write.html]"
 	),
 	PlainSnippet(
 		[SnippetLevel.type, SnippetLevel.mixinTemplate],
@@ -754,6 +754,129 @@ static immutable PlainSnippet[] plainSnippets = [
 		"A `printf` call in a debug block.\n\n"
 			~ "Useful to do a debug output inside a pure, nothrow or @nogc function.",
 		null, true
+	),
+
+	// statements
+	PlainSnippet(
+		[SnippetLevel.method],
+		"switch",
+		"switch-case",
+		"switch ($1) {\n$0\ndefault:\n\tbreak;\n}",
+		"Simple switch statement, with default (required). Use `final switch` "
+			~ "to match on enums where you know all possible values.\n\n"
+			~ "Reference: [https://dlang.org/spec/statement.html#switch-statement]"
+	),
+	PlainSnippet(
+		[SnippetLevel.method],
+		"final switch",
+		"final switch",
+		"final switch ($1) {\n$0\n}",
+		"switch statement that is used when all possible values are tested for"
+			~ ". (e.g. for enums) Missing cases will result in a compile time "
+			~ "error, which is useful for future-proofing the code.\n\n"
+			~ "Reference: [https://dlang.org/spec/statement.html#final-switch-statement]"
+	),
+	PlainSnippet(
+		[SnippetLevel.method],
+		"if",
+		"if",
+		"if ($1) {\n\t$0\n}",
+		"Basic `if` statement to branch on a condition.\n\n"
+			~ "Reference: [https://dlang.org/spec/statement.html#if-statement]"
+	),
+	PlainSnippet(
+		[SnippetLevel.method],
+		"if auto",
+		"if (auto x = ...)",
+		"if (auto ${2:x} = $1) {\n\t$0\n}",
+		"Given an expression, when it evaluates truthy (implicitly converts to "
+			~ "true), assigns that expression to the variable `x`. The scope of"
+			~ " x is then extended to the end of the ThenStatement.\n\n"
+			~ "If the expression does not evaluate truthy, the then-branch is "
+			~ "not called. This is useful for example to do null-checks and "
+			~ "then conditionally run code on only non-null values.\n\n"
+			~ "Example null check inside a JSONValue map: "
+			~ "`if (auto name = \"name\" in config.object) { ... }`\n\n"
+			~ "Reference: [https://dlang.org/spec/statement.html#if-statement]"
+	),
+	PlainSnippet(
+		[SnippetLevel.method],
+		"while",
+		"while",
+		"while ($1) {\n\t$0\n}",
+		"Basic `while` loop.\n\n"
+			~ "Reference: [https://dlang.org/spec/statement.html#while-statement]"
+	),
+	PlainSnippet(
+		[SnippetLevel.method],
+		"while auto",
+		"while (auto x = ...)",
+		"while (auto ${2:x} = $1) {\n\t$0\n}",
+		"Similar to `if (auto ...)`, this will loop on the expression and also "
+			~ "assign that expression to the given variable name every "
+			~ "iteration.\n\n"
+			~ "Reference: [https://dlang.org/spec/statement.html#while-statement]"
+	),
+	PlainSnippet(
+		[SnippetLevel.method],
+		"for",
+		"for",
+		"for (int ${1:i} = 0; ${1:i} < $2; ${1:i}++) {\n\t$0\n}",
+		"Basic `for` loop.\n\n"
+			~ "Reference: [https://dlang.org/spec/statement.html#for-statement]"
+	),
+	PlainSnippet(
+		[SnippetLevel.method],
+		"scope guard",
+		"scope (exit|success|failure)",
+		"scope(${1|exit,success,failure|}) {\n\t$0\n}",
+		"Runs code at the end of the scope, when it is left successfully or "
+			~ "after exceptions are thrown. e.g. after the `}` character.\n\n"
+			~ "- `failure` will only run the code when an Exception is thrown "
+				~ "(similar to `catch`)\n"
+			~ "- `success` will only run the code when the scope exits without "
+				~ "any thrown Exception\n"
+			~ "- `exit` will runs always (scope succeeds or throws)\n\n"
+			~ "Reference: [https://dlang.org/spec/statement.html#scope-guard-statement]"
+	),
+	PlainSnippet(
+		[SnippetLevel.method],
+		"return",
+		"return",
+		"return $1;$0",
+		"Returns (exits) from the function, possibly returning a value.\n\n"
+			~ "Reference: [https://dlang.org/spec/statement.html#return-statement]",
+		null, true
+	),
+	PlainSnippet(
+		[SnippetLevel.method],
+		"throw",
+		"throw new Exception",
+		"throw new ${2:Exception}(\"$1\");$0",
+		"Throws an Exception or Error (or any Throwable).\n\n"
+			~ "Reference: [https://dlang.org/spec/expression.html#throw_expression]",
+		null, true
+	),
+	PlainSnippet(
+		[SnippetLevel.method],
+		"goto",
+		"goto Label",
+		"goto ${1:Label};$0",
+		"Jumps to a label previously defined or inside a switch-case between "
+			~ "cases or simply fall-through to the next case.\n\n"
+			~ "Reference: [https://dlang.org/spec/statement.html#goto-statement]",
+		null, true
+	),
+	PlainSnippet(
+		[SnippetLevel.method],
+		"with",
+		"with",
+		"with ($1) {\n\t$0\n}",
+		"A with block simplifies repeated access of the same symbol. You can "
+			~ "use it for example to repeatedly access the same enum or to "
+			~ "use an inline-constructed value within a block without giving "
+			~ "it a name\n\n"
+			~ "Reference: [https://dlang.org/spec/statement.html#with-statement]"
 	),
 ];
 //dfmt on

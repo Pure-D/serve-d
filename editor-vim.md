@@ -5,10 +5,10 @@
 [Download or build serve-d](README.md#Installation) and edit your `.vimrc`.
 
 ```vimrc
-let g:ycm_language_server = [ 
-            \ { 
-            \     'name': 'd', 
-            \     'cmdline': ['path/to/your/serve-d/binary'], 
+let g:ycm_language_server = [
+            \ {
+            \     'name': 'd',
+            \     'cmdline': ['path/to/your/serve-d/binary'],
             \     'filetypes': ['d'],
             \ }]
 ```
@@ -40,9 +40,17 @@ what you are doing.
 
 ## Using coc's
 
+### Using `CocInstall`
+
+```
+:CocInstall coc-dlang
+```
+
+### Manually through coc-settings.json
+
 First [download or build serve-d](README.md#Installation)
 
-A coc-settings.json files looking like this works well.
+A `coc-settings.json` file looking like this works well (you can open it with `:CocConfig`)
 
 ```js
 {
@@ -61,4 +69,16 @@ A coc-settings.json files looking like this works well.
 	"suggest.autoTrigger": "none",
 	"suggest.noselect": false
 }
+```
+
+## Using nvim-lspconfig
+
+Neovim has a builtin LSP client and official LSP configs for it,
+[here](https://github.com/neovim/nvim-lspconfig).
+
+After installing `nvim-lspconfig` using your preferred plugin manager, you must
+load serve-d, like the following:
+
+```lua
+require'lspconfig'.serve_d.setup{}
 ```

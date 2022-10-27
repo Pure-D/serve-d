@@ -20,6 +20,7 @@ import std.typecons;
 public import workspaced.com.snippets.plain;
 public import workspaced.com.snippets.smart;
 public import workspaced.com.snippets.dependencies;
+public import workspaced.com.snippets.control_flow;
 
 // ugly, but works for now
 import mir.algebraic_alias.json : JsonValue = JsonAlgebraic;
@@ -33,6 +34,7 @@ class SnippetsComponent : ComponentWrapper
 	static PlainSnippetProvider plainSnippets;
 	static SmartSnippetProvider smartSnippets;
 	static DependencyBasedSnippetProvider dependencySnippets;
+	static ControlFlowSnippetProvider controlFlowSnippets;
 
 	protected SnippetProvider[] providers;
 
@@ -44,12 +46,15 @@ class SnippetsComponent : ComponentWrapper
 			smartSnippets = new SmartSnippetProvider();
 		if (!dependencySnippets)
 			dependencySnippets = new DependencyBasedSnippetProvider();
+		if (!controlFlowSnippets)
+			controlFlowSnippets = new ControlFlowSnippetProvider();
 
 		config.stringBehavior = StringBehavior.source;
 		providers.reserve(16);
 		providers ~= plainSnippets;
 		providers ~= smartSnippets;
 		providers ~= dependencySnippets;
+		providers ~= controlFlowSnippets;
 	}
 
 	/**
@@ -344,6 +349,9 @@ class SnippetsComponent : ComponentWrapper
 		case SnippetLevel.docComment:
 		case SnippetLevel.strings:
 		case SnippetLevel.mixinTemplate:
+		case SnippetLevel.newMethod:
+		case SnippetLevel.loop:
+		case SnippetLevel.switch_:
 			break;
 		case SnippetLevel.type:
 			tmp.put("struct FORMAT_HELPER {\n");
@@ -499,6 +507,9 @@ class SnippetsComponent : ComponentWrapper
 		case SnippetLevel.docComment:
 		case SnippetLevel.strings:
 		case SnippetLevel.mixinTemplate:
+		case SnippetLevel.newMethod:
+		case SnippetLevel.loop:
+		case SnippetLevel.switch_:
 			break;
 		case SnippetLevel.type:
 		case SnippetLevel.method:
@@ -521,6 +532,9 @@ class SnippetsComponent : ComponentWrapper
 		case SnippetLevel.docComment:
 		case SnippetLevel.strings:
 		case SnippetLevel.mixinTemplate:
+		case SnippetLevel.newMethod:
+		case SnippetLevel.loop:
+		case SnippetLevel.switch_:
 			break;
 		case SnippetLevel.type:
 		case SnippetLevel.method:
@@ -630,6 +644,15 @@ enum SnippetLevel
 	docComment,
 	/// Inside explicitly declared mixin templates
 	mixinTemplate,
+
+	/// Inserted at the start of any method, meaning the scope has cleared or at least is logically separated.
+	newMethod,
+	/// a breakable loop (while, for, foreach, etc.)
+	/// This type is usually not the trailing type and will repeat method afterwards.
+	loop,
+	/// a `switch` statement
+	/// This type is usually not the trailing type and will repeat method afterwards.
+	switch_,
 }
 
 ///
@@ -664,6 +687,20 @@ struct SnippetInfo
 	SnippetLevel level() const @property
 	{
 		return stack.length ? stack[$ - 1] : SnippetLevel.other;
+	}
+
+	/// Checks in reverse if the given snippet level is in the stack, up until
+	/// the last newMethod level.
+	SnippetLevel findInLocalScope(SnippetLevel[] levels...) const
+	{
+		foreach_reverse (s; stack)
+		{
+			if (levels.canFind(s))
+				return s;
+			if (s == SnippetLevel.newMethod)
+				break;
+		}
+		return SnippetLevel.init;
 	}
 }
 

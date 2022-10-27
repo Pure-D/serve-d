@@ -64,6 +64,8 @@ int main(string[] args)
 	debug globalLogLevel = LogLevel.trace;
 	else globalLogLevel = LogLevel.info;
 
+	sharedLog = new FileLogger(io.stderr);
+
 	bool printVer;
 	string[] features;
 	string[] provides;

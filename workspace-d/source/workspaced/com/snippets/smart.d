@@ -1,6 +1,6 @@
 module workspaced.com.snippets.smart;
 
-// debug = SnippetScope;
+//debug = SnippetScope;
 
 import workspaced.api;
 import workspaced.com.snippets;
@@ -60,6 +60,51 @@ class SmartSnippetProvider : SnippetProvider
 			snp.unformatted = true;
 			snp.resolved = true;
 			res ~= snp;
+		}
+
+		if (info.lastStatement.type == "TryStatement")
+		{
+			int tryIndex = info.contextTokenIndex == 0 ? position : info.contextTokenIndex;
+			auto hasBraces = code[0 .. max(min(tryIndex, $), 0)].stripRight.endsWith("}");
+			Snippet catchSnippet;
+			catchSnippet.providerId = typeid(this).name;
+			catchSnippet.id = "catch";
+			catchSnippet.title = "catch";
+			catchSnippet.shortcut = "catch";
+			catchSnippet.documentation = "catch block";
+			if (hasBraces)
+			{
+				catchSnippet.plain = "catch (Exception e) {\n\t\n}";
+				catchSnippet.snippet = "catch (${1:Exception e}) {\n\t$0\n}";
+			}
+			else
+			{
+				catchSnippet.plain = "catch (Exception e)\n\t";
+				catchSnippet.snippet = "catch (${1:Exception e})\n\t$0";
+			}
+			catchSnippet.unformatted = true;
+			catchSnippet.resolved = true;
+			res ~= catchSnippet;
+
+			Snippet finallySnippet;
+			finallySnippet.providerId = typeid(this).name;
+			finallySnippet.id = "finally";
+			finallySnippet.title = "finally";
+			finallySnippet.shortcut = "finally";
+			finallySnippet.documentation = "finally block";
+			if (hasBraces)
+			{
+				finallySnippet.plain = "finally {\n\t\n}";
+				finallySnippet.snippet = "finally {\n\t$0\n}";
+			}
+			else
+			{
+				finallySnippet.plain = "finally\n\t";
+				finallySnippet.snippet = "finally\n\t$0";
+			}
+			finallySnippet.unformatted = true;
+			finallySnippet.resolved = true;
+			res ~= finallySnippet;
 		}
 
 		debug (SnippetScope)
