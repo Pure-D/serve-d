@@ -2,6 +2,9 @@ name: Deploy Nightly
 on:
   schedule:
     - cron: '0 2 * * *'
+  push:
+    paths:
+      - '.manual-nightly-trigger'
 
 jobs:
   nightly:
