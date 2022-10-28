@@ -5,7 +5,6 @@ __dummy.html
 *.a
 *.obj
 *-test-*
-dub.selections.json
 /serve-d
 *.dll
 *.lib

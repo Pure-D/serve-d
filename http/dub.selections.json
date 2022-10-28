@@ -1,0 +1,7 @@
+{
+	"fileVersion": 1,
+	"versions": {
+		"cachetools": "0.3.1",
+		"requests": "2.0.9"
+	}
+}
