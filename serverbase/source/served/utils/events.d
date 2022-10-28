@@ -167,18 +167,27 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 					});
 					return got.deserializeJson!T;
 				}
-				else
+				else if (params.length && params.ptr[0] == '{')
 				{
 					// named parameter support
 					// only supports passing structs (not parsing names of D method arguments)
 					return params.deserializeJson!T;
+				}
+				else
+				{
+					// no parameters passed - parse empty JSON for the type or
+					// use default value.
+					static if (is(T == struct))
+						return `{}`.deserializeJson!T;
+					else
+						return T.init;
 				}
 			}
 			catch (Exception e)
 			{
 				ResponseError error;
 				error.code = ErrorCode.invalidParams;
-				error.message = "Failed converting input parameter " ~ params ~ " to needed type `" ~ T.stringof ~ "`: " ~ e.msg;
+				error.message = "Failed converting input parameter `" ~ params ~ "` to needed type `" ~ T.stringof ~ "`: " ~ e.msg;
 				error.data = JsonValue(e.toString);
 				throw new MethodException(error);
 			}
