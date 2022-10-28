@@ -1321,7 +1321,9 @@ struct VersionedTextDocumentIdentifier
 struct TextDocumentItem
 {
 	DocumentUri uri;
+	@serdeOptional // not actually optional according to LSP spec, logically fine to be omitted
 	string languageId;
+	@serdeOptional // not actually optional according to LSP spec, logically fine to be omitted
 	@serdeKeys("version") long version_;
 	string text;
 }
