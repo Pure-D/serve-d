@@ -1,97 +1,97 @@
 name: Deploy Nightly
 on:
-    schedule:
-        - cron: '0 2 * * *'
+  schedule:
+    - cron: '0 2 * * *'
 
 jobs:
-    nightly:
-        name: Deploy nightly
-        strategy:
-            fail-fast: false
-            matrix:
-                os: [ubuntu-latest, windows-latest, macOS-latest]
-                arch: [x86_64]
-                include:
-                  # use for 32 bit build
-                  - os: windows-latest
-                    arch: x86
-        runs-on: ${{ matrix.os }}
-        steps:
-            - uses: actions/checkout@v2
+  nightly:
+    name: Deploy nightly
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macOS-latest]
+        arch: [x86_64]
+        include:
+          # use for 32 bit build
+          - os: windows-latest
+            arch: x86
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
 
-            - name: Install D compiler
-              uses: dlang-community/setup-dlang@v1
-              with:
-                  compiler: ldc-latest
+      - name: Install D compiler
+        uses: dlang-community/setup-dlang@v1
+        with:
+            compiler: ldc-latest
 
-            - name: dub upgrade
-              uses: WebFreak001/dub-upgrade@v0.1.0
+      - name: dub upgrade
+        uses: WebFreak001/dub-upgrade@v0.1.0
 
-            - name: Run tests
-              run: dub test
+      - name: Run tests
+        run: dub test
 
-            # Linux release
-            - name: Build Linux release
-              run: ./ci/build.sh
-              if: matrix.os == 'ubuntu-latest'
-              env:
-                ARCH: ${{ matrix.arch }}
-                BUILD: release-debug
+      # Linux release
+      - name: Build Linux release
+        run: ./ci/build.sh
+        if: matrix.os == 'ubuntu-latest'
+        env:
+          ARCH: ${{ matrix.arch }}
+          BUILD: release-debug
 
-            - name: Deploy Linux release
-              if: matrix.os == 'ubuntu-latest'
-              uses: WebFreak001/deploy-nightly@master
-              env:
-                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
-                release_id: 20717582
-                asset_path: ./serve-d.tar.xz
-                asset_name: serve-d_linux-nightly-${{ matrix.arch }}-$$.tar.xz
-                asset_content_type: application/x-gtar
+      - name: Deploy Linux release
+        if: matrix.os == 'ubuntu-latest'
+        uses: WebFreak001/deploy-nightly@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
+          release_id: 20717582
+          asset_path: ./serve-d.tar.xz
+          asset_name: serve-d_linux-nightly-${{ matrix.arch }}-$$.tar.xz
+          asset_content_type: application/x-gtar
 
-            # OSX release
-            - name: Build OSX release
-              run: ./ci/build.sh
-              if: matrix.os == 'macOS-latest'
-              env:
-                MACOSX_DEPLOYMENT_TARGET: '10.12'
-                ARCH: ${{ matrix.arch }}
-                BUILD: release-debug
+      # OSX release
+      - name: Build OSX release
+        run: ./ci/build.sh
+        if: matrix.os == 'macOS-latest'
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '10.12'
+          ARCH: ${{ matrix.arch }}
+          BUILD: release-debug
 
-            - name: Deploy OSX release
-              if: matrix.os == 'macOS-latest'
-              uses: WebFreak001/deploy-nightly@master
-              env:
-                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
-                release_id: 20717582
-                asset_path: ./serve-d.tar.xz
-                asset_name: serve-d_osx-nightly-${{ matrix.arch }}-$$.tar.xz
-                asset_content_type: application/x-gtar
+      - name: Deploy OSX release
+        if: matrix.os == 'macOS-latest'
+        uses: WebFreak001/deploy-nightly@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
+          release_id: 20717582
+          asset_path: ./serve-d.tar.xz
+          asset_name: serve-d_osx-nightly-${{ matrix.arch }}-$$.tar.xz
+          asset_content_type: application/x-gtar
 
-            # Windows release
-            - name: Build Windows release
-              run: .\ci\build.bat
-              if: matrix.os == 'windows-latest'
-              env:
-                BUILD: release-debug
-                ARCH: ${{ matrix.arch }}
+      # Windows release
+      - name: Build Windows release
+        run: .\ci\build.bat
+        if: matrix.os == 'windows-latest'
+        env:
+          BUILD: release-debug
+          ARCH: ${{ matrix.arch }}
 
-            - name: Deploy Windows release
-              if: matrix.os == 'windows-latest'
-              uses: WebFreak001/deploy-nightly@master
-              env:
-                GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-              with:
-                upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
-                release_id: 20717582
-                asset_path: ./serve-d.zip
-                asset_name: serve-d_windows-nightly-${{ matrix.arch }}-$$.zip
-                asset_content_type: application/zip
+      - name: Deploy Windows release
+        if: matrix.os == 'windows-latest'
+        uses: WebFreak001/deploy-nightly@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
+          release_id: 20717582
+          asset_path: ./serve-d.zip
+          asset_name: serve-d_windows-nightly-${{ matrix.arch }}-$$.zip
+          asset_content_type: application/zip
 
-            - name: cache dependency binaries
-              uses: WebFreak001/dub-upgrade@v0.1.0
-              with:
-                store: true
+      - name: cache dependency binaries
+        uses: WebFreak001/dub-upgrade@v0.1.0
+        with:
+          store: true
