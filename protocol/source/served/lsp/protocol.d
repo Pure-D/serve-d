@@ -164,37 +164,41 @@ if (AllowedTypes.length > 0)
 		if (value.descriptor.type != IonTypeCode.struct_)
 			return ionException(IonErrorCode.expectedStructValue);
 
-		bool[commonKeys.length] hasRequired;
-
 		auto struct_ = value.get!(IonStruct).withSymbols(symbolTable);
-		foreach (error, key, value; struct_)
+
+		static if (commonKeys.length > 0)
 		{
-			if (error)
-				return error.ionException;
+			bool[commonKeys.length] hasRequired;
 
-		Switch:
-			switch (key)
+			foreach (error, key, value; struct_)
 			{
-				static foreach (i, member; commonKeys)
-				{
-			case member:
-					hasRequired[i] = true;
-					break Switch;
-				}
-			default:
-				break;
-			}
-		}
+				if (error)
+					return error.ionException;
 
-		foreach (i, has; hasRequired)
-			if (!has)
-				return new IonException({
-					string reason;
-					foreach (i, has; hasRequired)
-						if (!has)
-							reason ~= "\nrequired common key '" ~ commonKeys[i] ~ "' is missing";
-					return "ion value is not compatible with StructVariant with types " ~ AllowedTypes.stringof ~ reason;
-				}());
+			Switch:
+				switch (key)
+				{
+					static foreach (i, member; commonKeys)
+					{
+				case member:
+						hasRequired[i] = true;
+						break Switch;
+					}
+				default:
+					break;
+				}
+			}
+
+			foreach (i, has; hasRequired)
+				if (!has)
+					return new IonException({
+						string reason;
+						foreach (i, has; hasRequired)
+							if (!has)
+								reason ~= "\nrequired common key '" ~ commonKeys[i] ~ "' is missing";
+						return "ion value is not compatible with StructVariant with types " ~ AllowedTypes.stringof ~ reason;
+					}());
+		}
 
 		static foreach (T; AllowedTypes)
 			if (valueMatchesType!T(struct_))
