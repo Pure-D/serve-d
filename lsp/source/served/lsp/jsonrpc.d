@@ -693,8 +693,8 @@ unittest
 		};
 		auto tok = rpc.sendMethod("initialize", initializeParams);
 		auto waitHandle = rpc.prepareWait(tok);
-		expectPacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
-		writePacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","result":{"capabilities":{}}}`);
+		expectPacket(`{"jsonrpc":"2.0","id":` ~ tok.value.toString ~ `,"method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
+		writePacket(`{"jsonrpc":"2.0","id":` ~ tok.value.toString ~ `,"result":{"capabilities":{}}}`);
 		rpc.call();
 		Thread.sleep(shortDelay);
 		rpc.call();
@@ -735,8 +735,8 @@ unittest
 		};
 		auto tok = rpc.sendMethod("initialize", initializeParams);
 		auto waitHandle = rpc.prepareWait(tok);
-		expectPacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
-		auto s = `{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","result":{"capabilities":{}}}`;
+		expectPacket(`{"jsonrpc":"2.0","id":` ~ tok.value.toString ~ `,"method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
+		auto s = `{"jsonrpc":"2.0","id":` ~ tok.value.toString ~ `,"result":{"capabilities":{}}}`;
 		rpcPipe.writeEnd.lockingBinaryWriter.put("Content-Length: ");
 		rpcPipe.writeEnd.flush();
 		slowIO();
@@ -771,8 +771,8 @@ unittest
 		};
 		auto tok = rpc.sendMethod("initialize", initializeParams);
 		auto waitHandle = rpc.prepareWait(tok);
-		expectPacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
-		writePacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","result":{"capabilities":{}}}`, pair[1], pair[0]);
+		expectPacket(`{"jsonrpc":"2.0","id":` ~ tok.value.toString ~ `,"method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
+		writePacket(`{"jsonrpc":"2.0","id":` ~ tok.value.toString ~ `,"result":{"capabilities":{}}}`, pair[1], pair[0]);
 		rpc.call();
 		Thread.sleep(shortDelay);
 		rpc.call();
@@ -801,8 +801,8 @@ unittest
 		};
 		auto tok = rpc.sendMethod("initialize", initializeParams);
 		auto waitHandle = rpc.prepareWait(tok);
-		expectPacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
-		writePacket(`{"jsonrpc":"2.0","id":"` ~ tok.value.toString ~ `","result":{"capabilities":{}}}`);
+		expectPacket(`{"jsonrpc":"2.0","id":` ~ tok.value.toString ~ `,"method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
+		writePacket(`{"jsonrpc":"2.0","id":` ~ tok.value.toString ~ `,"result":{"capabilities":{}}}`);
 		rpc.call();
 		Thread.sleep(shortDelay);
 		rpc.call();

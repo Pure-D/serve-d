@@ -675,14 +675,14 @@ unittest
 	assert(`4000` == RequestToken(4000).serializeJson);
 	assert(`null` == RequestToken(null).serializeJson);
 
-	auto tok = RequestToken.random();
-	auto other = RequestToken.random();
+	auto tok = RequestToken.randomString();
+	auto other = RequestToken.randomString();
 	assert(tok.value.get!string.length > 10);
 	assert(tok.value.get!string[0 .. 5] != tok.value.get!string[5 .. 10]);
 	assert(tok.value.get!string != other.value.get!string);
 
 	char[16] buf;
-	tok = RequestToken.randomAndSerialized(buf[]);
+	tok = RequestToken.randomAndSerializedString(buf[]);
 	assert(buf[0] == '"');
 	assert(buf[$ - 1] == '"');
 	assert(buf[1 .. $ - 1] == tok.value.get!string);
