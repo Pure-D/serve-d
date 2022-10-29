@@ -109,7 +109,7 @@ class SmartSnippetProvider : SnippetProvider
 
 		debug (SnippetScope)
 		{
-			import mir.ser.json : serializeJson;
+			import served.lsp.jsonops : serializeJson;
 
 			Snippet ret;
 			ret.providerId = typeid(this).name;
