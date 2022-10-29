@@ -19,7 +19,7 @@ deprecated("use deserializeJson") T fromJSON(T)(StdJSONValue value)
 /++
 JSON serialization function.
 +/
-string serializeJson(T)(auto ref T value)
+string serializeJsonImpl(T)(auto ref T value)
 {
 	import mir.ser.json : serializeJson;
 
@@ -29,7 +29,15 @@ string serializeJson(T)(auto ref T value)
 		return serializeJson!T(value);
 }
 
-T deserializeJson(T)(scope const(char)[] text)
+string serializeJson(T)(auto ref T value)
+{
+	static if (__traits(hasMember, T, "__toJson"))
+		return T.__toJson(value);
+	else
+		return serializeJsonImpl(value);
+}
+
+T deserializeJsonImpl(T)(scope const(char)[] text)
 {
 	import mir.deser.json : deserializeJson;
 
@@ -46,6 +54,14 @@ struct RootJsonToken
 	string json;
 
 	void[1] unserializable;
+}
+
+T deserializeJson(T)(scope const(char)[] text)
+{
+	static if (__traits(hasMember, T, "__fromJson"))
+		return T.__fromJson(text);
+	else
+		return deserializeJsonImpl!T(text);
 }
 
 unittest

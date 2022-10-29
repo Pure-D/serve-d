@@ -1,4 +1,6 @@
 name "protocol"
 
+dflags "-lowmem"
+
 dependency "mir-algorithm" version="~>3.18.2"
 dependency "mir-ion" version="~>2.1"

@@ -45,6 +45,25 @@ enum getRequiredKeys(T) = ({
 	return ret;
 })();
 
+/// Optimization to pre-compile JSON serialization and deserialization code for
+/// the type where this is mixed in into. Only really makes sense to use this if
+/// the type is in a separate compilation unit.
+static immutable CacheJsonSerialization = q{
+	static string __toJson(typeof(this) v)
+	{
+		import mir.ser.json : serializeJson;
+
+		return serializeJson!(typeof(v))(v);
+	}
+
+	static typeof(this) __fromJson(scope const(char)[] text)
+	{
+		import mir.deser.json : deserializeJson;
+
+		return deserializeJson!(typeof(this))(text);
+	}
+};
+
 @serdeFallbackStruct
 @serdeProxy!JsonValue
 struct StructVariant(AllowedTypes...)
@@ -60,6 +79,8 @@ if (AllowedTypes.length > 0)
 		|| staticIndexOf!(Unqual!T, AllowedTypes) != -1;
 
 	enum commonKeys = setIntersection(staticMap!(getRequiredKeys, AllowedTypes)).array;
+
+	mixin(CacheJsonSerialization);
 
 	private static bool valueMatchesType(T)(IonStructWithSymbols struct_)
 	{
@@ -390,6 +411,8 @@ struct NullableOptional(T)
 	import mir.ion.exception;
 	import mir.ion.value;
 
+	mixin(CacheJsonSerialization);
+
 	bool isSet = false;
 	Nullable!T embed;
 
@@ -618,6 +641,8 @@ unittest
 @serdeFallbackStruct
 struct RequestToken
 {
+	mixin(CacheJsonSerialization);
+
 	Variant!(typeof(null), long, string) value;
 	alias value this;
 
@@ -733,6 +758,8 @@ unittest
 ///
 struct RequestMessage
 {
+	mixin(CacheJsonSerialization);
+
 	///
 	@serdeOptional Optional!RequestToken id;
 	///
@@ -747,6 +774,8 @@ struct RequestMessage
 ///
 struct RequestMessageRaw
 {
+	mixin(CacheJsonSerialization);
+
 	///
 	@serdeOptional Optional!RequestToken id;
 	///
@@ -796,6 +825,8 @@ enum ErrorCode
 @serdeFallbackStruct
 struct ResponseError
 {
+	mixin(CacheJsonSerialization);
+
 	/// A Number that indicates the error type that occurred.
 	ErrorCode code;
 	/// A String providing a short description of the error.
@@ -842,6 +873,8 @@ class MethodException : Exception
 ///
 struct ResponseMessage
 {
+	mixin(CacheJsonSerialization);
+
 	this(RequestToken id, JsonValue result)
 	{
 		this.id = id;
@@ -907,6 +940,8 @@ unittest
 ///
 struct ResponseMessageRaw
 {
+	mixin(CacheJsonSerialization);
+
 	///
 	RequestToken id;
 	/// empty string/null if not set, otherwise JSON string of result
@@ -947,6 +982,8 @@ alias DocumentUri = string;
 @allowedMethods("window/showMessage")
 struct ShowMessageParams
 {
+	mixin(CacheJsonSerialization);
+
 	MessageType type;
 	string message;
 }
@@ -963,6 +1000,8 @@ enum MessageType
 @serdeFallbackStruct
 struct ShowMessageRequestClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeFallbackStruct
 	@serdeIgnoreUnexpectedKeys
 	static struct MessageActionItemCapabilities
@@ -977,6 +1016,8 @@ struct ShowMessageRequestClientCapabilities
 @allowedMethods("window/showMessageRequest")
 struct ShowMessageRequestParams
 {
+	mixin(CacheJsonSerialization);
+
 	MessageType type;
 	string message;
 	@serdeOptional Optional!(MessageActionItem[]) actions;
@@ -985,12 +1026,16 @@ struct ShowMessageRequestParams
 @serdeFallbackStruct
 struct MessageActionItem
 {
+	mixin(CacheJsonSerialization);
+
 	string title;
 }
 
 @serdeFallbackStruct
 struct ShowDocumentClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	bool support;
 }
 
@@ -998,6 +1043,8 @@ struct ShowDocumentClientCapabilities
 @allowedMethods("window/showDocument")
 struct ShowDocumentParams
 {
+	mixin(CacheJsonSerialization);
+
 	DocumentUri uri;
 	@serdeOptional Optional!bool external;
 	@serdeOptional Optional!bool takeFocus;
@@ -1007,6 +1054,8 @@ struct ShowDocumentParams
 @serdeFallbackStruct
 struct ShowDocumentResult
 {
+	mixin(CacheJsonSerialization);
+
 	bool success;
 }
 
@@ -1014,6 +1063,8 @@ struct ShowDocumentResult
 @allowedMethods("window/logMessage")
 struct LogMessageParams
 {
+	mixin(CacheJsonSerialization);
+
 	MessageType type;
 	string message;
 }
@@ -1024,6 +1075,8 @@ alias ProgressToken = Variant!(int, string);
 @allowedMethods("window/workDoneProgress/create")
 struct WorkDoneProgressCreateParams
 {
+	mixin(CacheJsonSerialization);
+
 	ProgressToken token;
 }
 
@@ -1031,6 +1084,8 @@ struct WorkDoneProgressCreateParams
 @allowedMethods("window/workDoneProgress/cancel")
 struct WorkDoneProgressCancelParams
 {
+	mixin(CacheJsonSerialization);
+
 	ProgressToken token;
 }
 
@@ -1057,6 +1112,8 @@ string toString(EolType eol)
 @serdeFallbackStruct
 struct Position
 {
+	mixin(CacheJsonSerialization);
+
 	/// Zero-based line & character offset (UTF-16 codepoints)
 	uint line, character;
 
@@ -1087,6 +1144,8 @@ unittest
 
 private struct SerializableTextRange
 {
+	mixin(CacheJsonSerialization);
+
 	Position start;
 	Position end;
 
@@ -1107,6 +1166,8 @@ private struct SerializableTextRange
 @serdeFallbackStruct
 struct TextRange
 {
+	mixin(CacheJsonSerialization);
+
 	union
 	{
 		struct
@@ -1204,6 +1265,8 @@ unittest
 @serdeFallbackStruct
 struct Location
 {
+	mixin(CacheJsonSerialization);
+
 	DocumentUri uri;
 	TextRange range;
 }
@@ -1211,6 +1274,8 @@ struct Location
 @serdeFallbackStruct
 struct LocationLink
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!TextRange originSelectionRange;
 	DocumentUri targetUri;
 	TextRange targetRange;
@@ -1220,6 +1285,8 @@ struct LocationLink
 @serdeFallbackStruct
 struct Diagnostic
 {
+	mixin(CacheJsonSerialization);
+
 	TextRange range;
 	@serdeOptional Optional!DiagnosticSeverity severity;
 	@serdeOptional OptionalJsonValue code;
@@ -1234,12 +1301,16 @@ struct Diagnostic
 @serdeFallbackStruct
 struct CodeDescription
 {
+	mixin(CacheJsonSerialization);
+
 	string href;
 }
 
 @serdeFallbackStruct
 struct DiagnosticRelatedInformation
 {
+	mixin(CacheJsonSerialization);
+
 	Location location;
 	string message;
 }
@@ -1263,6 +1334,8 @@ enum DiagnosticTag
 @serdeFallbackStruct
 struct Command
 {
+	mixin(CacheJsonSerialization);
+
 	string title;
 	string command;
 	JsonValue[] arguments;
@@ -1273,6 +1346,8 @@ alias ChangeAnnotationIdentifier = string;
 @serdeFallbackStruct
 struct TextEdit
 {
+	mixin(CacheJsonSerialization);
+
 	TextRange range;
 	string newText;
 	@serdeOptional Optional!ChangeAnnotationIdentifier annotationId;
@@ -1305,6 +1380,8 @@ unittest
 @serdeFallbackStruct
 struct ChangeAnnotation
 {
+	mixin(CacheJsonSerialization);
+
 	string label;
 	@serdeOptional Optional!bool needsConfirmation;
 	@serdeOptional Optional!string description;
@@ -1313,6 +1390,8 @@ struct ChangeAnnotation
 @serdeFallbackStruct
 struct CreateFileOptions
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool overwrite;
 	@serdeOptional Optional!bool ignoreIfExists;
 }
@@ -1320,6 +1399,8 @@ struct CreateFileOptions
 @serdeFallbackStruct
 struct CreateFile
 {
+	mixin(CacheJsonSerialization);
+
 	string uri;
 	@serdeOptional Optional!CreateFileOptions options;
 	@serdeOptional Optional!ChangeAnnotationIdentifier annotationId;
@@ -1329,6 +1410,8 @@ struct CreateFile
 @serdeFallbackStruct
 struct RenameFileOptions
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool overwrite;
 	@serdeOptional Optional!bool ignoreIfExists;
 }
@@ -1336,6 +1419,8 @@ struct RenameFileOptions
 @serdeFallbackStruct
 struct RenameFile
 {
+	mixin(CacheJsonSerialization);
+
 	string oldUri;
 	string newUri;
 	@serdeOptional Optional!RenameFileOptions options;
@@ -1346,6 +1431,8 @@ struct RenameFile
 @serdeFallbackStruct
 struct DeleteFileOptions
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool recursive;
 	@serdeOptional Optional!bool ignoreIfNotExists;
 }
@@ -1353,6 +1440,8 @@ struct DeleteFileOptions
 @serdeFallbackStruct
 struct DeleteFile
 {
+	mixin(CacheJsonSerialization);
+
 	string uri;
 	@serdeOptional Optional!DeleteFileOptions options;
 	@serdeOptional Optional!ChangeAnnotationIdentifier annotationId;
@@ -1362,6 +1451,8 @@ struct DeleteFile
 @serdeFallbackStruct
 struct TextDocumentEdit
 {
+	mixin(CacheJsonSerialization);
+
 	VersionedTextDocumentIdentifier textDocument;
 	TextEdit[] edits;
 }
@@ -1373,6 +1464,8 @@ alias DocumentChange = StructVariant!(TextDocumentEdit, CreateFile, RenameFile, 
 @serdeFallbackStruct
 struct WorkspaceEdit
 {
+	mixin(CacheJsonSerialization);
+
 	TextEditCollection[DocumentUri] changes;
 
 	@serdeOptional Optional!(DocumentChange[]) documentChanges;
@@ -1382,12 +1475,16 @@ struct WorkspaceEdit
 @serdeFallbackStruct
 struct TextDocumentIdentifier
 {
+	mixin(CacheJsonSerialization);
+
 	DocumentUri uri;
 }
 
 @serdeFallbackStruct
 struct VersionedTextDocumentIdentifier
 {
+	mixin(CacheJsonSerialization);
+
 	DocumentUri uri;
 	@serdeKeys("version") long version_;
 }
@@ -1395,6 +1492,8 @@ struct VersionedTextDocumentIdentifier
 @serdeFallbackStruct
 struct TextDocumentItem
 {
+	mixin(CacheJsonSerialization);
+
 	DocumentUri uri;
 	@serdeOptional // not actually optional according to LSP spec, logically fine to be omitted
 	string languageId;
@@ -1406,6 +1505,8 @@ struct TextDocumentItem
 @serdeFallbackStruct
 struct TextDocumentPositionParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Position position;
 }
@@ -1413,6 +1514,8 @@ struct TextDocumentPositionParams
 @serdeFallbackStruct
 struct DocumentFilter
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!string language;
 	@serdeOptional Optional!string scheme;
 	@serdeOptional Optional!string pattern;
@@ -1424,6 +1527,8 @@ alias DocumentSelector = DocumentFilter[];
 @allowedMethods("initialize")
 struct InitializeParams
 {
+	mixin(CacheJsonSerialization);
+
 	Variant!(typeof(null), int) processId;
 	@serdeOptional Optional!string rootPath;
 	DocumentUri rootUri;
@@ -1680,6 +1785,8 @@ unittest
 @serdeFallbackStruct
 struct InitializeParamsClientInfo
 {
+	mixin(CacheJsonSerialization);
+
 	string name;
 	@serdeKeys("version") @serdeOptional Optional!string version_;
 }
@@ -1687,6 +1794,8 @@ struct InitializeParamsClientInfo
 @serdeFallbackStruct
 struct DynamicRegistration
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 }
 
@@ -1710,6 +1819,8 @@ enum FailureHandlingKind : string
 @serdeFallbackStruct
 struct WorkspaceEditClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool documentChanges;
 	@serdeOptional Optional!(ResourceOperationKind[]) resourceOperations;
 	@serdeOptional Optional!FailureHandlingKind failureHandling;
@@ -1731,12 +1842,16 @@ unittest
 @serdeFallbackStruct
 struct ChangeAnnotationWorkspaceEditClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool groupsOnLabel;
 }
 
 @serdeFallbackStruct
 struct WorkspaceClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool applyEdit;
 	@serdeOptional Optional!WorkspaceEditClientCapabilities workspaceEdit;
 	@serdeOptional Optional!DynamicRegistration didChangeConfiguration;
@@ -1753,18 +1868,24 @@ struct WorkspaceClientCapabilities
 @serdeFallbackStruct
 struct MonikerClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 }
 
 @serdeFallbackStruct
 struct MonikerOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 }
 
 @serdeFallbackStruct
 struct MonikerRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 }
@@ -1773,6 +1894,8 @@ struct MonikerRegistrationOptions
 @allowedMethods("textDocument/moniker")
 struct MonikerParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Position position;
 }
@@ -1798,6 +1921,8 @@ enum MonikerKind : string
 @serdeFallbackStruct
 struct Moniker
 {
+	mixin(CacheJsonSerialization);
+
 	string scheme;
 	string identifier;
 	UniquenessLevel unique;
@@ -1807,6 +1932,8 @@ struct Moniker
 @serdeFallbackStruct
 struct FileOperationsCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 	@serdeOptional Optional!bool didCreate;
 	@serdeOptional Optional!bool willCreate;
@@ -1819,6 +1946,8 @@ struct FileOperationsCapabilities
 @serdeFallbackStruct
 struct TextDocumentClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!TextDocumentSyncClientCapabilities synchronization;
 	@serdeOptional Optional!CompletionClientCapabilities completion;
 	@serdeOptional Optional!HoverClientCapabilities hover;
@@ -1850,6 +1979,8 @@ struct TextDocumentClientCapabilities
 @serdeFallbackStruct
 struct ClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!WorkspaceClientCapabilities workspace;
 	@serdeOptional Optional!TextDocumentClientCapabilities textDocument;
 	@serdeOptional Optional!WindowClientCapabilities window;
@@ -1860,6 +1991,8 @@ struct ClientCapabilities
 @serdeFallbackStruct
 struct WindowClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool workDoneProgress;
 	@serdeOptional Optional!ShowMessageRequestClientCapabilities showMessage;
 	@serdeOptional Optional!ShowDocumentClientCapabilities showDocument;
@@ -1868,6 +2001,8 @@ struct WindowClientCapabilities
 @serdeFallbackStruct
 struct GeneralClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!RegularExpressionsClientCapabilities regularExpressions;
 	@serdeOptional Optional!MarkdownClientCapabilities markdown;
 }
@@ -1875,6 +2010,8 @@ struct GeneralClientCapabilities
 @serdeFallbackStruct
 struct RegularExpressionsClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	string engine;
 	@serdeKeys("version") @serdeOptional Optional!string version_;
 }
@@ -1893,6 +2030,8 @@ unittest
 @serdeFallbackStruct
 struct InitializeResult
 {
+	mixin(CacheJsonSerialization);
+
 	ServerCapabilities capabilities;
 	@serdeOptional Optional!ServerInfo serverInfo;
 }
@@ -1938,6 +2077,8 @@ unittest
 @serdeFallbackStruct
 struct ServerInfo
 {
+	mixin(CacheJsonSerialization);
+
 	string name;
 	@serdeKeys("version") @serdeOptional Optional!string version_;
 }
@@ -1945,12 +2086,16 @@ struct ServerInfo
 @serdeFallbackStruct
 struct InitializeError
 {
+	mixin(CacheJsonSerialization);
+
 	bool retry;
 }
 
 @serdeFallbackStruct
 struct CompletionClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeFallbackStruct
 	@serdeIgnoreUnexpectedKeys
 	static struct CompletionItemCapabilities
@@ -1983,6 +2128,8 @@ struct CompletionClientCapabilities
 @serdeFallbackStruct
 struct CompletionOptions
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeFallbackStruct
 	@serdeIgnoreUnexpectedKeys
 	struct CompletionItem
@@ -1999,12 +2146,16 @@ struct CompletionOptions
 @serdeFallbackStruct
 struct SaveOptions
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool includeText;
 }
 
 @serdeFallbackStruct
 struct TextDocumentSyncClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 	@serdeOptional Optional!bool willSave;
 	@serdeOptional Optional!bool willSaveWaitUntil;
@@ -2022,6 +2173,8 @@ enum TextDocumentSyncKind
 @serdeFallbackStruct
 struct TextDocumentSyncOptions
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool openClose;
 	@serdeOptional Optional!TextDocumentSyncKind change;
 	@serdeOptional Optional!bool willSave;
@@ -2032,6 +2185,8 @@ struct TextDocumentSyncOptions
 @serdeFallbackStruct
 struct ServerCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Variant!(void, TextDocumentSyncKind, TextDocumentSyncOptions) textDocumentSync;
 	@serdeOptional Variant!(void, CompletionOptions) completionProvider;
 	@serdeOptional Variant!(void, bool, HoverOptions) hoverProvider;
@@ -2085,6 +2240,8 @@ struct InitializedParams
 @serdeFallbackStruct
 struct ServerWorkspaceCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!WorkspaceFoldersServerCapabilities workspaceFolders;
 	@serdeOptional Optional!WorkspaceFileOperationsCapabilities fileOperations;
 }
@@ -2092,6 +2249,8 @@ struct ServerWorkspaceCapabilities
 @serdeFallbackStruct
 struct WorkspaceFoldersServerCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool supported;
 	@serdeOptional Variant!(void, bool, string) changeNotifications;
 }
@@ -2099,6 +2258,8 @@ struct WorkspaceFoldersServerCapabilities
 @serdeFallbackStruct
 struct WorkspaceFileOperationsCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!FileOperationRegistrationOptions didCreate;
 	@serdeOptional Optional!FileOperationRegistrationOptions willCreate;
 	@serdeOptional Optional!FileOperationRegistrationOptions didRename;
@@ -2110,6 +2271,8 @@ struct WorkspaceFileOperationsCapabilities
 @serdeFallbackStruct
 struct FileOperationRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	FileOperationFilter[] filters;
 }
 
@@ -2123,12 +2286,16 @@ enum FileOperationPatternKind : string
 @serdeFallbackStruct
 struct FileOperationPatternOptions
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool ignoreCase;
 }
 
 @serdeFallbackStruct
 struct FileOperationPattern
 {
+	mixin(CacheJsonSerialization);
+
 	string glob;
 	@serdeOptional Optional!FileOperationPatternKind matches;
 	@serdeOptional Optional!FileOperationPatternOptions options;
@@ -2137,6 +2304,8 @@ struct FileOperationPattern
 @serdeFallbackStruct
 struct FileOperationFilter
 {
+	mixin(CacheJsonSerialization);
+
 	FileOperationPattern pattern;
 	@serdeOptional Optional!string scheme;
 }
@@ -2145,12 +2314,16 @@ struct FileOperationFilter
 @allowedMethods("workspace/willCreateFiles", "workspace/didCreateFiles")
 struct CreateFilesParams
 {
+	mixin(CacheJsonSerialization);
+
 	FileCreate[] files;
 }
 
 @serdeFallbackStruct
 struct FileCreate
 {
+	mixin(CacheJsonSerialization);
+
 	string uri;
 }
 
@@ -2158,12 +2331,16 @@ struct FileCreate
 @allowedMethods("workspace/willRenameFiles", "workspace/didRenameFiles")
 struct RenameFilesParams
 {
+	mixin(CacheJsonSerialization);
+
 	FileRename[] files;
 }
 
 @serdeFallbackStruct
 struct FileRename
 {
+	mixin(CacheJsonSerialization);
+
 	string oldUri;
 	string newUri;
 }
@@ -2172,18 +2349,24 @@ struct FileRename
 @allowedMethods("workspace/willDeleteFiles", "workspace/didDeleteFiles")
 struct DeleteFilesParams
 {
+	mixin(CacheJsonSerialization);
+
 	FileDelete[] files;
 }
 
 @serdeFallbackStruct
 struct FileDelete
 {
+	mixin(CacheJsonSerialization);
+
 	string uri;
 }
 
 @serdeFallbackStruct
 struct Registration
 {
+	mixin(CacheJsonSerialization);
+
 	string id;
 	string method;
 	@serdeOptional OptionalJsonValue registerOptions;
@@ -2193,12 +2376,16 @@ struct Registration
 @allowedMethods("client/registerCapability")
 struct RegistrationParams
 {
+	mixin(CacheJsonSerialization);
+
 	Registration[] registrations;
 }
 
 @serdeFallbackStruct
 struct Unregistration
 {
+	mixin(CacheJsonSerialization);
+
 	string id;
 	string method;
 }
@@ -2207,6 +2394,8 @@ struct Unregistration
 @allowedMethods("client/unregisterCapability")
 struct UnregistrationParams
 {
+	mixin(CacheJsonSerialization);
+
 	Unregistration[] unregistrations;
 }
 
@@ -2228,6 +2417,8 @@ mixin template StaticRegistrationOptions()
 @serdeFallbackStruct
 struct DidChangeConfigurationClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 }
 
@@ -2237,6 +2428,8 @@ struct DidChangeConfigurationClientCapabilities
 @allowedMethods("workspace/didChangeConfiguration")
 struct DidChangeConfigurationParams
 {
+	mixin(CacheJsonSerialization);
+
 	JsonValue settings;
 }
 
@@ -2244,12 +2437,16 @@ struct DidChangeConfigurationParams
 @allowedMethods("workspace/configuration")
 struct ConfigurationParams
 {
+	mixin(CacheJsonSerialization);
+
 	ConfigurationItem[] items;
 }
 
 @serdeFallbackStruct
 struct ConfigurationItem
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!string scopeUri;
 	@serdeOptional Optional!string section;
 }
@@ -2258,6 +2455,8 @@ struct ConfigurationItem
 @allowedMethods("textDocument/didOpen")
 struct DidOpenTextDocumentParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentItem textDocument;
 }
 
@@ -2265,6 +2464,8 @@ struct DidOpenTextDocumentParams
 @allowedMethods("textDocument/didChange")
 struct DidChangeTextDocumentParams
 {
+	mixin(CacheJsonSerialization);
+
 	VersionedTextDocumentIdentifier textDocument;
 	TextDocumentContentChangeEvent[] contentChanges;
 }
@@ -2272,6 +2473,8 @@ struct DidChangeTextDocumentParams
 @serdeFallbackStruct
 struct TextDocumentContentChangeEvent
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!TextRange range;
 	string text;
 }
@@ -2279,6 +2482,8 @@ struct TextDocumentContentChangeEvent
 @serdeFallbackStruct
 struct TextDocumentChangeRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 
 	TextDocumentSyncKind syncKind;
@@ -2288,6 +2493,8 @@ struct TextDocumentChangeRegistrationOptions
 @allowedMethods("textDocument/willSave", "textDocument/willSaveWaitUntil")
 struct WillSaveTextDocumentParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	TextDocumentSaveReason reason;
 }
@@ -2303,6 +2510,8 @@ enum TextDocumentSaveReason
 @serdeFallbackStruct
 struct TextDocumentSaveRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 
 	@serdeOptional Optional!bool includeText;
@@ -2312,6 +2521,8 @@ struct TextDocumentSaveRegistrationOptions
 @allowedMethods("textDocument/didSave")
 struct DidSaveTextDocumentParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	@serdeOptional Optional!string text;
 }
@@ -2320,12 +2531,16 @@ struct DidSaveTextDocumentParams
 @allowedMethods("textDocument/didClose")
 struct DidCloseTextDocumentParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 }
 
 @serdeFallbackStruct
 struct FileSystemWatcher
 {
+	mixin(CacheJsonSerialization);
+
 	string globPattern;
 	@serdeOptional Optional!WatchKind kind;
 }
@@ -2350,12 +2565,16 @@ unittest
 @serdeFallbackStruct
 struct DidChangeWatchedFilesClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 }
 
 @serdeFallbackStruct
 struct DidChangeWatchedFilesRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	FileSystemWatcher[] watchers;
 }
 
@@ -2363,12 +2582,16 @@ struct DidChangeWatchedFilesRegistrationOptions
 @allowedMethods("workspace/didChangeWatchedFiles")
 struct DidChangeWatchedFilesParams
 {
+	mixin(CacheJsonSerialization);
+
 	FileEvent[] changes;
 }
 
 @serdeFallbackStruct
 struct FileEvent
 {
+	mixin(CacheJsonSerialization);
+
 	DocumentUri uri;
 	FileChangeType type;
 }
@@ -2384,6 +2607,8 @@ enum FileChangeType
 @serdeFallbackStruct
 struct WorkspaceSymbolClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 	@serdeOptional Optional!(OptionalValueSet!SymbolKind) symbolKind;
 	@serdeOptional Optional!(RequiredValueSet!SymbolTag) tagSupport;
@@ -2392,12 +2617,16 @@ struct WorkspaceSymbolClientCapabilities
 @serdeFallbackStruct
 struct WorkspaceSymbolOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 }
 
 @serdeFallbackStruct
 struct WorkspaceSymbolRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 }
 
@@ -2405,12 +2634,16 @@ struct WorkspaceSymbolRegistrationOptions
 @allowedMethods("workspace/symbol")
 struct WorkspaceSymbolParams
 {
+	mixin(CacheJsonSerialization);
+
 	string query;
 }
 
 @serdeFallbackStruct
 struct PublishDiagnosticsClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool relatedInformation;
 	@serdeOptional Optional!(RequiredValueSet!DiagnosticTag) tagSupport;
 	@serdeOptional Optional!bool versionSupport;
@@ -2422,6 +2655,8 @@ struct PublishDiagnosticsClientCapabilities
 @allowedMethods("textDocument/publishDiagnostics")
 struct PublishDiagnosticsParams
 {
+	mixin(CacheJsonSerialization);
+
 	DocumentUri uri;
 	Diagnostic[] diagnostics;
 	@serdeKeys("version") @serdeOptional Optional!int version_;
@@ -2430,6 +2665,8 @@ struct PublishDiagnosticsParams
 @serdeFallbackStruct
 struct CompletionRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 
 	@serdeOptional Optional!(string[]) triggerCharacters;
@@ -2440,6 +2677,8 @@ struct CompletionRegistrationOptions
 @allowedMethods("textDocument/completion")
 struct CompletionParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Position position;
 	@serdeOptional Optional!CompletionContext context;
@@ -2456,6 +2695,8 @@ enum CompletionTriggerKind
 @serdeFallbackStruct
 struct CompletionContext
 {
+	mixin(CacheJsonSerialization);
+
 	CompletionTriggerKind triggerKind;
 	@serdeOptional Optional!string triggerCharacter;
 }
@@ -2463,6 +2704,8 @@ struct CompletionContext
 @serdeFallbackStruct
 struct CompletionList
 {
+	mixin(CacheJsonSerialization);
+
 	bool isIncomplete;
 	CompletionItem[] items;
 }
@@ -2483,6 +2726,8 @@ enum CompletionItemTag
 @serdeFallbackStruct
 struct InsertReplaceEdit
 {
+	mixin(CacheJsonSerialization);
+
 	string newText;
 	TextRange insert;
 	TextRange replace;
@@ -2526,6 +2771,8 @@ enum InsertTextMode
 @serdeFallbackStruct
 struct CompletionItemLabelDetails
 {
+	mixin(CacheJsonSerialization);
+
 	/**
 	 * An optional string which is rendered less prominently directly after
 	 * {@link CompletionItemLabel.label label}, without any spacing. Should be
@@ -2544,6 +2791,8 @@ struct CompletionItemLabelDetails
 @serdeFallbackStruct
 struct CompletionItem
 {
+	mixin(CacheJsonSerialization);
+
 	string label;
 	@serdeOptional Optional!CompletionItemLabelDetails labelDetails;
 	@serdeOptional Optional!CompletionItemKind kind;
@@ -2676,6 +2925,8 @@ enum CompletionItemKind
 @serdeFallbackStruct
 struct HoverClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 	@serdeOptional Optional!(MarkupKind[]) contentFormat;
 }
@@ -2683,12 +2934,16 @@ struct HoverClientCapabilities
 @serdeFallbackStruct
 struct HoverOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 }
 
 @serdeFallbackStruct
 struct HoverRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 }
@@ -2697,6 +2952,8 @@ struct HoverRegistrationOptions
 @allowedMethods("textDocument/hover")
 struct HoverParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Position position;
 }
@@ -2704,6 +2961,8 @@ struct HoverParams
 @serdeFallbackStruct
 struct Hover
 {
+	mixin(CacheJsonSerialization);
+
 	Variant!(StructVariant!(MarkedString, MarkupContent), MarkedString[]) contents;
 	@serdeOptional Optional!TextRange range;
 }
@@ -2711,6 +2970,8 @@ struct Hover
 @serdeFallbackStruct
 struct MarkedString
 {
+	mixin(CacheJsonSerialization);
+
 	import mir.ion.exception;
 	import mir.ion.value;
 	import mir.deser.ion : deserializeIon;
@@ -2774,6 +3035,8 @@ enum MarkupKind : string
 @serdeFallbackStruct
 struct MarkupContent
 {
+	mixin(CacheJsonSerialization);
+
 	string kind;
 	string value;
 
@@ -2810,6 +3073,8 @@ struct MarkupContent
 @serdeFallbackStruct
 struct MarkdownClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	string parser;
 	@serdeKeys("version") @serdeOptional Optional!string version_;
 }
@@ -2817,6 +3082,8 @@ struct MarkdownClientCapabilities
 @serdeFallbackStruct
 struct SignatureHelpClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeFallbackStruct
 	@serdeIgnoreUnexpectedKeys
 	static struct SignatureInformationCapabilities
@@ -2841,6 +3108,8 @@ struct SignatureHelpClientCapabilities
 @serdeFallbackStruct
 struct SignatureHelpOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 
 	@serdeOptional Optional!(string[]) triggerCharacters;
@@ -2850,6 +3119,8 @@ struct SignatureHelpOptions
 @serdeFallbackStruct
 struct SignatureHelpRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 
@@ -2861,6 +3132,8 @@ struct SignatureHelpRegistrationOptions
 @allowedMethods("textDocument/signatureHelp")
 struct SignatureHelpParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Position position;
 	@serdeOptional Optional!SignatureHelpContext context;
@@ -2877,6 +3150,8 @@ enum SignatureHelpTriggerKind
 @serdeFallbackStruct
 struct SignatureHelpContext
 {
+	mixin(CacheJsonSerialization);
+
 	SignatureHelpTriggerKind triggerKind;
 	@serdeOptional Optional!string triggerCharacter;
 	@serdeOptional Optional!bool isRetrigger;
@@ -2886,6 +3161,8 @@ struct SignatureHelpContext
 @serdeFallbackStruct
 struct SignatureHelp
 {
+	mixin(CacheJsonSerialization);
+
 	SignatureInformation[] signatures;
 	@serdeOptional Optional!uint activeSignature;
 	@serdeOptional Optional!uint activeParameter;
@@ -2913,6 +3190,8 @@ struct SignatureHelp
 @serdeFallbackStruct
 struct SignatureInformation
 {
+	mixin(CacheJsonSerialization);
+
 	string label;
 	@serdeOptional Variant!(void, string, MarkupContent) documentation;
 	@serdeOptional Optional!(ParameterInformation[]) parameters;
@@ -2922,6 +3201,8 @@ struct SignatureInformation
 @serdeFallbackStruct
 struct ParameterInformation
 {
+	mixin(CacheJsonSerialization);
+
 	Variant!(string, uint[2]) label;
 	@serdeOptional Variant!(void, string, MarkupContent) documentation;
 }
@@ -2929,6 +3210,8 @@ struct ParameterInformation
 @serdeFallbackStruct
 struct DeclarationClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 	@serdeOptional Optional!bool linkSupport;
 }
@@ -2936,12 +3219,16 @@ struct DeclarationClientCapabilities
 @serdeFallbackStruct
 struct DeclarationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 }
 
 @serdeFallbackStruct
 struct DeclarationRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 	mixin TextDocumentRegistrationOptions;
 	mixin StaticRegistrationOptions;
@@ -2951,6 +3238,8 @@ struct DeclarationRegistrationOptions
 @allowedMethods("textDocument/declaration")
 struct DeclarationParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Position position;
 }
@@ -2958,6 +3247,8 @@ struct DeclarationParams
 @serdeFallbackStruct
 struct DefinitionClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 	@serdeOptional Optional!bool linkSupport;
 }
@@ -2965,12 +3256,16 @@ struct DefinitionClientCapabilities
 @serdeFallbackStruct
 struct DefinitionOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 }
 
 @serdeFallbackStruct
 struct DefinitionRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 }
@@ -2979,6 +3274,8 @@ struct DefinitionRegistrationOptions
 @allowedMethods("textDocument/definition")
 struct DefinitionParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Position position;
 }
@@ -2986,6 +3283,8 @@ struct DefinitionParams
 @serdeFallbackStruct
 struct TypeDefinitionClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 	@serdeOptional Optional!bool linkSupport;
 }
@@ -2993,12 +3292,16 @@ struct TypeDefinitionClientCapabilities
 @serdeFallbackStruct
 struct TypeDefinitionOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 }
 
 @serdeFallbackStruct
 struct TypeDefinitionRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 	mixin StaticRegistrationOptions;
@@ -3008,6 +3311,8 @@ struct TypeDefinitionRegistrationOptions
 @allowedMethods("textDocument/typeDefinition")
 struct TypeDefinitionParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Position position;
 }
@@ -3015,6 +3320,8 @@ struct TypeDefinitionParams
 @serdeFallbackStruct
 struct ImplementationClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 	@serdeOptional Optional!bool linkSupport;
 }
@@ -3022,12 +3329,16 @@ struct ImplementationClientCapabilities
 @serdeFallbackStruct
 struct ImplementationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 }
 
 @serdeFallbackStruct
 struct ImplementationRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 	mixin StaticRegistrationOptions;
@@ -3037,6 +3348,8 @@ struct ImplementationRegistrationOptions
 @allowedMethods("textDocument/implementation")
 struct ImplementationParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Position position;
 }
@@ -3044,18 +3357,24 @@ struct ImplementationParams
 @serdeFallbackStruct
 struct ReferenceClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 }
 
 @serdeFallbackStruct
 struct ReferenceOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 }
 
 @serdeFallbackStruct
 struct ReferenceRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 }
@@ -3064,6 +3383,8 @@ struct ReferenceRegistrationOptions
 @allowedMethods("textDocument/references")
 struct ReferenceParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Position position;
 	ReferenceContext context;
@@ -3072,24 +3393,32 @@ struct ReferenceParams
 @serdeFallbackStruct
 struct ReferenceContext
 {
+	mixin(CacheJsonSerialization);
+
 	bool includeDeclaration;
 }
 
 @serdeFallbackStruct
 struct DocumentHighlightClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 }
 
 @serdeFallbackStruct
 struct DocumentHighlightOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 }
 
 @serdeFallbackStruct
 struct DocumentHighlightRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 }
@@ -3098,6 +3427,8 @@ struct DocumentHighlightRegistrationOptions
 @allowedMethods("textDocument/documentHighlight")
 struct DocumentHighlightParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Position position;
 }
@@ -3105,6 +3436,8 @@ struct DocumentHighlightParams
 @serdeFallbackStruct
 struct DocumentHighlight
 {
+	mixin(CacheJsonSerialization);
+
 	TextRange range;
 	@serdeOptional Optional!DocumentHighlightKind kind;
 }
@@ -3120,6 +3453,8 @@ enum DocumentHighlightKind
 @serdeFallbackStruct
 struct DocumentSymbolClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 	@serdeOptional Optional!(OptionalValueSet!SymbolKind) symbolKind;
 	@serdeOptional Optional!bool hierarchicalDocumentSymbolSupport;
@@ -3130,6 +3465,8 @@ struct DocumentSymbolClientCapabilities
 @serdeFallbackStruct
 struct DocumentSymbolOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 
 	@serdeOptional Optional!string label;
@@ -3138,6 +3475,8 @@ struct DocumentSymbolOptions
 @serdeFallbackStruct
 struct DocumentSymbolRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 
@@ -3148,6 +3487,8 @@ struct DocumentSymbolRegistrationOptions
 @allowedMethods("textDocument/documentSymbol")
 struct DocumentSymbolParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 }
 
@@ -3191,6 +3532,8 @@ enum SymbolTag
 @serdeFallbackStruct
 struct DocumentSymbol
 {
+	mixin(CacheJsonSerialization);
+
 	string name;
 	@serdeOptional Optional!string detail;
 	SymbolKind kind;
@@ -3203,6 +3546,8 @@ struct DocumentSymbol
 @serdeFallbackStruct
 struct SymbolInformation
 {
+	mixin(CacheJsonSerialization);
+
 	string name;
 	SymbolKind kind;
 	@serdeOptional Optional!(SymbolTag[]) tags;
@@ -3213,6 +3558,8 @@ struct SymbolInformation
 @serdeFallbackStruct
 struct CodeActionClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeFallbackStruct
 	@serdeIgnoreUnexpectedKeys
 	static struct CodeActionLiteralSupport
@@ -3240,6 +3587,8 @@ struct CodeActionClientCapabilities
 @serdeFallbackStruct
 struct CodeActionOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 
 	@serdeOptional Optional!(CodeActionKind[]) codeActionKinds;
@@ -3249,6 +3598,8 @@ struct CodeActionOptions
 @serdeFallbackStruct
 struct CodeActionRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 
@@ -3260,6 +3611,8 @@ struct CodeActionRegistrationOptions
 @allowedMethods("textDocument/codeAction")
 struct CodeActionParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	TextRange range;
 	CodeActionContext context;
@@ -3281,6 +3634,8 @@ enum CodeActionKind : string
 @serdeFallbackStruct
 struct CodeActionContext
 {
+	mixin(CacheJsonSerialization);
+
 	Diagnostic[] diagnostics;
 	@serdeOptional Optional!(CodeActionKind[]) only;
 }
@@ -3288,6 +3643,8 @@ struct CodeActionContext
 @serdeFallbackStruct
 struct CodeAction
 {
+	mixin(CacheJsonSerialization);
+
 	this(Command command)
 	{
 		title = command.title;
@@ -3320,12 +3677,16 @@ struct CodeAction
 @serdeFallbackStruct
 struct CodeLensClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 }
 
 @serdeFallbackStruct
 struct CodeLensOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 
 	@serdeOptional Optional!bool resolveProvider;
@@ -3334,6 +3695,8 @@ struct CodeLensOptions
 @serdeFallbackStruct
 struct CodeLensRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 
@@ -3344,12 +3707,16 @@ struct CodeLensRegistrationOptions
 @allowedMethods("textDocument/codeLens")
 struct CodeLensParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 }
 
 @serdeFallbackStruct
 struct CodeLens
 {
+	mixin(CacheJsonSerialization);
+
 	TextRange range;
 	@serdeOptional Optional!Command command;
 	@serdeOptional OptionalJsonValue data;
@@ -3358,12 +3725,16 @@ struct CodeLens
 @serdeFallbackStruct
 struct CodeLensWorkspaceClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool refreshSupport;
 }
 
 @serdeFallbackStruct
 struct DocumentLinkClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 	@serdeOptional Optional!bool tooltipSupport;
 }
@@ -3371,6 +3742,8 @@ struct DocumentLinkClientCapabilities
 @serdeFallbackStruct
 struct DocumentLinkOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 
 	bool resolveProvider;
@@ -3379,6 +3752,8 @@ struct DocumentLinkOptions
 @serdeFallbackStruct
 struct DocumentLinkRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 
@@ -3389,12 +3764,16 @@ struct DocumentLinkRegistrationOptions
 @allowedMethods("textDocument/documentLink")
 struct DocumentLinkParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 }
 
 @serdeFallbackStruct
 struct DocumentLink
 {
+	mixin(CacheJsonSerialization);
+
 	TextRange range;
 	@serdeOptional Optional!DocumentUri target;
 	@serdeOptional Optional!string tooltip;
@@ -3404,18 +3783,24 @@ struct DocumentLink
 @serdeFallbackStruct
 struct DocumentColorClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 }
 
 @serdeFallbackStruct
 struct DocumentColorOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 }
 
 @serdeFallbackStruct
 struct DocumentColorRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin StaticRegistrationOptions;
 	mixin WorkDoneProgressOptions;
@@ -3425,12 +3810,16 @@ struct DocumentColorRegistrationOptions
 @allowedMethods("textDocument/documentColor")
 struct DocumentColorParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 }
 
 @serdeFallbackStruct
 struct ColorInformation
 {
+	mixin(CacheJsonSerialization);
+
 	TextRange range;
 	Color color;
 }
@@ -3438,6 +3827,8 @@ struct ColorInformation
 @serdeFallbackStruct
 struct Color
 {
+	mixin(CacheJsonSerialization);
+
 	double red = 0;
 	double green = 0;
 	double blue = 0;
@@ -3448,6 +3839,8 @@ struct Color
 @allowedMethods("textDocument/colorPresentation")
 struct ColorPresentationParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Color color;
 	TextRange range;
@@ -3456,6 +3849,8 @@ struct ColorPresentationParams
 @serdeFallbackStruct
 struct ColorPresentation
 {
+	mixin(CacheJsonSerialization);
+
 	string label;
 	@serdeOptional Optional!TextEdit textEdit;
 	@serdeOptional Optional!(TextEdit[]) additionalTextEdits;
@@ -3464,18 +3859,24 @@ struct ColorPresentation
 @serdeFallbackStruct
 struct DocumentFormattingClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 }
 
 @serdeFallbackStruct
 struct DocumentFormattingOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 }
 
 @serdeFallbackStruct
 struct DocumentFormattingRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 }
@@ -3484,6 +3885,8 @@ struct DocumentFormattingRegistrationOptions
 @allowedMethods("textDocument/formatting")
 struct DocumentFormattingParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	FormattingOptions options;
 }
@@ -3491,6 +3894,8 @@ struct DocumentFormattingParams
 @serdeFallbackStruct
 struct FormattingOptions
 {
+	mixin(CacheJsonSerialization);
+
 	int tabSize;
 	bool insertSpaces;
 	@serdeOptional Optional!bool trimTrailingWhitespace;
@@ -3502,18 +3907,24 @@ struct FormattingOptions
 @serdeFallbackStruct
 struct DocumentRangeFormattingClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 }
 
 @serdeFallbackStruct
 struct DocumentRangeFormattingOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 }
 
 @serdeFallbackStruct
 struct DocumentRangeFormattingRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 }
@@ -3522,6 +3933,8 @@ struct DocumentRangeFormattingRegistrationOptions
 @allowedMethods("textDocument/rangeFormatting")
 struct DocumentRangeFormattingParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	TextRange range;
 	FormattingOptions options;
@@ -3530,12 +3943,16 @@ struct DocumentRangeFormattingParams
 @serdeFallbackStruct
 struct DocumentOnTypeFormattingClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 }
 
 @serdeFallbackStruct
 struct DocumentOnTypeFormattingOptions
 {
+	mixin(CacheJsonSerialization);
+
 	string firstTriggerCharacter;
 	@serdeOptional Optional!(string[]) moreTriggerCharacter;
 }
@@ -3543,6 +3960,8 @@ struct DocumentOnTypeFormattingOptions
 @serdeFallbackStruct
 struct DocumentOnTypeFormattingRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 
 	string firstTriggerCharacter;
@@ -3553,6 +3972,8 @@ struct DocumentOnTypeFormattingRegistrationOptions
 @allowedMethods("textDocument/onTypeFormatting")
 struct DocumentOnTypeFormattingParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Position position;
 	string ch;
@@ -3568,6 +3989,8 @@ enum PrepareSupportDefaultBehavior
 @serdeFallbackStruct
 struct RenameClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 	@serdeOptional Optional!bool prepareSupport;
 	@serdeOptional Optional!PrepareSupportDefaultBehavior prepareSupportDefaultBehavior;
@@ -3577,6 +4000,8 @@ struct RenameClientCapabilities
 @serdeFallbackStruct
 struct RenameOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 
 	@serdeOptional Optional!bool prepareProvider;
@@ -3585,6 +4010,8 @@ struct RenameOptions
 @serdeFallbackStruct
 struct RenameRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 
@@ -3595,6 +4022,8 @@ struct RenameRegistrationOptions
 @allowedMethods("textDocument/rename")
 struct RenameParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Position position;
 	string newName;
@@ -3604,6 +4033,8 @@ struct RenameParams
 @allowedMethods("textDocument/prepareRename")
 struct PrepareRenameParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Position position;
 }
@@ -3611,6 +4042,8 @@ struct PrepareRenameParams
 @serdeFallbackStruct
 struct FoldingRangeClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 	@serdeOptional Optional!uint rangeLimit;
 	@serdeOptional Optional!bool lineFoldingOnly;
@@ -3619,12 +4052,16 @@ struct FoldingRangeClientCapabilities
 @serdeFallbackStruct
 struct FoldingRangeOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 }
 
 @serdeFallbackStruct
 struct FoldingRangeRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 	mixin StaticRegistrationOptions;
@@ -3634,6 +4071,8 @@ struct FoldingRangeRegistrationOptions
 @allowedMethods("textDocument/foldingRange")
 struct FoldingRangeParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 }
 
@@ -3648,6 +4087,8 @@ enum FoldingRangeKind : string
 @serdeFallbackStruct
 struct FoldingRange
 {
+	mixin(CacheJsonSerialization);
+
 	uint startLine;
 	uint endLine;
 	@serdeOptional Optional!uint startCharacter;
@@ -3674,18 +4115,24 @@ unittest
 @serdeFallbackStruct
 struct SelectionRangeClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 }
 
 @serdeFallbackStruct
 struct SelectionRangeOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 }
 
 @serdeFallbackStruct
 struct SelectionRangeRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 	mixin TextDocumentRegistrationOptions;
 	mixin StaticRegistrationOptions;
@@ -3695,6 +4142,8 @@ struct SelectionRangeRegistrationOptions
 @allowedMethods("textDocument/selectionRange")
 struct SelectionRangeParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Position[] positions;
 }
@@ -3702,6 +4151,8 @@ struct SelectionRangeParams
 @serdeFallbackStruct
 struct SelectionRange
 {
+	mixin(CacheJsonSerialization);
+
 	TextRange range;
 	@serdeOptional OptionalJsonValue parent;
 }
@@ -3709,18 +4160,24 @@ struct SelectionRange
 @serdeFallbackStruct
 struct CallHierarchyClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 }
 
 @serdeFallbackStruct
 struct CallHierarchyOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 }
 
 @serdeFallbackStruct
 struct CallHierarchyRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 	mixin StaticRegistrationOptions;
@@ -3730,6 +4187,8 @@ struct CallHierarchyRegistrationOptions
 @allowedMethods("textDocument/prepareCallHierarchy")
 struct CallHierarchyPrepareParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Position position;
 }
@@ -3737,6 +4196,8 @@ struct CallHierarchyPrepareParams
 @serdeFallbackStruct
 struct CallHierarchyItem
 {
+	mixin(CacheJsonSerialization);
+
 	string name;
 	SymbolKind kind;
 	@serdeOptional Optional!(SymbolTag[]) tags;
@@ -3751,12 +4212,16 @@ struct CallHierarchyItem
 @allowedMethods("callHierarchy/incomingCalls")
 struct CallHierarchyIncomingCallsParams
 {
+	mixin(CacheJsonSerialization);
+
 	CallHierarchyItem item;
 }
 
 @serdeFallbackStruct
 struct CallHierarchyIncomingCall
 {
+	// mixin(CacheJsonSerialization);
+
 	CallHierarchyItem from;
 	TextRange[] fromRanges;
 }
@@ -3765,12 +4230,16 @@ struct CallHierarchyIncomingCall
 @allowedMethods("callHierarchy/outgoingCalls")
 struct CallHierarchyOutgoingCallsParams
 {
+	mixin(CacheJsonSerialization);
+
 	CallHierarchyItem item;
 }
 
 @serdeFallbackStruct
 struct CallHierarchyOutgoingCall
 {
+	// mixin(CacheJsonSerialization);
+
 	CallHierarchyItem to;
 	TextRange[] fromRanges;
 }
@@ -3826,6 +4295,8 @@ enum TokenFormat : string
 @serdeFallbackStruct
 struct SemanticTokensLegend
 {
+	mixin(CacheJsonSerialization);
+
 	string[] tokenTypes;
 	string[] tokenModifiers;
 }
@@ -3833,11 +4304,15 @@ struct SemanticTokensLegend
 @serdeFallbackStruct
 struct SemanticTokensRange
 {
+	mixin(CacheJsonSerialization);
+
 }
 
 @serdeFallbackStruct
 struct SemanticTokensFull
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool delta;
 }
 
@@ -3845,6 +4320,8 @@ struct SemanticTokensFull
 @serdeFallbackStruct
 struct SemanticTokensClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeIgnoreUnexpectedKeys
 	static struct Requests
 	{
@@ -3864,6 +4341,8 @@ struct SemanticTokensClientCapabilities
 @serdeFallbackStruct
 struct SemanticTokensOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 
 	SemanticTokensLegend legend;
@@ -3874,6 +4353,8 @@ struct SemanticTokensOptions
 @serdeFallbackStruct
 struct SemanticTokensRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 	mixin StaticRegistrationOptions;
@@ -3887,12 +4368,16 @@ struct SemanticTokensRegistrationOptions
 @allowedMethods("textDocument/semanticTokens/full")
 struct SemanticTokensParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 }
 
 @serdeFallbackStruct
 struct SemanticTokens
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!string resultId;
 	uint[] data;
 }
@@ -3900,6 +4385,8 @@ struct SemanticTokens
 @serdeFallbackStruct
 struct SemanticTokensPartialResult
 {
+	mixin(CacheJsonSerialization);
+
 	uint[] data;
 }
 
@@ -3907,6 +4394,8 @@ struct SemanticTokensPartialResult
 @allowedMethods("textDocument/semanticTokens/full/delta")
 struct SemanticTokensDeltaParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	string previousResultId;
 }
@@ -3914,6 +4403,8 @@ struct SemanticTokensDeltaParams
 @serdeFallbackStruct
 struct SemanticTokensDelta
 {
+	mixin(CacheJsonSerialization);
+
 	string resultId;
 	SemanticTokensEdit[] edits;
 }
@@ -3921,6 +4412,8 @@ struct SemanticTokensDelta
 @serdeFallbackStruct
 struct SemanticTokensEdit
 {
+	mixin(CacheJsonSerialization);
+
 	uint start;
 	uint deleteCount;
 	@serdeOptional Optional!(uint[]) data;
@@ -3929,6 +4422,8 @@ struct SemanticTokensEdit
 @serdeFallbackStruct
 struct SemanticTokensDeltaPartialResult
 {
+	mixin(CacheJsonSerialization);
+
 	SemanticTokensEdit[] edits;
 }
 
@@ -3936,6 +4431,8 @@ struct SemanticTokensDeltaPartialResult
 @allowedMethods("textDocument/semanticTokens/range")
 struct SemanticTokensRangeParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	TextRange range;
 }
@@ -3943,6 +4440,8 @@ struct SemanticTokensRangeParams
 @serdeFallbackStruct
 struct SemanticTokensWorkspaceClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool refreshSupport;
 }
 
@@ -3950,18 +4449,24 @@ struct SemanticTokensWorkspaceClientCapabilities
 @serdeFallbackStruct
 struct LinkedEditingRangeClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 }
 
 @serdeFallbackStruct
 struct LinkedEditingRangeOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin WorkDoneProgressOptions;
 }
 
 @serdeFallbackStruct
 struct LinkedEditingRangeRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	mixin TextDocumentRegistrationOptions;
 	mixin WorkDoneProgressOptions;
 	mixin StaticRegistrationOptions;
@@ -3971,6 +4476,8 @@ struct LinkedEditingRangeRegistrationOptions
 @allowedMethods("textDocument/linkedEditingRange")
 struct LinkedEditingRangeParams
 {
+	mixin(CacheJsonSerialization);
+
 	TextDocumentIdentifier textDocument;
 	Position position;
 }
@@ -3978,6 +4485,8 @@ struct LinkedEditingRangeParams
 @serdeFallbackStruct
 struct LinkedEditingRanges
 {
+	// mixin(CacheJsonSerialization);
+
 	TextRange[] ranges;
 	@serdeOptional Optional!string wordPattern;
 }
@@ -3985,18 +4494,24 @@ struct LinkedEditingRanges
 @serdeFallbackStruct
 struct ExecuteCommandClientCapabilities
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!bool dynamicRegistration;
 }
 
 @serdeFallbackStruct
 struct ExecuteCommandOptions
 {
+	mixin(CacheJsonSerialization);
+
 	string[] commands;
 }
 
 @serdeFallbackStruct
 struct ExecuteCommandRegistrationOptions
 {
+	mixin(CacheJsonSerialization);
+
 	string[] commands;
 }
 
@@ -4004,6 +4519,8 @@ struct ExecuteCommandRegistrationOptions
 @allowedMethods("workspace/executeCommand")
 struct ExecuteCommandParams
 {
+	mixin(CacheJsonSerialization);
+
 	string command;
 	@serdeOptional Optional!(JsonValue[]) arguments;
 }
@@ -4012,6 +4529,8 @@ struct ExecuteCommandParams
 @allowedMethods("workspace/applyEdit")
 struct ApplyWorkspaceEditParams
 {
+	mixin(CacheJsonSerialization);
+
 	@serdeOptional Optional!string label;
 	WorkspaceEdit edit;
 }
@@ -4019,6 +4538,8 @@ struct ApplyWorkspaceEditParams
 @serdeFallbackStruct
 struct ApplyWorkspaceEditResponse
 {
+	mixin(CacheJsonSerialization);
+
 	bool applied;
 	@serdeOptional Optional!string failureReason;
 	@serdeOptional Optional!uint failedChange;
@@ -4027,6 +4548,8 @@ struct ApplyWorkspaceEditResponse
 @serdeFallbackStruct
 struct WorkspaceFolder
 {
+	mixin(CacheJsonSerialization);
+
 	string uri;
 	string name;
 }
@@ -4035,12 +4558,16 @@ struct WorkspaceFolder
 @allowedMethods("workspace/didChangeWorkspaceFolders")
 struct DidChangeWorkspaceFoldersParams
 {
+	mixin(CacheJsonSerialization);
+
 	WorkspaceFoldersChangeEvent event;
 }
 
 @serdeFallbackStruct
 struct WorkspaceFoldersChangeEvent
 {
+	mixin(CacheJsonSerialization);
+
 	WorkspaceFolder[] added;
 	WorkspaceFolder[] removed;
 }
@@ -4057,6 +4584,8 @@ enum TraceValue : string
 @allowedMethods("$/setTrace")
 struct SetTraceParams
 {
+	mixin(CacheJsonSerialization);
+
 	TraceValue value;
 }
 
@@ -4064,6 +4593,8 @@ struct SetTraceParams
 @allowedMethods("$/logTrace")
 struct LogTraceParams
 {
+	mixin(CacheJsonSerialization);
+
 	string message;
 	@serdeOptional Optional!string verbose;
 }
