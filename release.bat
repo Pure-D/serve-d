@@ -16,7 +16,6 @@ robocopy . %SystemDrive%\buildsd /MIR /XA:SH /XD .* /XF .* /XF *.zip
 pushd %SystemDrive%\buildsd
 
 set /p Version=<version.txt
-dub upgrade
 dub build --compiler=ldc2 --arch=x86
 
 if exist windows del /S /Q windows

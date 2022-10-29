@@ -24,9 +24,6 @@ jobs:
         with:
             compiler: ldc-latest
 
-      - name: dub upgrade
-        uses: WebFreak001/dub-upgrade@v0.1.0
-
       - name: Run tests
         run: dub test
 

@@ -21,9 +21,6 @@ jobs:
         with:
           compiler: ${{ matrix.dc }}
 
-      - name: dub upgrade
-        run: dub upgrade
-
       - name: Run workspace-d tests
         run: dub test :workspace-d
         env:

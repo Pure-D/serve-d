@@ -43,7 +43,6 @@ for testCase in $tests; do
 		cp ../data/dcd/dcd-client* .
 	fi
 
-	dub upgrade 2>&1
 	dub --compiler="${DC}" 2>&1
 	if [[ $? -eq 0 ]]; then
 		echo -e "${YELLOW}$testCase:${NORMAL} ... ${GREEN}Test Pass${NORMAL}";
