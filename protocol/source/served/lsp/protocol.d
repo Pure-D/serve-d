@@ -618,18 +618,32 @@ struct RequestToken
 		return this;
 	}
 
-	static RequestToken random()
+	deprecated alias random = randomLong;
+
+	static RequestToken randomLong()
+	{
+		import std.random : uniform;
+
+		// from JS, see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER
+		enum long maxSafeInt = 0x001f_ffff_ffff_ffffL;
+
+		return RequestToken(uniform(0L, maxSafeInt));
+	}
+
+	static RequestToken randomString()
 	{
 		version (unittest)
 			char[16] buffer; // make sure uninitialized buffers are caught in tests
 		else
 			char[16] buffer = void;
 
-		randomSerialized(buffer);
+		randomSerializedString(buffer);
 		return RequestToken(buffer[1 .. $ - 1].idup);
 	}
 
-	static void randomSerialized(char[] buffer)
+	deprecated alias randomSerialized = randomSerializedString;
+
+	static void randomSerializedString(char[] buffer)
 	in(buffer.length > 2)
 	{
 		import std.random : uniform;
@@ -642,9 +656,11 @@ struct RequestToken
 		buffer[$ - 1] = '"';
 	}
 
-	static RequestToken randomAndSerialized(char[] buffer)
+	deprecated alias randomAndSerialized = randomAndSerializedString;
+
+	static RequestToken randomAndSerializedString(char[] buffer)
 	{
-		randomSerialized(buffer);
+		randomSerializedString(buffer);
 		return RequestToken(buffer[1 .. $ - 1].idup);
 	}
 }
