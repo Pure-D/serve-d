@@ -80,6 +80,8 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 
 	private string ctLintEvents()
 	{
+		import std.string : chomp;
+
 		static bool isInvalidMethodName(string methodName, AllowedMethods[] allowed)
 		{
 			if (!allowed.length)
