@@ -219,7 +219,13 @@ struct Configuration
 		assert(settingJsons.length >= configurationSections.length);
 		auto changed = appender!(string[]);
 		static foreach (n, section; configurationSections)
-			changed ~= this.replaceSection!section(settingJsons[n].deserializeJson!(configurationTypes[n]));
+		{{
+			auto json = settingJsons[n];
+			if (json == `null` || json.isEmptyJsonObject)
+				changed ~= this.replaceSection!section(configurationTypes[n].init);
+			else
+				changed ~= this.replaceSection!section(json.deserializeJson!(configurationTypes[n]));
+		}}
 		return changed.data;
 	}
 }

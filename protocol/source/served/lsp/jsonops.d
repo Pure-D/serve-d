@@ -501,6 +501,37 @@ bool isValidJsonStringContent(scope const(char)[] jsonString)
 	return true;
 }
 
+bool isEmptyJsonObject(scope const(char)[] jsonString)
+{
+	import std.ascii : isWhite;
+
+	static immutable string expected = "{}";
+	int i = 0;
+	foreach (char c; jsonString)
+	{
+		if (c.isWhite)
+			continue;
+
+		if (i >= expected.length || c != expected[i])
+			return false;
+		i++;
+	}
+	return i == expected.length;
+}
+
+unittest
+{
+	assert(isEmptyJsonObject(`{}`));
+	assert(isEmptyJsonObject(` { } `));
+	assert(isEmptyJsonObject(` {} `));
+	assert(isEmptyJsonObject(`{  }`));
+	assert(!isEmptyJsonObject(``));
+	assert(!isEmptyJsonObject(`{`));
+	assert(!isEmptyJsonObject(`}`));
+	assert(!isEmptyJsonObject(`}{`));
+	assert(!isEmptyJsonObject(`{]`));
+}
+
 const(inout(char))[] escapeJsonStringContent(scope return inout(char)[] str)
 {
 	import std.ascii : hexDigits;
