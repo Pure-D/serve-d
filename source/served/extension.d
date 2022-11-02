@@ -1070,7 +1070,7 @@ void onDidOpenDocument(DidOpenTextDocumentParams params)
 }
 
 @protocolNotification("textDocument/didClose")
-void onDidCloseDocument(DidOpenTextDocumentParams params)
+void onDidCloseDocument(DidCloseTextDocumentParams params)
 {
 	// remove lint warnings for external projects
 	if (workspaceIndex(params.textDocument.uri) == size_t.max)
