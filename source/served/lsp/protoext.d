@@ -82,6 +82,13 @@ struct DubConvertRequest
 }
 
 ///
+struct SimpleTextDocumentIdentifierParams
+{
+	///
+	TextDocumentIdentifier textDocument;
+}
+
+///
 struct InstallRequest
 {
 	/// Name of the dub dependency

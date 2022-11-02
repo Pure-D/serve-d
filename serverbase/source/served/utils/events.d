@@ -22,6 +22,10 @@ struct postProtocolMethod
 	string method;
 }
 
+/// UDA to annotate a request or notification parameter with to supress linting
+/// warnings.
+enum nonStandard;
+
 struct protocolNotification
 {
 	string method;
@@ -68,6 +72,82 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 	{
 		pragma(msg, "duplicates: ", duplicates);
 		static assert(false, "Found duplicate method handlers of same name");
+	}
+
+	enum lintWarnings = ctLintEvents();
+	static if (lintWarnings.length > 0)
+		pragma(msg, lintWarnings);
+
+	private string ctLintEvents()
+	{
+		static bool isInvalidMethodName(string methodName, AllowedMethods[] allowed)
+		{
+			if (!allowed.length)
+				return false;
+
+			foreach (a; allowed)
+				foreach (m; a.methods)
+					if (m == methodName)
+						return false;
+			return true;
+		}
+
+		static string formatMethodNameWarning(string methodName, AllowedMethods[] allowed,
+			string codeName, string file, size_t line, size_t column)
+		{
+			import std.conv : to;
+
+			string allowedStr = "";
+			foreach (allow; allowed)
+			{
+				foreach (m; allow.methods)
+				{
+					if (allowedStr.length)
+						allowedStr ~= ", ";
+					allowedStr ~= "`" ~ m ~ "`";
+				}
+			}
+
+			return "\x1B[1m" ~ file ~ "(" ~ line.to!string ~ "," ~ column.to!string ~ "): \x1B[1;34mHint: \x1B[m"
+				~ "method " ~ codeName ~ " listens for event `" ~ methodName
+				~ "`, but the type has set allowed methods to " ~ allowedStr
+				~ ".\n\t\tNote: check back with the LSP specification, in case this is wrongly tagged or annotate parameter with @nonStandard.\n";
+		}
+
+		string lintResult;
+		foreach (name; ExtensionModule.members)
+		{
+			static if (__traits(compiles, __traits(getMember, ExtensionModule, name)))
+			{
+				// AliasSeq to workaround AliasSeq members
+				alias symbols = AliasSeq!(__traits(getMember, ExtensionModule, name));
+				static if (symbols.length == 1 && hasUDA!(symbols[0], protocolMethod))
+					enum methodName = getUDAs!(symbols[0], protocolMethod)[0].method;
+				else static if (symbols.length == 1 && hasUDA!(symbols[0], protocolNotification))
+					enum methodName = getUDAs!(symbols[0], protocolNotification)[0].method;
+				else
+					enum methodName = "";
+
+				static if (methodName.length)
+				{
+					alias symbol = symbols[0];
+					static if (isSomeFunction!(symbol) && __traits(getProtection, symbol) == "public")
+					{
+						alias P = Parameters!symbol;
+						static if (P.length == 1 && is(P[0] == struct)
+							&& staticIndexOf!(nonStandard, __traits(getAttributes, P)) == -1)
+						{
+							enum allowedMethods = getUDAs!(P[0], AllowedMethods);
+							static if (isInvalidMethodName(methodName, [allowedMethods]))
+								lintResult ~= formatMethodNameWarning(methodName, [allowedMethods],
+									name, __traits(getLocation, symbol));
+						}
+					}
+				}
+			}
+		}
+
+		return lintResult.chomp("\n");
 	}
 
 	/// Calls all protocol methods in `ExtensionModule` matching a certain method

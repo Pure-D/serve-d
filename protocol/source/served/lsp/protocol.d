@@ -365,6 +365,19 @@ unittest
 	assert(var.extract!Person == Person("Alice", 64));
 }
 
+struct AllowedMethods
+{
+	immutable string[] methods;
+}
+
+AllowedMethods allowedMethods(immutable string[] methods...)
+{
+	if (__ctfe)
+		return AllowedMethods(methods);
+	else
+		return AllowedMethods(methods.idup);
+}
+
 alias Optional(T) = Variant!(void, T);
 alias OptionalJsonValue = Variant!(void, JsonValue);
 template TypeFromOptional(T)
@@ -891,6 +904,7 @@ struct ResponseMessageRaw
 alias DocumentUri = string;
 
 @serdeFallbackStruct
+@allowedMethods("window/showMessage")
 struct ShowMessageParams
 {
 	MessageType type;
@@ -920,6 +934,7 @@ struct ShowMessageRequestClientCapabilities
 }
 
 @serdeFallbackStruct
+@allowedMethods("window/showMessageRequest")
 struct ShowMessageRequestParams
 {
 	MessageType type;
@@ -940,6 +955,7 @@ struct ShowDocumentClientCapabilities
 }
 
 @serdeFallbackStruct
+@allowedMethods("window/showDocument")
 struct ShowDocumentParams
 {
 	DocumentUri uri;
@@ -955,6 +971,7 @@ struct ShowDocumentResult
 }
 
 @serdeFallbackStruct
+@allowedMethods("window/logMessage")
 struct LogMessageParams
 {
 	MessageType type;
@@ -964,12 +981,14 @@ struct LogMessageParams
 alias ProgressToken = Variant!(int, string);
 
 @serdeFallbackStruct
+@allowedMethods("window/workDoneProgress/create")
 struct WorkDoneProgressCreateParams
 {
 	ProgressToken token;
 }
 
 @serdeFallbackStruct
+@allowedMethods("window/workDoneProgress/cancel")
 struct WorkDoneProgressCancelParams
 {
 	ProgressToken token;
@@ -1362,6 +1381,7 @@ struct DocumentFilter
 alias DocumentSelector = DocumentFilter[];
 
 @serdeFallbackStruct
+@allowedMethods("initialize")
 struct InitializeParams
 {
 	Variant!(typeof(null), int) processId;
@@ -1686,6 +1706,7 @@ struct MonikerRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/moniker")
 struct MonikerParams
 {
 	TextDocumentIdentifier textDocument;
@@ -2051,7 +2072,8 @@ struct FileOperationFilter
 }
 
 @serdeFallbackStruct
-struct CreateFileParams
+@allowedMethods("workspace/willCreateFiles", "workspace/didCreateFiles")
+struct CreateFilesParams
 {
 	FileCreate[] files;
 }
@@ -2063,7 +2085,8 @@ struct FileCreate
 }
 
 @serdeFallbackStruct
-struct RenameFileParams
+@allowedMethods("workspace/willRenameFiles", "workspace/didRenameFiles")
+struct RenameFilesParams
 {
 	FileRename[] files;
 }
@@ -2076,7 +2099,8 @@ struct FileRename
 }
 
 @serdeFallbackStruct
-struct DeleteFileParams
+@allowedMethods("workspace/willDeleteFiles", "workspace/didDeleteFiles")
+struct DeleteFilesParams
 {
 	FileDelete[] files;
 }
@@ -2096,6 +2120,7 @@ struct Registration
 }
 
 @serdeFallbackStruct
+@allowedMethods("client/registerCapability")
 struct RegistrationParams
 {
 	Registration[] registrations;
@@ -2109,6 +2134,7 @@ struct Unregistration
 }
 
 @serdeFallbackStruct
+@allowedMethods("client/unregisterCapability")
 struct UnregistrationParams
 {
 	Unregistration[] unregistrations;
@@ -2136,12 +2162,14 @@ struct DidChangeConfigurationClientCapabilities
 }
 
 @serdeFallbackStruct
+@allowedMethods("workspace/didChangeConfiguration")
 struct DidChangeConfigurationParams
 {
 	JsonValue settings;
 }
 
 @serdeFallbackStruct
+@allowedMethods("workspace/configuration")
 struct ConfigurationParams
 {
 	ConfigurationItem[] items;
@@ -2155,12 +2183,14 @@ struct ConfigurationItem
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/didOpen")
 struct DidOpenTextDocumentParams
 {
 	TextDocumentItem textDocument;
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/didChange")
 struct DidChangeTextDocumentParams
 {
 	VersionedTextDocumentIdentifier textDocument;
@@ -2183,6 +2213,7 @@ struct TextDocumentChangeRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/willSave", "textDocument/willSaveWaitUntil")
 struct WillSaveTextDocumentParams
 {
 	TextDocumentIdentifier textDocument;
@@ -2206,6 +2237,7 @@ struct TextDocumentSaveRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/didSave")
 struct DidSaveTextDocumentParams
 {
 	TextDocumentIdentifier textDocument;
@@ -2213,6 +2245,7 @@ struct DidSaveTextDocumentParams
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/didClose")
 struct DidCloseTextDocumentParams
 {
 	TextDocumentIdentifier textDocument;
@@ -2255,6 +2288,7 @@ struct DidChangeWatchedFilesRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("workspace/didChangeWatchedFiles")
 struct DidChangeWatchedFilesParams
 {
 	FileEvent[] changes;
@@ -2296,6 +2330,7 @@ struct WorkspaceSymbolRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("workspace/symbol")
 struct WorkspaceSymbolParams
 {
 	string query;
@@ -2312,6 +2347,7 @@ struct PublishDiagnosticsClientCapabilities
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/publishDiagnostics")
 struct PublishDiagnosticsParams
 {
 	DocumentUri uri;
@@ -2329,6 +2365,7 @@ struct CompletionRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/completion")
 struct CompletionParams
 {
 	TextDocumentIdentifier textDocument;
@@ -2585,6 +2622,7 @@ struct HoverRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/hover")
 struct HoverParams
 {
 	TextDocumentIdentifier textDocument;
@@ -2748,6 +2786,7 @@ struct SignatureHelpRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/signatureHelp")
 struct SignatureHelpParams
 {
 	TextDocumentIdentifier textDocument;
@@ -2837,6 +2876,7 @@ struct DeclarationRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/declaration")
 struct DeclarationParams
 {
 	TextDocumentIdentifier textDocument;
@@ -2864,6 +2904,7 @@ struct DefinitionRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/definition")
 struct DefinitionParams
 {
 	TextDocumentIdentifier textDocument;
@@ -2892,6 +2933,7 @@ struct TypeDefinitionRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/typeDefinition")
 struct TypeDefinitionParams
 {
 	TextDocumentIdentifier textDocument;
@@ -2920,6 +2962,7 @@ struct ImplementationRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/implementation")
 struct ImplementationParams
 {
 	TextDocumentIdentifier textDocument;
@@ -2946,6 +2989,7 @@ struct ReferenceRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/references")
 struct ReferenceParams
 {
 	TextDocumentIdentifier textDocument;
@@ -2979,6 +3023,7 @@ struct DocumentHighlightRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/documentHighlight")
 struct DocumentHighlightParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3028,6 +3073,7 @@ struct DocumentSymbolRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/documentSymbol")
 struct DocumentSymbolParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3139,6 +3185,7 @@ struct CodeActionRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/codeAction")
 struct CodeActionParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3222,6 +3269,7 @@ struct CodeLensRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/codeLens")
 struct CodeLensParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3266,6 +3314,7 @@ struct DocumentLinkRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/documentLink")
 struct DocumentLinkParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3301,6 +3350,7 @@ struct DocumentColorRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/documentColor")
 struct DocumentColorParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3323,6 +3373,7 @@ struct Color
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/colorPresentation")
 struct ColorPresentationParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3358,6 +3409,7 @@ struct DocumentFormattingRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/formatting")
 struct DocumentFormattingParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3395,6 +3447,7 @@ struct DocumentRangeFormattingRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/rangeFormatting")
 struct DocumentRangeFormattingParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3425,6 +3478,7 @@ struct DocumentOnTypeFormattingRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/onTypeFormatting")
 struct DocumentOnTypeFormattingParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3466,6 +3520,7 @@ struct RenameRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/rename")
 struct RenameParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3474,6 +3529,7 @@ struct RenameParams
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/prepareRename")
 struct PrepareRenameParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3503,6 +3559,7 @@ struct FoldingRangeRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/foldingRange")
 struct FoldingRangeParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3547,6 +3604,7 @@ struct SelectionRangeRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/selectionRange")
 struct SelectionRangeParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3581,6 +3639,7 @@ struct CallHierarchyRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/prepareCallHierarchy")
 struct CallHierarchyPrepareParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3601,6 +3660,7 @@ struct CallHierarchyItem
 }
 
 @serdeFallbackStruct
+@allowedMethods("callHierarchy/incomingCalls")
 struct CallHierarchyIncomingCallsParams
 {
 	CallHierarchyItem item;
@@ -3614,6 +3674,7 @@ struct CallHierarchyIncomingCall
 }
 
 @serdeFallbackStruct
+@allowedMethods("callHierarchy/outgoingCalls")
 struct CallHierarchyOutgoingCallsParams
 {
 	CallHierarchyItem item;
@@ -3735,6 +3796,7 @@ struct SemanticTokensRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/semanticTokens/full")
 struct SemanticTokensParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3754,6 +3816,7 @@ struct SemanticTokensPartialResult
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/semanticTokens/full/delta")
 struct SemanticTokensDeltaParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3782,6 +3845,7 @@ struct SemanticTokensDeltaPartialResult
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/semanticTokens/range")
 struct SemanticTokensRangeParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3816,6 +3880,7 @@ struct LinkedEditingRangeRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/linkedEditingRange")
 struct LinkedEditingRangeParams
 {
 	TextDocumentIdentifier textDocument;
@@ -3848,6 +3913,7 @@ struct ExecuteCommandRegistrationOptions
 }
 
 @serdeFallbackStruct
+@allowedMethods("workspace/executeCommand")
 struct ExecuteCommandParams
 {
 	string command;
@@ -3855,6 +3921,7 @@ struct ExecuteCommandParams
 }
 
 @serdeFallbackStruct
+@allowedMethods("workspace/applyEdit")
 struct ApplyWorkspaceEditParams
 {
 	@serdeOptional Optional!string label;
@@ -3877,6 +3944,7 @@ struct WorkspaceFolder
 }
 
 @serdeFallbackStruct
+@allowedMethods("workspace/didChangeWorkspaceFolders")
 struct DidChangeWorkspaceFoldersParams
 {
 	WorkspaceFoldersChangeEvent event;
@@ -3889,10 +3957,27 @@ struct WorkspaceFoldersChangeEvent
 	WorkspaceFolder[] removed;
 }
 
-@serdeFallbackStruct
-struct TraceParams
+@serdeEnumProxy!string
+enum TraceValue : string
 {
-	string value;
+	off = "off",
+	messages = "messages",
+	verbose = "verbose",
+}
+
+@serdeFallbackStruct
+@allowedMethods("$/setTrace")
+struct SetTraceParams
+{
+	TraceValue value;
+}
+
+@serdeFallbackStruct
+@allowedMethods("$/logTrace")
+struct LogTraceParams
+{
+	string message;
+	@serdeOptional Optional!string verbose;
 }
 
 unittest

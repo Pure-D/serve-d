@@ -1034,9 +1034,9 @@ JsonValue shutdown()
 // === Protocol Notifications starting here ===
 
 @protocolNotification("$/setTrace")
-void setTrace(TraceParams params)
+void setTrace(SetTraceParams params)
 {
-	if (params.value == "verbose")
+	if (params.value == TraceValue.verbose)
 		globalLogLevel = LogLevel.trace;
 	else
 		globalLogLevel = LogLevel.info;
@@ -1066,7 +1066,8 @@ void onDidOpenDocument(DidOpenTextDocumentParams params)
 		shouldLint = workspaceIndex(params.textDocument.uri) != size_t.max;
 
 	if (shouldLint)
-		onDidChangeDocument(DocumentLinkParams(TextDocumentIdentifier(params.textDocument.uri)));
+		onDidChangeDocument(DidChangeTextDocumentParams(
+			VersionedTextDocumentIdentifier(params.textDocument.uri, params.textDocument.version_)));
 }
 
 @protocolNotification("textDocument/didClose")
@@ -1089,7 +1090,7 @@ void onDidCloseDocument(DidCloseTextDocumentParams params)
 
 int genericChangeTimeout;
 @protocolNotification("textDocument/didChange")
-void onDidChangeDocument(DocumentLinkParams params)
+void onDidChangeDocument(DidChangeTextDocumentParams params)
 {
 	auto document = documents[params.textDocument.uri];
 	if (document.getLanguageId != "d")
@@ -1110,7 +1111,7 @@ void onDidChangeDocument(DocumentLinkParams params)
 int dscannerChangeTimeout;
 @protocolNotification("coded/doDscanner")  // deprecated alias
 @protocolNotification("served/doDscanner")
-void doDscanner(DocumentLinkParams params)
+void doDscanner(@nonStandard DidChangeTextDocumentParams params)
 {
 	auto document = documents[params.textDocument.uri];
 	if (document.getLanguageId != "d")
@@ -1130,7 +1131,7 @@ void doDscanner(DocumentLinkParams params)
 }
 
 @protocolMethod("served/getDscannerConfig")
-DScannerIniSection[] getDscannerConfig(DocumentLinkParams params)
+DScannerIniSection[] getDscannerConfig(SimpleTextDocumentIdentifierParams params)
 {
 	import served.linters.dscanner : getDscannerIniForDocument;
 
