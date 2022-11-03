@@ -593,9 +593,16 @@ alias ArrayOrSingle(T) = Variant!(T[], T);
 
 ///
 @serdeFallbackStruct
-struct ValueSet(T)
+struct RequiredValueSet(T)
 {
 	T[] valueSet;
+}
+
+///
+@serdeFallbackStruct
+struct OptionalValueSet(T)
+{
+	@serdeOptional Optional!(T[]) valueSet;
 }
 
 unittest
@@ -1903,16 +1910,16 @@ struct CompletionClientCapabilities
 		@serdeOptional Optional!(MarkupKind[]) documentationFormat;
 		@serdeOptional Optional!bool deprecatedSupport;
 		@serdeOptional Optional!bool preselectSupport;
-		@serdeOptional Optional!(ValueSet!CompletionItemTag) tagSupport;
+		@serdeOptional Optional!(RequiredValueSet!CompletionItemTag) tagSupport;
 		@serdeOptional Optional!bool insertReplaceSupport;
 		@serdeOptional Optional!ResolveSupport resolveSupport;
-		@serdeOptional Optional!(ValueSet!InsertTextMode) insertTextModeSupport;
+		@serdeOptional Optional!(RequiredValueSet!InsertTextMode) insertTextModeSupport;
 		@serdeOptional Optional!bool labelDetailsSupport;
 	}
 
 	@serdeOptional Optional!bool dynamicRegistration;
 	@serdeOptional Optional!CompletionItemCapabilities completionItem;
-	@serdeOptional Optional!(ValueSet!CompletionItemKind) completionItemKind;
+	@serdeOptional Optional!(OptionalValueSet!CompletionItemKind) completionItemKind;
 	@serdeOptional Optional!bool contextSupport;
 }
 
@@ -2313,8 +2320,8 @@ enum FileChangeType
 struct WorkspaceSymbolClientCapabilities
 {
 	@serdeOptional Optional!bool dynamicRegistration;
-	@serdeOptional Optional!(ValueSet!SymbolKind) symbolKind;
-	@serdeOptional Optional!(ValueSet!SymbolTag) tagSupport;
+	@serdeOptional Optional!(OptionalValueSet!SymbolKind) symbolKind;
+	@serdeOptional Optional!(RequiredValueSet!SymbolTag) tagSupport;
 }
 
 @serdeFallbackStruct
@@ -2340,7 +2347,7 @@ struct WorkspaceSymbolParams
 struct PublishDiagnosticsClientCapabilities
 {
 	@serdeOptional Optional!bool relatedInformation;
-	@serdeOptional Optional!(ValueSet!DiagnosticTag) tagSupport;
+	@serdeOptional Optional!(RequiredValueSet!DiagnosticTag) tagSupport;
 	@serdeOptional Optional!bool versionSupport;
 	@serdeOptional Optional!bool codeDescriptionSupport;
 	@serdeOptional Optional!bool dataSupport;
@@ -3049,9 +3056,9 @@ enum DocumentHighlightKind
 struct DocumentSymbolClientCapabilities
 {
 	@serdeOptional Optional!bool dynamicRegistration;
-	@serdeOptional Optional!(ValueSet!SymbolKind) symbolKind;
+	@serdeOptional Optional!(OptionalValueSet!SymbolKind) symbolKind;
 	@serdeOptional Optional!bool hierarchicalDocumentSymbolSupport;
-	@serdeOptional Optional!(ValueSet!SymbolTag) tagSupport;
+	@serdeOptional Optional!(RequiredValueSet!SymbolTag) tagSupport;
 	@serdeOptional Optional!bool labelSupport;
 }
 
@@ -3145,7 +3152,7 @@ struct CodeActionClientCapabilities
 	@serdeIgnoreUnexpectedKeys
 	static struct CodeActionLiteralSupport
 	{
-		ValueSet!CodeActionKind codeActionKind;
+		RequiredValueSet!CodeActionKind codeActionKind;
 	}
 
 	@serdeFallbackStruct
