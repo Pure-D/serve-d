@@ -124,7 +124,8 @@ bool adjustRangeForType(ref Diagnostic d, Document document, DScannerIssue issue
 	if (s.startsWith("Line is longer than ") && s.endsWith(" characters"))
 	{
 		d.range.start.character = s["Line is longer than ".length .. $ - " characters".length].to!uint;
-		d.range.end.character = 1000;
+		d.range.end.line = d.range.start.line + 1;
+		d.range.end.character = 0;
 	}
 
 	return true;
