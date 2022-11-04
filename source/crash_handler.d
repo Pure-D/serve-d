@@ -37,7 +37,9 @@ static if (BacktraceHandler)
 			])
 			signal(sig, &backtrace_handler);
 
-		fprintf(stderr, "Registered backtrace signal handlers\n");
+		// this is print on every invocation of serve-d, so we only print this in unittests and assume it works elsewhere
+		version (unittest)
+			fprintf(stderr, "Registered backtrace signal handlers\n");
 	}
 
 	shared static this()
