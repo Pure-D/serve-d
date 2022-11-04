@@ -44,6 +44,7 @@ _add LSP configurations using serve-d for other editors and PR them here!_
 * [sublime text](editor-st.md)
 * [emacs](editor-emacs.md)
 * [Helix](editor-helix.md)
+* [Nova](editor-nova.md)
 
 ### Project Layout
 
