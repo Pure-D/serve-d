@@ -9,12 +9,10 @@
 		"diet-complete": "0.0.3",
 		"diet-ng": "1.8.1",
 		"dscanner": "0.13.0-beta.1",
-		"dsymbol": "0.13.0",
+		"dsymbol": "0.13.3",
 		"dub": "1.29.2",
-		"dunit": "1.0.16",
 		"emsi_containers": "0.9.0",
 		"eventcore": "0.9.21",
-		"eventsystem": "1.2.0",
 		"inifiled": "1.3.3",
 		"isfreedesktop": "0.1.1",
 		"libasync": "0.8.6",
@@ -28,8 +26,6 @@
 		"mir-linux-kernel": "1.0.1",
 		"msgpack-d": "1.0.1",
 		"openssl": "3.2.2",
-		"painlessjson": "1.4.0",
-		"painlesstraits": "0.3.0",
 		"requests": "2.0.9",
 		"rm-rf": "0.1.0",
 		"silly": "1.1.1",
@@ -38,7 +34,6 @@
 		"taggedalgebraic": "0.11.22",
 		"vibe-core": "1.22.5",
 		"vibe-d": "0.9.5",
-		"workspace-d": "3.8.0",
 		"xdgpaths": "0.2.5"
 	}
 }

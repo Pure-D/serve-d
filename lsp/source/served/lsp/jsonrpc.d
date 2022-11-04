@@ -15,8 +15,6 @@ import std.string;
 import served.lsp.filereader;
 import served.lsp.protocol;
 
-import tinyevent;
-
 /// Fiber which runs in the background, reading from a FileReader, and calling methods when requested over the RPC interface.
 class RPCProcessor : Fiber
 {
