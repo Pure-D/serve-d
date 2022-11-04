@@ -1,7 +1,7 @@
 {
 	"fileVersion": 1,
 	"versions": {
-		"mir-algorithm": "3.18.2",
+		"mir-algorithm": "3.18.4",
 		"mir-core": "1.3.14",
 		"mir-cpuid": "1.2.10",
 		"mir-ion": "2.1.0",
