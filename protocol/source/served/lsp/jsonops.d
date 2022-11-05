@@ -286,14 +286,6 @@ private void skipWhite(ref scope return inout(char)[] jsonObject)
 	jsonObject = jsonObject.stripLeft;
 }
 
-bool seemsLikeJsonObject(T)(scope T[] json)
-if (is(immutable T == immutable char))
-{
-	return json.length
-		&& json[0] == '{'
-		&& json[$ - 1] == '}';
-}
-
 /// Split the json object into keys, store the slices from the input string
 /// into a newly created struct which contains all the keys from the `fields`
 /// parameter.
@@ -304,7 +296,7 @@ template parseKeySlices(fields...)
 {
 	auto parseKeySlices(T)(scope return T[] jsonObject)
 	if (is(immutable T == immutable char))
-	in (jsonObject.seemsLikeJsonObject)
+	in (jsonObject.looksLikeJsonObject)
 	{
 		import std.string : representation;
 		import std.algorithm : canFind;

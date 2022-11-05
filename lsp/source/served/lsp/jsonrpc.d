@@ -537,7 +537,7 @@ private:
 
 	RequestMessageRaw handleRequestImpl(scope const(char)[] json)
 	{
-		if (!json.length || json.ptr[0] != '{' || json.ptr[json.length - 1] != '}')
+		if (!json.looksLikeJsonObject)
 			throw new Exception("malformed request JSON, must be object");
 		auto slices = json.parseKeySlices!("id", "result", "error", "method", "params");
 
