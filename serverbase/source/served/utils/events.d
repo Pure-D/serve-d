@@ -351,6 +351,9 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 				alias symbols = AliasSeq!(__traits(getMember, ExtensionModule, name));
 				static if (symbols.length == 1 && hasUDA!(symbols[0], UDA))
 				{
+					static assert (__traits(getOverloads, ExtensionModule, name, true).length == 1,
+						"UDA @" ~ UDA.stringof ~ " annotated method " ~ name
+						~ " has more than one overload, which is not supported. Please rename.");
 					alias symbol = symbols[0];
 					static if (isSomeFunction!(symbol) && __traits(getProtection, symbol) == "public")
 					{
