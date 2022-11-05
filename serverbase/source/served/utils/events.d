@@ -36,6 +36,16 @@ struct EventProcessorConfig
 	string[] allowedDuplicateMethods = ["object", "served", "std", "io", "workspaced", "fs"];
 }
 
+/// Hooks into initialization, possibly manipulating the InitializeResponse.
+/// Called after the extension entry point `initialize()` method.
+///
+/// Annotated method is expected to have this type signature:
+/// ```d
+/// @initializeHook
+/// void myInitHook(InitializeParams params, ref InitializeResult result);
+/// ```
+enum initializeHook;
+
 /// Implements the event processor for a given extension module exposing a
 /// `members` field defining all potential methods.
 mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config = EventProcessorConfig.init)
