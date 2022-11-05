@@ -52,7 +52,7 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 	import std.traits;
 
 	// duplicate method name check to avoid name clashes and unreadable error messages
-	private string[] findDuplicates(string[] fields)
+	private static string[] findDuplicates(string[] fields)
 	{
 		string[] dups;
 		Loop: foreach (i, field; fields)
@@ -78,7 +78,7 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 	static if (lintWarnings.length > 0)
 		pragma(msg, lintWarnings);
 
-	private string ctLintEvents()
+	private static string ctLintEvents()
 	{
 		import std.string : chomp;
 

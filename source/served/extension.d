@@ -70,33 +70,51 @@ alias members = AliasSeq!(
 /// Set to true when shutdown is called
 __gshared bool shutdownRequested;
 
-void changedConfig(string workspaceUri, string[] paths, served.types.Configuration config,
-		bool allowFallback = false, size_t index = 0, size_t numConfigs = 0)
+struct ConfigWorkspace
+{
+	/// Workspace URI, resolved to a local workspace URI, or null if none found.
+	/// May be null for invalid workspaces or if this is the unnamed workspace.
+	/// Check `isUnnamedWorkspace` to see if this is the unnamed workspace.
+	string uri;
+	/// Only true _iff_ this config applies to the unnamed workspace (folder-less workspace)
+	bool isUnnamedWorkspace;
+	/// 0-based index which workspace is being processed out of the total count. (for progress reporting)
+	size_t index;
+	/// Number of workspaces which are being processed right now in total. (for progress reporting)
+	size_t numWorkspaces;
+
+	static ConfigWorkspace exactlyOne(string uri)
+	{
+		return ConfigWorkspace(uri, false, 0, 1);
+	}
+}
+
+void changedConfig(ConfigWorkspace target, string[] paths, served.types.Configuration config)
 {
 	StopWatch sw;
 	sw.start();
 
-	reportProgress(ProgressType.configLoad, index, numConfigs, workspaceUri);
+	reportProgress(ProgressType.configLoad, target.index, target.numWorkspaces, target.uri);
 
-	if (!workspaceUri.length)
+	if (!target.uri.length)
 	{
-		if (!allowFallback)
+		if (!target.isUnnamedWorkspace)
 			error("Passed invalid empty workspace uri to changedConfig!");
 		trace("Updated fallback config (user settings) for sections ", paths);
 		return;
 	}
 
-	if (!syncedConfiguration && !allowFallback)
+	if (!syncedConfiguration && !target.isUnnamedWorkspace)
 	{
 		syncedConfiguration = true;
 		ensureStartedUp();
 	}
 
-	Workspace* proj = &workspace(workspaceUri);
+	Workspace* proj = &workspace(target.uri);
 	bool isFallback = proj is &fallbackWorkspace;
-	if (isFallback && !allowFallback)
+	if (isFallback && !target.isUnnamedWorkspace)
 	{
-		error("Did not find workspace ", workspaceUri, " when updating config?");
+		error("Did not find workspace ", target.uri, " when updating config?");
 		return;
 	}
 	else if (isFallback)
@@ -111,7 +129,7 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 		proj.initialized = true;
 	}
 
-	auto workspaceFs = workspaceUri.uriToFile;
+	auto workspaceFs = target.uri.uriToFile;
 
 	foreach (path; paths)
 	{
@@ -172,7 +190,7 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 				if (!backend.has!DCDComponent(workspaceFs))
 				{
 					auto instance = backend.getInstance(workspaceFs);
-					lazyStartDCDServer(instance, workspaceUri);
+					lazyStartDCDServer(instance, target.uri);
 				}
 			}
 			else if (backend.has!DCDComponent(workspaceFs))
@@ -211,7 +229,7 @@ void changedConfig(string workspaceUri, string[] paths, served.types.Configurati
 		}
 	}
 
-	trace("Finished config change of ", workspaceUri, " with ", paths.length,
+	trace("Finished config change of ", target.uri, " with ", paths.length,
 			" changes in ", sw.peek, ".");
 }
 
@@ -260,8 +278,13 @@ void processConfigChange(served.types.Configuration configuration)
 			auto workspace = isDefault ? &fallbackWorkspace : &.workspace(items[i * stride].scopeUri.deref,
 					false);
 			string[] changed = workspace.config.replaceAllSectionsJson(settings[i * stride .. $]);
-			changedConfig(isDefault ? null : workspace.folder.uri, changed,
-					workspace.config, isDefault, i, expected);
+			changedConfig(
+				ConfigWorkspace(
+					isDefault ? null : workspace.folder.uri,
+					isDefault,
+					i,
+					expected
+				), changed, workspace.config);
 		}
 	}
 	else if (workspaces.length)
@@ -270,7 +293,7 @@ void processConfigChange(served.types.Configuration configuration)
 			error(
 					"Client does not support configuration request, only applying config for first workspace.");
 		auto changed = workspaces[0].config.replace(configuration);
-		changedConfig(workspaces[0].folder.uri, changed, workspaces[0].config, false, 0, 1);
+		changedConfig(ConfigWorkspace.exactlyOne(workspaces[0].folder.uri), changed, workspaces[0].config);
 		fallbackWorkspace.config = workspaces[0].config;
 	}
 	else
@@ -310,8 +333,8 @@ bool syncConfiguration(string workspaceUri, size_t index = 0, size_t numConfigs 
 
 		string[] changed = proj.config.replaceAllSectionsJson(settings);
 		string uri = workspaceUri.length ? proj.folder.uri : null;
-		changedConfig(uri, changed, proj.config,
-				workspaceUri.length == 0, index, numConfigs);
+		changedConfig(ConfigWorkspace(uri, workspaceUri.length == 0, index, numConfigs),
+			changed, proj.config);
 		return true;
 	}
 	else
@@ -515,7 +538,7 @@ InitializeResult initialize(InitializeParams params)
 				warning("This Language Client doesn't support configuration requests and also didn't send any ",
 					"configuration to serve-d. Initializing using default configuration");
 
-				changedConfig(workspaces[0].folder.uri, null, workspaces[0].config);
+				changedConfig(ConfigWorkspace.exactlyOne(workspaces[0].folder.uri), null, workspaces[0].config);
 				fallbackWorkspace.config = workspaces[0].config;
 			}
 

@@ -169,7 +169,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				if (done)
 					return;
 
-				trace("Calling ", name);
+				trace("Calling request method ", name);
 				alias RequestResultT = typeof(symbol(arguments.expand));
 
 				static if (is(RequestResultT : JsonValue))
@@ -292,7 +292,8 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		}
 		documents.process(msg);
 
-		eventProcessor.emitProtocol!(protocolNotification, (name, callSymbol, uda) {
+		bool gotAny = eventProcessor.emitProtocol!(protocolNotification, (name, callSymbol, uda) {
+			trace("Calling notification method ", name);
 			try
 			{
 				callSymbol();
@@ -302,6 +303,8 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				error("Failed notify: ", e);
 			}
 		}, false)(msg.method, msg.paramsJson);
+		if (!gotAny)
+			trace("Discarding unknown notification: ", msg);
 	}
 
 	void delegate() gotRequest(RequestMessageRaw msg)
@@ -389,6 +392,13 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		rpc = new RPCProcessor(input, stdout);
 		rpc.call();
 		trace("RPC started");
+		return runImpl(); 
+	}
+
+	/// Same as `run`, assumes `rpc` is initialized and ready
+	bool runImpl()
+	{
+		fibersMutex = new Mutex();
 
 		static if (serverConfig.gcCollectSeconds > 0)
 		{
