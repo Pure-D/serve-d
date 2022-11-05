@@ -504,3 +504,141 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		return shutdownRequested;
 	}
 }
+
+unittest
+{
+	import core.thread;
+	import core.time;
+
+	import std.experimental.logger;
+	import std.stdio;
+
+	import served.lsp.jsonrpc;
+	import served.lsp.protocol;
+	import served.utils.events;
+
+	static struct CustomInitializeResult
+	{
+		bool calledA;
+		bool calledB;
+		bool calledC;
+		bool sanityFalse;
+	}
+
+	__gshared static int calledCustomNotify;
+
+	static struct UTServer
+	{
+	static:
+		alias members = __traits(derivedMembers, UTServer);
+
+		CustomInitializeResult initialize(InitializeParams params)
+		{
+			CustomInitializeResult res;
+			res.calledA = true;
+			return res;
+		}
+
+		@initializeHook
+		void myInitHook1(InitializeParams params, ref CustomInitializeResult result)
+		{
+			assert(result.calledA);
+			assert(!result.calledB);
+			assert(!result.sanityFalse);
+
+			result.calledB = true;
+		}
+
+		@initializeHook
+		void myInitHook2(InitializeParams params, ref CustomInitializeResult result)
+		{
+			assert(result.calledA);
+			assert(!result.calledC);
+			assert(!result.sanityFalse);
+
+			result.calledC = true;
+		}
+
+		@protocolMethod("textDocument/documentColor")
+		int myMethod1(DocumentColorParams c)
+		{
+			return 4 + cast(int)c.textDocument.uri.length;
+		}
+
+		static struct NotifyParams
+		{
+			int i;
+		}
+
+		@protocolNotification("custom/notify")
+		void myMethod2(NotifyParams params)
+		{
+			calledCustomNotify = 4 + params.i;
+		}
+	}
+
+	// we get a bunch of deprecations because of dual-context, but I don't think we can do anything about these.
+	mixin LanguageServerRouter!(UTServer) server;
+
+	globalLogLevel = LogLevel.trace;
+	sharedLog = new FileLogger(io.stderr);
+
+	MockRPC mockRPC;
+	mockRPC.testRPC((rpc) {
+		server.rpc = rpc;
+		bool started;
+		bool exitSuccess;
+		auto t = new Thread({
+			started = true;
+			try
+			{
+				exitSuccess = server.runImpl();
+			}
+			catch (Throwable t)
+			{
+				import std.stdio;
+
+				stderr.writeln("Fatal: mockRPC crashed: ", t);
+			}
+		});
+		t.start();
+		do {
+			Thread.sleep(10.msecs);
+		} while (!started);
+		// give it a little more time
+		Thread.sleep(50.msecs);
+
+		trace("Started mock RPC");
+		mockRPC.writePacket(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file:///","capabilities":{}}}`);
+		Thread.sleep(50.msecs);
+		assert(server.serverInitializeCalled);
+		trace("Initialized");
+
+		auto resObj = ResponseMessageRaw.deserialize(mockRPC.readPacket());
+		assert(resObj.error.isNone);
+
+		auto initResult = resObj.resultJson.deserializeJson!CustomInitializeResult;
+
+		assert(initResult.calledA);
+		assert(initResult.calledB);
+		assert(initResult.calledC);
+		assert(!initResult.sanityFalse);
+		trace("Initialize OK");
+
+		mockRPC.writePacket(`{"jsonrpc":"2.0","id":1,"method":"textDocument/documentColor","params":{"textDocument":{"uri":"a"}}}`);
+		resObj = ResponseMessageRaw.deserialize(mockRPC.readPacket());
+		assert(resObj.resultJson == `5`);
+
+		assert(!calledCustomNotify);
+		mockRPC.writePacket(`{"jsonrpc":"2.0","method":"custom/notify","params":{"i":4}}`);
+		Thread.sleep(50.msecs);
+		assert(calledCustomNotify == 8);
+
+		mockRPC.writePacket(`{"jsonrpc":"2.0","id":1,"method":"shutdown","params":{}}`);
+		mockRPC.readPacket();
+		mockRPC.writePacket(`{"jsonrpc":"2.0","method":"exit","params":{}}`);
+
+		t.join();
+		assert(exitSuccess);
+	});
+}
