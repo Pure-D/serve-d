@@ -309,7 +309,7 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 		}, returnFirst);
 	}
 
-	bool emitExtensionEvent(alias UDA, Args...)(Args args)
+	bool emitExtensionEvent(alias UDA, Args...)(auto ref Args args)
 	{
 		return iterateExtensionMethodsByUDA!(UDA, (name, symbol, uda) {
 			symbol(forward!args);
