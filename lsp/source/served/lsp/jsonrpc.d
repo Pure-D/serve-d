@@ -613,9 +613,10 @@ private:
 	}
 }
 
-unittest
+/// Helper struct to simulate RPC connections with an RPCProcessor.
+/// Intended for use with tests, not for real-world use.
+struct MockRPC
 {
-	import served.lsp.protocol;
 	import std.process;
 
 	enum shortDelay = 10.msecs;
@@ -676,8 +677,36 @@ unittest
 		cb(rpc);
 
 		rpc.stop();
-		rpc.call();
+		if (rpc.state != Fiber.State.TERM)
+			rpc.call();
 		assert(rpc.state == Fiber.State.TERM);
+	}
+}
+
+unittest
+{
+	import served.lsp.protocol;
+
+	MockRPC mockRPC;
+
+	void writePacket(string s, string epilogue = "", string prologue = "")
+	{
+		mockRPC.writePacket(s, epilogue, prologue);
+	}
+
+	string readPacket()
+	{
+		return mockRPC.readPacket();
+	}
+
+	void expectPacket(string s)
+	{
+		mockRPC.expectPacket(s);
+	}
+
+	void testRPC(void delegate(RPCProcessor rpc) cb)
+	{
+		mockRPC.testRPC(cb);
 	}
 
 	testRPC((rpc) { /* test immediate close */ });
