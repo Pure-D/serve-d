@@ -906,6 +906,23 @@ struct ResponseMessageRaw
 		else
 			return text("ResponseMessage(", id, ": ", error.deref, ")");
 	}
+
+	static ResponseMessageRaw deserialize(scope const(char)[] json)
+	in (json.looksLikeJsonObject)
+	{
+		auto slices = json.parseKeySlices!("id", "result", "error", "method", "params");
+
+		auto tok = slices.id.deserializeJson!RequestToken;
+		ResponseMessageRaw ret;
+		ret.id = tok;
+		auto res = slices.result;
+		auto err = slices.error;
+		if (res.length)
+			ret.resultJson = res.idup;
+		if (err.length)
+			ret.error = err.deserializeJson!ResponseError;
+		return ret;
+	}
 }
 
 alias DocumentUri = string;
