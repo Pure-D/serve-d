@@ -120,7 +120,18 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			});
 			return res;
 		}
-		if (!serverInitializeCalled)
+
+		static if (!is(typeof(ExtensionModule.shutdown)))
+		{
+			if (msg.method == "shutdown" && !shutdownRequested)
+			{
+				shutdownRequested = true;
+				res.resultJson = `null`;
+				return res;
+			}
+		}
+
+		if (!serverInitializeCalled && msg.method != "shutdown")
 		{
 			trace("Tried to call command without initializing");
 			res.error = ResponseError(ErrorCode.serverNotInitialized);
@@ -283,15 +294,6 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			return;
 		}
 
-		static if (!is(typeof(ExtensionModule.shutdown)))
-		{
-			if (msg.method == "shutdown" && !shutdownRequested)
-			{
-				shutdownRequested = true;
-				return;
-			}
-		}
-
 		if (!serverInitializeCalled)
 		{
 			trace("Tried to call notification without initializing");
@@ -393,8 +395,6 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		for (int timeout = 10; timeout >= 0 && !input.isRunning; timeout--)
 			Thread.sleep(1.msecs);
 		trace("Started reading from stdin");
-
-		fibersMutex = new Mutex();
 
 		rpc = new RPCProcessor(input, stdout);
 		rpc.call();
