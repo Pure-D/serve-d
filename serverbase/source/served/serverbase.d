@@ -510,6 +510,7 @@ unittest
 	import core.thread;
 	import core.time;
 
+	import std.conv;
 	import std.experimental.logger;
 	import std.stdio;
 
