@@ -234,7 +234,7 @@ class RPCProcessor : Fiber
 	/// Returns: a RequestToken to use with $(LREF awaitResponse) to get the response. Can be ignored if the response isn't important.
 	RequestToken sendMethod(string method)
 	{
-		auto id = RequestToken.randomLong();
+		auto id = RequestToken.next();
 		const(char)[][5] parts = [
 			`{"jsonrpc":"2.0","id":`,
 			id.serializeJson,
@@ -269,7 +269,7 @@ class RPCProcessor : Fiber
 	/// ditto
 	RequestToken sendMethodRaw(string method, scope const(char)[] value)
 	{
-		auto id = RequestToken.randomLong();
+		auto id = RequestToken.next();
 		const(char)[][7] parts = [
 			`{"jsonrpc":"2.0","id":`,
 			id.serializeJson,

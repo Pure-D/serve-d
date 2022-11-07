@@ -638,14 +638,33 @@ struct RequestToken
 		return this;
 	}
 
+	/// Simply counts up using a global counter, wrapping around at int.max.
+	static RequestToken next()
+	{
+		import core.atomic : atomicOp;
+
+		static shared uint counter = 0;
+
+		// uint overflows at 32 bits, we use a bitmask to further narrow this
+		// down to 31 bits, which should be safe to handle by _any_ LSP client.
+		//
+		// no need to represent this in the uint counter, because overflow at 32
+		// bit is basically the same thing we simulate here with the bitmask.
+		uint ourValue = atomicOp!"+="(counter, 1)
+			& 0x7FFF_FFFFu;
+
+		return RequestToken(ourValue);
+	}
+
 	deprecated alias random = randomLong;
 
 	static RequestToken randomLong()
 	{
 		import std.random : uniform;
 
-		// from JS, see https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Number/MAX_SAFE_INTEGER
-		enum long maxSafeInt = 0x001f_ffff_ffff_ffffL;
+		// Lua LSP clients (e.g. vim-lspconfig) aren't playing well with large numbers.
+		// we simply don't go over int.max to support any sensible implementation here.
+		enum long maxSafeInt = int.max;
 
 		return RequestToken(uniform(0L, maxSafeInt));
 	}
