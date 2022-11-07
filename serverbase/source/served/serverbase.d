@@ -574,6 +574,7 @@ unittest
 		void myMethod2(NotifyParams params)
 		{
 			calledCustomNotify = 4 + params.i;
+			trace("myMethod2 -> ", calledCustomNotify, " - ptr: ", &calledCustomNotify);
 		}
 	}
 
@@ -632,7 +633,8 @@ unittest
 		assert(!calledCustomNotify);
 		mockRPC.writePacket(`{"jsonrpc":"2.0","method":"custom/notify","params":{"i":4}}`);
 		Thread.sleep(50.msecs);
-		assert(calledCustomNotify == 8);
+		assert(calledCustomNotify == 8,
+			text("calledCustomNotify = ", calledCustomNotify, " - ptr: ", &calledCustomNotify));
 
 		mockRPC.writePacket(`{"jsonrpc":"2.0","id":1,"method":"shutdown","params":{}}`);
 		mockRPC.readPacket();
