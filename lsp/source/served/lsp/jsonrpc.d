@@ -25,6 +25,12 @@ class RPCProcessor : Fiber
 		super(&run, 4096 * 32);
 		this.reader = reader;
 		this.writer = writer;
+
+		// LDC requires we don't use any TLS variables in the RPC processor on OSX
+		// this assumption holds true for most of serve-d, but should be verified
+		// every once in a while using `-vtls` to print all TLS variables.
+		static if (__traits(hasMember, Fiber, "allowMigration"))
+			allowMigration();
 	}
 
 	/// Instructs the RPC processor to stop at the next IO read instruction.
