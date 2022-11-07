@@ -723,7 +723,7 @@ unittest
 		expectPacket(`{"jsonrpc":"2.0","id":` ~ tok.value.toString ~ `,"method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
 		writePacket(`{"jsonrpc":"2.0","id":` ~ tok.value.toString ~ `,"result":{"capabilities":{}}}`);
 		rpc.call();
-		Thread.sleep(shortDelay);
+		Thread.sleep(MockRPC.shortDelay);
 		rpc.call();
 		assert(rpc.hasResponse(waitHandle));
 		auto res = rpc.resolveWait(waitHandle);
@@ -732,17 +732,17 @@ unittest
 
 	// test close after unfinished message (e.g. client crashed)
 	testRPC((rpc) {
-		rpcPipe.writeEnd.lockingBinaryWriter.put("Content-Length: 5\r\n\r\n");
-		rpcPipe.writeEnd.flush();
+		mockRPC.rpcPipe.writeEnd.lockingBinaryWriter.put("Content-Length: 5\r\n\r\n");
+		mockRPC.rpcPipe.writeEnd.flush();
 		rpc.call();
-		Thread.sleep(shortDelay);
+		Thread.sleep(MockRPC.shortDelay);
 		rpc.call();
 	});
 	testRPC((rpc) {
-		rpcPipe.writeEnd.lockingBinaryWriter.put("Content-Length: 5\r\n\r\ntrue");
-		rpcPipe.writeEnd.flush();
+		mockRPC.rpcPipe.writeEnd.lockingBinaryWriter.put("Content-Length: 5\r\n\r\ntrue");
+		mockRPC.rpcPipe.writeEnd.flush();
 		rpc.call();
-		Thread.sleep(shortDelay);
+		Thread.sleep(MockRPC.shortDelay);
 		rpc.call();
 	});
 
@@ -751,7 +751,7 @@ unittest
 		void slowIO()
 		{
 			rpc.call();
-			Thread.sleep(shortDelay);
+			Thread.sleep(MockRPC.shortDelay);
 			rpc.call();
 		}
 
@@ -764,24 +764,24 @@ unittest
 		auto waitHandle = rpc.prepareWait(tok);
 		expectPacket(`{"jsonrpc":"2.0","id":` ~ tok.value.toString ~ `,"method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
 		auto s = `{"jsonrpc":"2.0","id":` ~ tok.value.toString ~ `,"result":{"capabilities":{}}}`;
-		rpcPipe.writeEnd.lockingBinaryWriter.put("Content-Length: ");
-		rpcPipe.writeEnd.flush();
+		mockRPC.rpcPipe.writeEnd.lockingBinaryWriter.put("Content-Length: ");
+		mockRPC.rpcPipe.writeEnd.flush();
 		slowIO();
 		assert(!rpc.hasResponse(waitHandle));
-		rpcPipe.writeEnd.lockingBinaryWriter.put(s.length.to!string);
-		rpcPipe.writeEnd.flush();
+		mockRPC.rpcPipe.writeEnd.lockingBinaryWriter.put(s.length.to!string);
+		mockRPC.rpcPipe.writeEnd.flush();
 		slowIO();
 		assert(!rpc.hasResponse(waitHandle));
-		rpcPipe.writeEnd.lockingBinaryWriter.put("\r\n\r\n");
-		rpcPipe.writeEnd.flush();
+		mockRPC.rpcPipe.writeEnd.lockingBinaryWriter.put("\r\n\r\n");
+		mockRPC.rpcPipe.writeEnd.flush();
 		slowIO();
 		assert(!rpc.hasResponse(waitHandle));
-		rpcPipe.writeEnd.lockingBinaryWriter.put(s[0 .. $ / 2]);
-		rpcPipe.writeEnd.flush();
+		mockRPC.rpcPipe.writeEnd.lockingBinaryWriter.put(s[0 .. $ / 2]);
+		mockRPC.rpcPipe.writeEnd.flush();
 		slowIO();
 		assert(!rpc.hasResponse(waitHandle));
-		rpcPipe.writeEnd.lockingBinaryWriter.put(s[$ / 2 .. $]);
-		rpcPipe.writeEnd.flush();
+		mockRPC.rpcPipe.writeEnd.lockingBinaryWriter.put(s[$ / 2 .. $]);
+		mockRPC.rpcPipe.writeEnd.flush();
 		slowIO();
 		assert(rpc.hasResponse(waitHandle));
 		auto res = rpc.resolveWait(waitHandle);
@@ -801,7 +801,7 @@ unittest
 		expectPacket(`{"jsonrpc":"2.0","id":` ~ tok.value.toString ~ `,"method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
 		writePacket(`{"jsonrpc":"2.0","id":` ~ tok.value.toString ~ `,"result":{"capabilities":{}}}`, pair[1], pair[0]);
 		rpc.call();
-		Thread.sleep(shortDelay);
+		Thread.sleep(MockRPC.shortDelay);
 		rpc.call();
 		assert(rpc.hasResponse(waitHandle));
 		auto res = rpc.resolveWait(waitHandle);
@@ -809,7 +809,7 @@ unittest
 
 		writePacket(`{"jsonrpc":"2.0","id":"sendtest","method":"test","params":{"x":{"a":4}}}`, pair[1], pair[0]);
 		rpc.call();
-		Thread.sleep(shortDelay);
+		Thread.sleep(MockRPC.shortDelay);
 		rpc.call();
 		assert(rpc.hasData);
 		auto msg = rpc.poll;
@@ -831,7 +831,7 @@ unittest
 		expectPacket(`{"jsonrpc":"2.0","id":` ~ tok.value.toString ~ `,"method":"initialize","params":{"processId":1234,"rootUri":"file:///root/uri","capabilities":{}}}`);
 		writePacket(`{"jsonrpc":"2.0","id":` ~ tok.value.toString ~ `,"result":{"capabilities":{}}}`);
 		rpc.call();
-		Thread.sleep(shortDelay);
+		Thread.sleep(MockRPC.shortDelay);
 		rpc.call();
 		assert(rpc.hasResponse(waitHandle));
 		auto res = rpc.resolveWait(waitHandle);
@@ -841,7 +841,7 @@ unittest
 		{
 			writePacket(send);
 			rpc.call();
-			Thread.sleep(shortDelay);
+			Thread.sleep(MockRPC.shortDelay);
 			rpc.call();
 			expectPacket(recv);
 		}
@@ -864,7 +864,7 @@ unittest
 
 		writePacket(`[{},{},{}]`);
 		rpc.call();
-		Thread.sleep(shortDelay);
+		Thread.sleep(MockRPC.shortDelay);
 		rpc.call();
 		expectPacket(`{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"missing required members or has ambiguous members"}}`);
 		expectPacket(`{"jsonrpc":"2.0","id":null,"error":{"code":-32600,"message":"missing required members or has ambiguous members"}}`);
