@@ -631,7 +631,7 @@ void doGlobalStartup()
 
 					if (res == action)
 						spawnFiber((&updateDCD).toDelegate);
-				}, 4);
+				});
 			}
 		}
 
