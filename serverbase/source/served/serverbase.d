@@ -608,11 +608,11 @@ unittest
 			Thread.sleep(10.msecs);
 		} while (!started);
 		// give it a little more time
-		Thread.sleep(50.msecs);
+		Thread.sleep(200.msecs);
 
 		trace("Started mock RPC");
 		mockRPC.writePacket(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file:///","capabilities":{}}}`);
-		Thread.sleep(50.msecs);
+		Thread.sleep(200.msecs);
 		assert(server.serverInitializeCalled);
 		trace("Initialized");
 
@@ -633,7 +633,7 @@ unittest
 
 		assert(!calledCustomNotify);
 		mockRPC.writePacket(`{"jsonrpc":"2.0","method":"custom/notify","params":{"i":4}}`);
-		Thread.sleep(50.msecs);
+		Thread.sleep(200.msecs);
 		assert(calledCustomNotify == 8,
 			text("calledCustomNotify = ", calledCustomNotify, " - ptr: ", &calledCustomNotify));
 
