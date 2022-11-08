@@ -42,7 +42,7 @@ void onDidAddProjectForUnittest(WorkspaceD.Instance instance, string dir, string
 			return;
 
 		rescanProject(instance);
-	}, 80);
+	}, requiredLibdparsePageCount * 2);
 }
 
 @protocolNotification("textDocument/didSave")
@@ -65,7 +65,7 @@ void onDidSaveCheckForUnittest(DidSaveTextDocumentParams params)
 		rescanFile(*project, params.textDocument);
 
 		rpc.notifyMethod("coded/pushProjectTests", *project);
-	}, 80);
+	}, requiredLibdparsePageCount * 2);
 }
 
 @protocolNotification("served/rescanTests")

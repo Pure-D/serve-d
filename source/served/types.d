@@ -10,7 +10,19 @@ public import served.utils.events;
 static import served.extension;
 
 import served.serverbase;
-mixin LanguageServerRouter!(served.extension) lspRouter;
+
+/// These are kind-of minimum values for a bunch of "killer" tests in libdparse
+debug
+	enum requiredLibdparsePageCount = 128; // = 1 MiB stack per fiber
+else // release builds are more optimized with stack usage
+	enum requiredLibdparsePageCount = 32; // = 256 KiB stack per fiber
+
+static immutable LanguageServerConfig lsConfig = {
+	defaultPages: requiredLibdparsePageCount,
+	productName: "serve-d"
+};
+
+mixin LanguageServerRouter!(served.extension, lsConfig) lspRouter;
 
 import core.time : MonoTime;
 

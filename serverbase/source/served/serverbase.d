@@ -30,11 +30,14 @@ struct LanguageServerConfig
 	EventProcessorConfig eventConfig;
 
 	/// Product name to use in error messages
-	string productName = "serve-d";
+	string productName = "unnamed lsp";
 
 	/// If set to non-zero, call GC.collect every n seconds and GC.minimize
-	/// every 5th call. Keeps track of cleaned up memory in trace logs.
+	/// every gcMinimizeTimes-th call. Keeps track of cleaned up memory in
+	/// trace logs.
 	int gcCollectSeconds = 30;
+	/// ditto
+	int gcMinimizeTimes = 5;
 }
 
 // dumps a performance/GC trace log to served_trace.log
@@ -423,12 +426,15 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 
 				GC.collect();
 
-				gcCollects++;
 				totalGcCollects++;
-				if (gcCollects > 5)
+				static if (serverConfig.gcMinimizeTimes > 0)
 				{
-					GC.minimize();
-					gcCollects = 0;
+					gcCollects++;
+					if (gcCollects >= serverConfig.gcMinimizeTimes)
+					{
+						GC.minimize();
+						gcCollects = 0;
+					}
 				}
 
 				gcSpeed.stop();
@@ -472,6 +478,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		fibers ~= rpc;
 
 		spawnFiberImpl = (&pushFiber!(void delegate())).toDelegate;
+		defaultFiberPages = serverConfig.defaultPages;
 
 		static if (is(typeof(ExtensionModule.parallelMain)))
 			pushFiber(&ExtensionModule.parallelMain);
