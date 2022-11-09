@@ -192,7 +192,7 @@ struct Configuration
 			return path;
 
 		version (Windows)
-			auto exePath = withDefaultExtension(path, ".exe");
+			auto exePath = defaultExtension(path, ".exe");
 		else
 			auto exePath = path;
 
