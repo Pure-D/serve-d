@@ -2234,6 +2234,8 @@ struct DidChangeConfigurationClientCapabilities
 	@serdeOptional Optional!bool dynamicRegistration;
 }
 
+/// You might want to use `RootJsonToken` instead of this type if you want to
+/// deserialize your custom config types.
 @serdeFallbackStruct
 @allowedMethods("workspace/didChangeConfiguration")
 struct DidChangeConfigurationParams

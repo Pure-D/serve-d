@@ -23,14 +23,29 @@ string serializeJson(T)(auto ref T value)
 {
 	import mir.ser.json : serializeJson;
 
-	return serializeJson!T(value);
+	static if (is(T == RootJsonToken))
+		return value.json;
+	else
+		return serializeJson!T(value);
 }
 
 T deserializeJson(T)(scope const(char)[] text)
 {
 	import mir.deser.json : deserializeJson;
 
-	return deserializeJson!T(text);
+	static if (is(T == RootJsonToken))
+		return T(text.idup);
+	else
+		return deserializeJson!T(text);
+}
+
+/// Type that can be used to pass JSON as-is, without (de)serialization.
+/// Only works at root level, e.g. can't be nested inside (de)serialized types.
+struct RootJsonToken
+{
+	string json;
+
+	void[1] unserializable;
 }
 
 unittest
