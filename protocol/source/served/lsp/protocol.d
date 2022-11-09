@@ -1436,6 +1436,30 @@ struct InitializeParams
 	@serdeOptional NullableOptional!(WorkspaceFolder[]) workspaceFolders;
 	@serdeOptional Optional!InitializeParamsClientInfo clientInfo;
 	@serdeOptional Optional!string locale;
+
+	/// Compatibility helper to get workspace folders. Checks these members:
+	/// 1) If `workspaceFolders` has any entries, it is returned as-is.
+	/// 2) Otherwise, if `rootUri` is non-empty, it is returned as the only
+	///    workspace, with `fallbackRootName` as name.
+	/// 3) Otherwise, if `rootPath` is non-empty, it is converted to a URI and
+	///    returned as the only workspace, with `fallbackRootName` as name.
+	/// 4) Otherwise, empty array `[]` is returned.
+	WorkspaceFolder[] getWorkspaceFolders(string fallbackRootName = "Root")
+	{
+		import served.lsp.uri;
+
+		if (workspaceFolders.isSet
+			&& !workspaceFolders.get.isNull
+			&& workspaceFolders.get.get.length > 0
+		)
+			return workspaceFolders.get.get;
+		else if (rootUri.length)
+			return [WorkspaceFolder(rootUri, fallbackRootName)];
+		else if (rootPath.orDefault.length)
+			return [WorkspaceFolder(rootPath.deref.uriFromFile, fallbackRootName)];
+		else
+			return [];
+	}
 }
 
 unittest
