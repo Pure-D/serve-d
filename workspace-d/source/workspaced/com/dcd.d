@@ -472,11 +472,16 @@ class DCDComponent : ComponentWrapper
 			mixin(traceTask);
 			try
 			{
-				if (!running)
+				if (!running || pos >= code.length)
 				{
 					ret.finish("");
 					return;
 				}
+
+				// We need to move by one character on identifier characters to ensure the start character fits.
+				if (!isIdentifierSeparatingChar(code[pos]))
+					pos++;
+
 				auto doc = client.requestDocumentation(CodeRequest("stdin", code, pos));
 				ret.finish(doc.join("\n"));
 			}
