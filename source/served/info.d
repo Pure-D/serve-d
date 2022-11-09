@@ -1,7 +1,7 @@
 module served.info;
 
 static immutable Version = [0, 8, 0];
-static immutable VersionSuffix = "beta.6"; // like beta.1
+static immutable VersionSuffix = "beta.7"; // like beta.1
 static immutable string BundledDependencies = "dub, dfmt and dscanner are bundled within (compiled in)";
 
 version (Windows) version (DigitalMars) static assert(false,
