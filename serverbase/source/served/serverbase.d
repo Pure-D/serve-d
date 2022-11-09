@@ -268,6 +268,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 	private void processRequestObservers(T)(RequestMessageRaw msg, T result)
 	{
 		eventProcessor.emitProtocol!(postProtocolMethod, (name, callSymbol, uda) {
+			trace("Calling post-request method ", name);
 			try
 			{
 				callSymbol();
@@ -315,8 +316,9 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				error("Failed notify: ", e);
 			}
 		}, false)(msg.method, msg.paramsJson);
+
 		if (!gotAny)
-			trace("Discarding unknown notification: ", msg);
+			trace("No handlers for notification: ", msg);
 	}
 
 	void delegate() gotRequest(RequestMessageRaw msg)
