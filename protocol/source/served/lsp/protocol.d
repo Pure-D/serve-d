@@ -2056,6 +2056,12 @@ unittest
 }
 
 @serdeFallbackStruct
+@allowedMethods("initialized")
+struct InitializedParams
+{
+}
+
+@serdeFallbackStruct
 struct ServerWorkspaceCapabilities
 {
 	@serdeOptional Optional!WorkspaceFoldersServerCapabilities workspaceFolders;
