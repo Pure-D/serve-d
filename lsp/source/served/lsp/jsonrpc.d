@@ -900,7 +900,7 @@ struct WindowFunctions
 	{
 		auto res = rpc.sendRequest("window/showMessageRequest",
 				ShowMessageRequestParams(type, message, actions.opt));
-		if (!res.resultJson.length)
+		if (!res.resultJson.length || res.resultJson == `null`)
 			return MessageActionItem(null);
 		return res.resultJson.deserializeJson!MessageActionItem;
 	}
