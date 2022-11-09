@@ -62,8 +62,31 @@ mixin template ConfigHandler(TConfig)
 
 	private struct TConfigHolder
 	{
+		import std.array;
+
 		TConfig config;
 		alias config this;
+
+		private static void compare(string prefix, T)(ref Appender!(string[]) changed, ref T a, ref T b)
+		{
+			foreach (i, ref lhs; a.tupleof)
+			{
+				alias SubT = typeof(a.tupleof[i]);
+				// if the value is a simple struct, which is assumed to be user-defined, go through it
+				static if (is(SubT == struct)
+					&& __traits(getAliasThis, SubT).length == 0
+					&& !isVariant!SubT)
+				{
+					compare!(prefix ~ __traits(identifier, a.tupleof[i]) ~ ".")(changed,
+						a.tupleof[i], b.tupleof[i]);
+				}
+				else
+				{
+					if (a.tupleof[i] != b.tupleof[i])
+						changed ~= (prefix ~ __traits(identifier, a.tupleof[i]));
+				}
+			}
+		}
 
 		string[] replace(TConfig newConfig)
 		{
@@ -75,10 +98,11 @@ mixin template ConfigHandler(TConfig)
 
 		string[] replaceSection(size_t tupleOfIdx)(typeof(TConfig.tupleof[tupleOfIdx]) newValue)
 		{
-			auto ret = compare!(__traits(identifier, TConfig.tupleof[tupleOfIdx]) ~ ".")(
-				config.tupleof[tupleOfIdx], newValue);
+			auto ret = appender!(string[]);
+			compare!(__traits(identifier, TConfig.tupleof[tupleOfIdx]) ~ ".")(
+				ret, config.tupleof[tupleOfIdx], newValue);
 			config.tupleof[tupleOfIdx] = newValue;
-			return ret;
+			return ret.data;
 		}
 
 		string[] replaceAllSectionsJson(string[] settingJsons)

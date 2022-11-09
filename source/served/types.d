@@ -54,15 +54,6 @@ __gshared MonoTime startupTime;
 alias documents = lspRouter.documents;
 alias rpc = lspRouter.rpc;
 
-string[] compare(string prefix, T)(ref T a, ref T b)
-{
-	auto changed = appender!(string[]);
-	foreach (member; __traits(allMembers, T))
-		if (__traits(getMember, a, member) != __traits(getMember, b, member))
-			changed ~= (prefix ~ member);
-	return changed.data;
-}
-
 enum ManyProjectsAction : string
 {
 	ask = "ask",
