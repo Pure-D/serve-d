@@ -5,6 +5,7 @@ import served.types;
 import served.utils.fibermanager;
 import served.utils.progress;
 import served.utils.translate;
+import served.utils.serverconfig;
 
 public import served.utils.async;
 
@@ -46,65 +47,31 @@ public import served.commands.test_provider;
 public import served.workers.profilegc;
 public import served.workers.rename_listener;
 
-//dfmt off
-alias members = AliasSeq!(
-	__traits(derivedMembers, served.extension),
-	__traits(derivedMembers, served.commands.calltips),
-	__traits(derivedMembers, served.commands.code_actions),
-	__traits(derivedMembers, served.commands.code_lens),
-	__traits(derivedMembers, served.commands.color),
-	__traits(derivedMembers, served.commands.complete),
-	__traits(derivedMembers, served.commands.dcd_update),
-	__traits(derivedMembers, served.commands.definition),
-	__traits(derivedMembers, served.commands.dub),
-	__traits(derivedMembers, served.commands.file_search),
-	__traits(derivedMembers, served.commands.format),
-	__traits(derivedMembers, served.commands.highlight),
-	__traits(derivedMembers, served.commands.symbol_search),
-	__traits(derivedMembers, served.commands.test_provider),
-	__traits(derivedMembers, served.workers.profilegc),
-	__traits(derivedMembers, served.workers.rename_listener),
-);
-//dfmt on
-
 /// Set to true when shutdown is called
 __gshared bool shutdownRequested;
 
-struct ConfigWorkspace
-{
-	/// Workspace URI, resolved to a local workspace URI, or null if none found.
-	/// May be null for invalid workspaces or if this is the unnamed workspace.
-	/// Check `isUnnamedWorkspace` to see if this is the unnamed workspace.
-	string uri;
-	/// Only true _iff_ this config applies to the unnamed workspace (folder-less workspace)
-	bool isUnnamedWorkspace;
-	/// 0-based index which workspace is being processed out of the total count. (for progress reporting)
-	size_t index;
-	/// Number of workspaces which are being processed right now in total. (for progress reporting)
-	size_t numWorkspaces;
-
-	static ConfigWorkspace exactlyOne(string uri)
-	{
-		return ConfigWorkspace(uri, false, 0, 1);
-	}
-}
-
+@onConfigChanged
 void changedConfig(ConfigWorkspace target, string[] paths, served.types.Configuration config)
 {
 	StopWatch sw;
 	sw.start();
+
+	trace("Config for ", target, " changed: ", config);
 
 	reportProgress(ProgressType.configLoad, target.index, target.numWorkspaces, target.uri);
 
 	if (!target.uri.length)
 	{
 		if (!target.isUnnamedWorkspace)
+		{
 			error("Passed invalid empty workspace uri to changedConfig!");
+			return;
+		}
 		trace("Updated fallback config (user settings) for sections ", paths);
-		return;
+		target.uri = fallbackWorkspace.folder.uri;
 	}
 
-	if (!syncedConfiguration && !target.isUnnamedWorkspace)
+	if (!target.isUnnamedWorkspace)
 	{
 		syncedConfiguration = true;
 		ensureStartedUp();
@@ -233,169 +200,13 @@ void changedConfig(ConfigWorkspace target, string[] paths, served.types.Configur
 			" changes in ", sw.peek, ".");
 }
 
-@protocolNotification("workspace/didChangeConfiguration")
-void didChangeConfiguration(DidChangeConfigurationParams params)
+@onConfigFinished
+void configFinished(size_t num)
 {
-	processConfigChange(params.settings.parseConfiguration);
+	reportProgress(ProgressType.configFinish, num, num);
 }
 
-void processConfigChange(served.types.Configuration configuration)
-{
-	syncingConfiguration = true;
-	scope (exit)
-		syncingConfiguration = false;
-
-	if (!workspaces.length)
-	{
-		info("initializing config for temporary fallback workspace");
-		workspaces = [fallbackWorkspace];
-		workspaces[0].initialized = false;
-	}
-
-	if (capabilities
-		.workspace.orDefault
-		.configuration.orDefault
-		&& workspaces.length >= 2)
-	{
-		ConfigurationItem[] items;
-		items = getGlobalConfigurationItems(); // default workspace
-		const stride = configurationSections.length;
-
-		foreach (workspace; workspaces)
-			items ~= getConfigurationItems(workspace.folder.uri);
-
-		trace("Re-requesting configuration from client because there is more than 1 workspace");
-		auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
-
-		const expected = workspaces.length + 1;
-		string[] settings = res.validateConfigurationItemsResponse(expected);
-		if (!settings.length)
-			return;
-
-		for (size_t i = 0; i < expected; i++)
-		{
-			const isDefault = i == 0;
-			auto workspace = isDefault ? &fallbackWorkspace : &.workspace(items[i * stride].scopeUri.deref,
-					false);
-			string[] changed = workspace.config.replaceAllSectionsJson(settings[i * stride .. $]);
-			changedConfig(
-				ConfigWorkspace(
-					isDefault ? null : workspace.folder.uri,
-					isDefault,
-					i,
-					expected
-				), changed, workspace.config);
-		}
-	}
-	else if (workspaces.length)
-	{
-		if (workspaces.length > 1)
-			error(
-					"Client does not support configuration request, only applying config for first workspace.");
-		auto changed = workspaces[0].config.replace(configuration);
-		changedConfig(ConfigWorkspace.exactlyOne(workspaces[0].folder.uri), changed, workspaces[0].config);
-		fallbackWorkspace.config = workspaces[0].config;
-	}
-	else
-		error("unexpected state: got ", workspaces.length, " workspaces and ",
-				capabilities
-					.workspace.orDefault
-					.configuration.orDefault ? "" : "no ",
-				"configuration request support");
-	reportProgress(ProgressType.configFinish, 0, 0);
-}
-
-bool syncConfiguration(string workspaceUri, size_t index = 0, size_t numConfigs = 0)
-{
-	if (capabilities
-		.workspace.orDefault
-		.configuration.orDefault)
-	{
-		Workspace* proj = &workspace(workspaceUri);
-		if (proj is &fallbackWorkspace && workspaceUri.length)
-		{
-			error("Did not find workspace ", workspaceUri, " when syncing config?");
-			return false;
-		}
-
-		ConfigurationItem[] items;
-		if (workspaceUri.length)
-			items = getConfigurationItems(proj.folder.uri);
-		else
-			items = getGlobalConfigurationItems();
-
-		trace("Sending workspace/configuration request for ", workspaceUri);
-		auto res = rpc.sendRequest("workspace/configuration", ConfigurationParams(items));
-
-		string[] settings = res.validateConfigurationItemsResponse();
-		if (!settings.length)
-			return false;
-
-		string[] changed = proj.config.replaceAllSectionsJson(settings);
-		string uri = workspaceUri.length ? proj.folder.uri : null;
-		changedConfig(ConfigWorkspace(uri, workspaceUri.length == 0, index, numConfigs),
-			changed, proj.config);
-		return true;
-	}
-	else
-		return false;
-}
-
-ConfigurationItem[] getGlobalConfigurationItems()
-{
-	ConfigurationItem[] items = new ConfigurationItem[configurationSections.length];
-	foreach (i, section; configurationSections)
-		items[i] = ConfigurationItem(Optional!string.init, opt(section));
-	return items;
-}
-
-ConfigurationItem[] getConfigurationItems(DocumentUri uri)
-{
-	ConfigurationItem[] items = new ConfigurationItem[configurationSections.length];
-	foreach (i, section; configurationSections)
-		items[i] = ConfigurationItem(opt(uri), opt(section));
-	return items;
-}
-
-private string[] validateConfigurationItemsResponse(scope return ref ResponseMessageRaw res,
-		size_t expected = size_t.max)
-{
-	if (!res.resultJson.looksLikeJsonArray)
-	{
-		error("Got invalid configuration response from language client. (not an array)");
-		trace("Response: ", res);
-		return null;
-	}
-
-	string[] settings;
-	int i;
-	res.resultJson.visitJsonArray!(v => i++);
-	settings.length = i;
-	i = 0;
-	res.resultJson.visitJsonArray!(v => settings[i++] = v);
-
-	if (settings.length % configurationSections.length != 0)
-	{
-		error("Got invalid configuration response from language client. (invalid length)");
-		trace("Response: ", res);
-		return null;
-	}
-	if (expected != size_t.max)
-	{
-		auto total = settings.length / configurationSections.length;
-		if (total > expected)
-		{
-			warning("Loading different amount of workspaces than requested: requested ",
-					expected, " but loading ", total);
-		}
-		else if (total < expected)
-		{
-			error("Didn't get all configs we asked for: requested ", expected, " but loading ", total);
-			return null;
-		}
-	}
-	return settings;
-}
+mixin ConfigHandler!(served.types.Configuration);
 
 string[] getPossibleSourceRoots(string workspaceFolder)
 {
@@ -415,8 +226,6 @@ string[] getPossibleSourceRoots(string workspaceFolder)
 	return [workspaceFolder];
 }
 
-__gshared bool syncedConfiguration = false;
-__gshared bool syncingConfiguration = false;
 __gshared bool startedUp = false;
 InitializeResult initialize(InitializeParams params)
 {
@@ -431,27 +240,15 @@ InitializeResult initialize(InitializeParams params)
 	prettyPrintStruct!trace(params);
 
 	// need to use 2 .get on workspaceFolders because it's an Optional!(Nullable!(T[]))
-	if (params.workspaceFolders.isSet
-		&& !params.workspaceFolders.get.isNull
-		&& params.workspaceFolders.get.get.length > 0
-	)
-		workspaces = params.workspaceFolders.get.get
-			.map!(a => Workspace(a, served.types.Configuration.init))
-			.array;
-	else if (params.rootUri.length)
-		workspaces = [
-			Workspace(WorkspaceFolder(params.rootUri, "Root"), served.types.Configuration.init)
-		];
-	else if (params.rootPath.orDefault.length)
-		workspaces = [
-			Workspace(WorkspaceFolder(params.rootPath.deref.uriFromFile, "Root"),
-					served.types.Configuration.init)
-		];
+	workspaces = params.getWorkspaceFolders
+		.map!(a => Workspace(a))
+		.array;
 
 	if (workspaces.length)
 	{
 		fallbackWorkspace.folder = workspaces[0].folder;
 		fallbackWorkspace.initialized = true;
+		fallbackWorkspace.useGlobalConfig = true;
 	}
 	else
 	{
@@ -463,6 +260,7 @@ InitializeResult initialize(InitializeParams params)
 			mkdir(tmpFolder);
 		fallbackWorkspace.folder = WorkspaceFolder(tmpFolder.uriFromFile, "serve-d dummy tmp folder");
 		fallbackWorkspace.initialized = true;
+		fallbackWorkspace.useGlobalConfig = true;
 	}
 
 	InitializeResult result;
@@ -516,35 +314,6 @@ InitializeResult initialize(InitializeParams params)
 		};
 		result.serverInfo = serverInfo;
 	}
-
-	setTimeout({
-		if (!syncedConfiguration && !syncingConfiguration)
-		{
-			if (capabilities
-				.workspace.orDefault
-				.configuration.orDefault)
-			{
-				if (!syncConfiguration(null, 0, workspaces.length + 1))
-					error("Syncing user configuration failed!");
-
-				warning(
-					"Didn't receive any configuration notification, manually requesting all configurations now");
-
-				foreach (i, ref workspace; workspaces)
-					syncConfiguration(workspace.folder.uri, i + 1, workspaces.length + 1);
-			}
-			else
-			{
-				warning("This Language Client doesn't support configuration requests and also didn't send any ",
-					"configuration to serve-d. Initializing using default configuration");
-
-				changedConfig(ConfigWorkspace.exactlyOne(workspaces[0].folder.uri), null, workspaces[0].config);
-				fallbackWorkspace.config = workspaces[0].config;
-			}
-
-			reportProgress(ProgressType.configFinish, 0, 0);
-		}
-	}, 1000);
 
 	return result;
 }
@@ -1073,7 +842,7 @@ void didChangeWorkspaceFolders(DidChangeWorkspaceFoldersParams params)
 	foreach (i, toAdd; params.event.added)
 	{
 		workspaces ~= Workspace(toAdd);
-		syncConfiguration(toAdd.uri, i, params.event.added.length);
+		syncConfiguration(toAdd.uri, i, params.event.added.length, true);
 		doStartup(toAdd.uri);
 	}
 }
@@ -1261,3 +1030,26 @@ shared static ~this()
 	if (backend)
 		backend.shutdown();
 }
+
+// NOTE: members must be defined at the bottom of this file to make sure mixin
+// templates inside this file are included in it!
+//dfmt off
+alias members = AliasSeq!(
+	__traits(derivedMembers, served.extension),
+	__traits(derivedMembers, served.commands.calltips),
+	__traits(derivedMembers, served.commands.code_actions),
+	__traits(derivedMembers, served.commands.code_lens),
+	__traits(derivedMembers, served.commands.color),
+	__traits(derivedMembers, served.commands.complete),
+	__traits(derivedMembers, served.commands.dcd_update),
+	__traits(derivedMembers, served.commands.definition),
+	__traits(derivedMembers, served.commands.dub),
+	__traits(derivedMembers, served.commands.file_search),
+	__traits(derivedMembers, served.commands.format),
+	__traits(derivedMembers, served.commands.highlight),
+	__traits(derivedMembers, served.commands.symbol_search),
+	__traits(derivedMembers, served.commands.test_provider),
+	__traits(derivedMembers, served.workers.profilegc),
+	__traits(derivedMembers, served.workers.rename_listener),
+);
+//dfmt on

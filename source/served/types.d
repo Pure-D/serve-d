@@ -63,12 +63,6 @@ string[] compare(string prefix, T)(ref T a, ref T b)
 	return changed.data;
 }
 
-alias configurationTypes = AliasSeq!(Configuration.D, Configuration.DFmt,
-		Configuration.DScanner, Configuration.Editor, Configuration.Git);
-static immutable string[] configurationSections = [
-	"d", "dfmt", "dscanner", "editor", "git"
-];
-
 enum ManyProjectsAction : string
 {
 	ask = "ask",
@@ -179,175 +173,15 @@ struct Configuration
 				return [p.get!string.userPath];
 		}
 	}
-
-	string[] replace(Configuration newConfig)
-	{
-		string[] ret;
-		ret ~= replaceSection!"d"(newConfig.d);
-		ret ~= replaceSection!"dfmt"(newConfig.dfmt);
-		ret ~= replaceSection!"dscanner"(newConfig.dscanner);
-		ret ~= replaceSection!"editor"(newConfig.editor);
-		ret ~= replaceSection!"git"(newConfig.git);
-		return ret;
-	}
-
-	string[] replaceSection(string section : "d")(D newD)
-	{
-		auto ret = compare!"d."(d, newD);
-		d = newD;
-		return ret;
-	}
-
-	string[] replaceSection(string section : "dfmt")(DFmt newDfmt)
-	{
-		auto ret = compare!"dfmt."(dfmt, newDfmt);
-		dfmt = newDfmt;
-		return ret;
-	}
-
-	string[] replaceSection(string section : "dscanner")(DScanner newDscanner)
-	{
-		auto ret = compare!"dscanner."(dscanner, newDscanner);
-		dscanner = newDscanner;
-		return ret;
-	}
-
-	string[] replaceSection(string section : "editor")(Editor newEditor)
-	{
-		auto ret = compare!"editor."(editor, newEditor);
-		editor = newEditor;
-		return ret;
-	}
-
-	string[] replaceSection(string section : "git")(Git newGit)
-	{
-		auto ret = compare!"git."(git, newGit);
-		git = newGit;
-		return ret;
-	}
-
-	string[] replaceAllSectionsJson(string[] settingJsons)
-	{
-		assert(settingJsons.length >= configurationSections.length);
-		auto changed = appender!(string[]);
-		static foreach (n, section; configurationSections)
-		{{
-			auto json = settingJsons[n];
-			if (json == `null` || json.isEmptyJsonObject)
-				changed ~= this.replaceSection!section(configurationTypes[n].init);
-			else
-				changed ~= this.replaceSection!section(json.deserializeJson!(configurationTypes[n]));
-		}}
-		return changed.data;
-	}
-}
-
-Configuration parseConfiguration(JsonValue json)
-{
-	Configuration ret;
-	if (json.kind != JsonValue.Kind.object)
-	{
-		error("Configuration is not an object!");
-		return ret;
-	}
-
-	foreach (kv; json.get!(StringMap!JsonValue).byKeyValue)
-	{
-	SectionSwitch:
-		switch (kv.key)
-		{
-			static foreach (section; configurationSections)
-			{
-		case section:
-				__traits(getMember, ret, section) = kv.value.parseConfigurationSection!(
-						typeof(__traits(getMember, ret, section)))(kv.key);
-				break SectionSwitch;
-			}
-		default:
-			infof("Ignoring unknown configuration section '%s'", kv.key);
-			break;
-		}
-	}
-
-	return ret;
-}
-
-T parseConfigurationSection(T)(JsonValue json, string sectionKey)
-{
-	import std.traits : FieldNameTuple;
-
-	T ret;
-	if (json.kind != JsonValue.Kind.object)
-	{
-		error("Configuration is not an object!");
-		return ret;
-	}
-
-	foreach (kv; json.get!(StringMap!JsonValue).byKeyValue)
-	{
-	ConfigSwitch:
-		switch (kv.key)
-		{
-			static foreach (member; FieldNameTuple!T)
-			{
-		case member:
-				{
-					alias U = typeof(__traits(getMember, ret, member));
-					try
-					{
-						static if (__traits(compiles, { T t = null; }))
-						{
-							if (kv.value.kind == JsonValue.Kind.null_)
-							{
-								__traits(getMember, ret, member) = null;
-							}
-							else
-							{
-								static if (is(U : string))
-									__traits(getMember, ret, member) = cast(U) kv.value.get!string;
-								else
-									__traits(getMember, ret, member) = kv.value.jsonValueTo!U;
-							}
-						}
-						else
-						{
-							if (kv.value.kind == JsonValue.Kind.null_)
-							{
-								// ignore null value on non-nullable
-							}
-							else
-							{
-								static if (is(U : string))
-									__traits(getMember, ret, member) = cast(U) kv.value.get!string;
-								else
-									__traits(getMember, ret, member) = kv.value.jsonValueTo!U;
-							}
-						}
-					}
-					catch (Exception e)
-					{
-						errorf("Skipping unparsable configuration '%s.%s' which was expected to be of type %s parsed from %s: %s",
-								sectionKey, kv.key, U.stringof, kv.value.kind, e.msg);
-					}
-					break ConfigSwitch;
-				}
-			}
-		default:
-			warningf("Ignoring unknown configuration section '%s.%s'", sectionKey, kv.key);
-			break;
-		}
-	}
-
-	return ret;
 }
 
 struct Workspace
 {
 	WorkspaceFolder folder;
-	Configuration config;
 	bool initialized, disabled;
 	string[string] startupErrorNotifications;
 	bool selected;
+	bool useGlobalConfig;
 
 	void startupError(string folder, string error)
 	{
@@ -387,6 +221,14 @@ struct Workspace
 		state.initialized = initialized;
 		state.selected = selected;
 		return state;
+	}
+
+	ref inout(Configuration) config() inout
+	{
+		auto cfg = folder.uri in served.extension.perWorkspaceConfigurationStore;
+		if (!cfg || useGlobalConfig)
+			cfg = served.extension.globalConfiguration;
+		return cast(inout) cfg.config;
 	}
 }
 
@@ -550,11 +392,6 @@ bool hasWorkspace(string uri)
 
 ref Configuration config(string uri, bool userExecuted = true,
 		string file = __FILE__, size_t line = __LINE__)
-out (result)
-{
-	trace("Config for ", uri, ": ", result);
-}
-do
 {
 	return workspace(uri, userExecuted, file, line).config;
 }
