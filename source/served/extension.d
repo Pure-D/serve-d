@@ -226,7 +226,6 @@ string[] getPossibleSourceRoots(string workspaceFolder)
 	return [workspaceFolder];
 }
 
-__gshared bool startedUp = false;
 InitializeResult initialize(InitializeParams params)
 {
 	import served.info;
@@ -320,6 +319,7 @@ InitializeResult initialize(InitializeParams params)
 
 void ensureStartedUp()
 {
+	static __gshared bool startedUp = false;
 	if (startedUp)
 		return;
 	startedUp = true;
