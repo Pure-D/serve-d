@@ -187,6 +187,8 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 	bool emitProtocol(alias UDA, alias callback, bool returnFirst, Args...)(string method,
 			string params, Args availableExtraArgs)
 	{
+		ensureImpure();
+
 		return iterateExtensionMethodsByUDA!(UDA, (name, symbol, uda) {
 			if (uda.method == method)
 			{
@@ -239,6 +241,7 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 			string params)
 	{
 		import std.typecons : tuple;
+		ensureImpure();
 
 		T parseParam(T)()
 		{
@@ -321,10 +324,15 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 
 	bool emitExtensionEvent(alias UDA, Args...)(auto ref Args args)
 	{
+		ensureImpure();
 		return iterateExtensionMethodsByUDA!(UDA, (name, symbol, uda) {
 			symbol(forward!args);
 			return true;
 		}, false);
+	}
+
+	private static void ensureImpure() @nogc nothrow @safe
+	{
 	}
 
 	/// Iterates through all public methods in `ExtensionModule` annotated with the
