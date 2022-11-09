@@ -247,6 +247,8 @@ mixin template ConfigHandler(TConfig)
 				error("Did not find workspace ", workspaceUri, " when syncing config?");
 				return false;
 			}
+			else if (!proj)
+				proj = globalConfiguration;
 
 			ConfigurationItem[] items;
 			if (workspaceUri.length)
