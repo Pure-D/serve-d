@@ -634,48 +634,69 @@ void prettyPrintStruct(alias printFunc, T, int line = __LINE__, string file = __
 		if (is(T == struct))
 {
 	static foreach (i, member; T.tupleof)
-	{
+	{{
+		static if (isVariant!(typeof(member)))
 		{
-			static if (is(typeof(member) == Optional!U, U))
+			static if (is(typeof(member).AllowedTypes[0] == void))
 			{
-				if (value.tupleof[i].isNull)
-				{
-					printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
-							__traits(identifier, member), "?: <null>");
-				}
-				else
-				{
-					static if (is(U == struct))
-					{
+				// is optional
+				value.tupleof[i].match!(
+					() {
 						printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
-								__traits(identifier, member), "?:");
-						prettyPrintStruct!(printFunc, U, line, file, funcName, prettyFuncName, moduleName)(value.tupleof[i].get,
-								indent ~ "\t");
+								__traits(identifier, member), "?: <null>");
+					},
+					(val) {
+						static if (is(typeof(val) == struct))
+						{
+							printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
+									__traits(identifier, member), "?:");
+							prettyPrintStruct!(printFunc, typeof(val), line, file, funcName, prettyFuncName, moduleName)(
+									val, indent ~ "\t");
+						}
+						else
+						{
+							printFunc!(line, file, funcName, prettyFuncName, moduleName)(
+									indent, __traits(identifier, member), "?: ", val);
+						}
 					}
-					else
-					{
-						printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
-								__traits(identifier, member), "?: ", value.tupleof[i].get);
-					}
-				}
-			}
-			else static if (is(typeof(member) == JsonValue))
-			{
-				printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
-						__traits(identifier, member), ": ", value.tupleof[i].toString());
-			}
-			else static if (is(typeof(member) == struct))
-			{
-				printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
-						__traits(identifier, member), ":");
-				prettyPrintStruct!(printFunc, typeof(member), line, file, funcName,
-						prettyFuncName, moduleName)(value.tupleof[i], indent ~ "\t");
+				);
 			}
 			else
-				printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
-						__traits(identifier, member), ": ", value.tupleof[i]);
+			{
+				value.tupleof[i].match!(
+					(val) {
+						static if (is(typeof(val) == struct))
+						{
+							printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
+									__traits(identifier, member), ":");
+							prettyPrintStruct!(printFunc, typeof(val), line, file, funcName, prettyFuncName, moduleName)(
+									val, indent ~ "\t");
+						}
+						else
+						{
+							printFunc!(line, file, funcName, prettyFuncName, moduleName)(
+									indent, __traits(identifier, member), ": ", val);
+						}
+					}
+				);
+			}
 		}
-	}
+		else static if (is(typeof(member) == JsonValue))
+		{
+			printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
+					__traits(identifier, member), ": ", value.tupleof[i].toString());
+		}
+		else static if (is(typeof(member) == struct))
+		{
+			printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
+					__traits(identifier, member), ":");
+			prettyPrintStruct!(printFunc, typeof(member), line, file, funcName,
+					prettyFuncName, moduleName)(value.tupleof[i], indent ~ "\t");
+		}
+		else
+			printFunc!(line, file, funcName, prettyFuncName, moduleName)(indent,
+					__traits(identifier, member), ": ", value.tupleof[i]);
+	}}
 }
 
 /// Event called when all components have been registered but no workspaces have
