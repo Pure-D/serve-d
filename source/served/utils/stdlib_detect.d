@@ -4,10 +4,10 @@ import std.algorithm : countUntil, splitter, startsWith;
 import std.array : appender, replace;
 import std.ascii : isWhite;
 import std.conv : to;
-import std.experimental.logger : warning, trace;
-import std.path : buildNormalizedPath, baseName, buildPath, chainPath, dirName, stripExtension, isAbsolute;
+import std.experimental.logger : trace, warning;
+import std.path : baseName, buildNormalizedPath, buildPath, chainPath, dirName, isAbsolute, stripExtension;
 import std.process : environment;
-import std.string : indexOf, startsWith, strip, stripLeft;
+import std.string : endsWith, indexOf, startsWith, strip, stripLeft;
 import std.uni : sicmp;
 import std.utf : decode, UseReplacementDchar;
 
@@ -268,16 +268,28 @@ private string getUserHomeDirectoryLDC()
 	}
 }
 
-private string searchPathFor()(scope const(char)[] executable)
+string searchPathFor(scope const(char)[] executable)
 {
 	auto path = environment.get("PATH");
 
 	version (Posix)
-		char separator = ':';
+	{
+		enum char separator = ':';
+		enum string exeExt = "";
+	}
 	else version (Windows)
-		char separator = ';';
+	{
+		enum char separator = ';';
+		enum string exeExt = ".exe";
+	}
 	else
 		static assert(false, "No path separator character");
+
+	static if (exeExt.length)
+	{
+		if (!executable.endsWith(exeExt))
+			executable ~= exeExt;
+	}
 
 	foreach (dir; path.splitter(separator))
 	{

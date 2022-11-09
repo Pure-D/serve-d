@@ -336,8 +336,8 @@ void doGlobalStartup()
 
 		backend.globalConfiguration.base = [
 			"dcd": Configuration.Section([
-				"clientPath": Configuration.ValueT(firstConfig.d.dcdClientPath.userPath),
-				"serverPath": Configuration.ValueT(firstConfig.d.dcdServerPath.userPath),
+				"clientPath": Configuration.ValueT(firstConfig.dcdClientPath.userPath),
+				"serverPath": Configuration.ValueT(firstConfig.dcdServerPath.userPath),
 				"port": Configuration.ValueT(9166)
 			]),
 			"dmd": Configuration.Section([
@@ -512,8 +512,8 @@ void doStartup(string workspaceUri)
 		WConfiguration config;
 		config.base = [
 			"dcd": WConfiguration.Section([
-				"clientPath": WConfiguration.ValueT(proj.config.d.dcdClientPath.userPath),
-				"serverPath": WConfiguration.ValueT(proj.config.d.dcdServerPath.userPath),
+				"clientPath": WConfiguration.ValueT(proj.config.dcdClientPath.userPath),
+				"serverPath": WConfiguration.ValueT(proj.config.dcdServerPath.userPath),
 				"port": WConfiguration.ValueT(9166)
 			]),
 			"dmd": WConfiguration.Section([

@@ -147,7 +147,7 @@ struct Configuration
 	Editor editor;
 	Git git;
 
-	string[] stdlibPath(string cwd = null)
+	string[] stdlibPath(string cwd = null) const
 	{
 		auto p = d.stdlibPath;
 		if (p.kind == JsonValue.Kind.array)
@@ -163,6 +163,64 @@ struct Configuration
 			else
 				return [p.get!string.userPath];
 		}
+	}
+
+	string dcdClientPath() const
+	{
+		return detectDcdPath(d.dcdClientPath);
+	}
+
+	string dcdServerPath() const
+	{
+		return detectDcdPath(d.dcdServerPath);
+	}
+
+	private static string detectDcdPath(string path)
+	{
+		import served.extension : determineOutputFolder;
+		import served.utils.stdlib_detect : searchPathFor;
+
+		if (path != "dcd-server" && path != "dcd-client")
+		{
+			trace("using custom DCD provided from ", path);
+			return path;
+		}
+
+		// if any such executable is found in PATH, just return path and let the
+		// OS give us what it thinks it should be.
+		if (searchPathFor(path).length)
+			return path;
+
+		version (Windows)
+			auto exePath = withDefaultExtension(path, ".exe");
+		else
+			auto exePath = path;
+
+		auto outputFolder = determineOutputFolder;
+		if (fs.exists(outputFolder))
+		{
+			version (Windows)
+				static immutable searchPrefixes = ["", "DCD", "DCD\\bin"];
+			else
+				static immutable searchPrefixes = ["", "dcd", "DCD", "dcd/bin", "DCD/bin"];
+
+			foreach (prefix; ["", "dcd", "DCD", "dcd/bin", "DCD/bin"])
+			{
+				auto finalPath = buildPath(outputFolder, prefix, exePath);
+				if (fs.exists(finalPath))
+				{
+					trace("found previously installed DCD in ", finalPath);
+					return finalPath;
+				}
+			}
+		}
+		else
+		{
+			trace("no default output folder for DCD exists yet (", outputFolder,
+				"), going to ask the user for automatic installation soon");
+		}
+
+		return path;
 	}
 }
 
