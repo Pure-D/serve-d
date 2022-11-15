@@ -149,33 +149,38 @@ mixin template ConfigHandler(TConfig)
 	@protocolNotification("initialized")
 	void setupConfig_Initialized(InitializedParams params)
 	{
-		if (_hasConfigurationCapability)
-		{
+		import served.utils.async : setTimeout;
+
+		// add 250ms timeout after `initialized` notification to give clients
+		// the chance to send `workspace/didChangeConfiguration` proactively
+		// before requesting all configs ourselves.
+		enum waitTimeMs = 250;
+		setTimeout({
 			if (!syncedConfiguration && !syncingConfiguration)
 			{
-				if (!syncConfiguration(null, 0, perWorkspaceConfigurationStore.length + 1))
-					error("Syncing user configuration failed!");
+				if (_hasConfigurationCapability)
+				{
+					if (!syncConfiguration(null, 0, perWorkspaceConfigurationStore.length + 1))
+						error("Syncing user configuration failed!");
 
-				warning(
-					"Didn't receive any configuration notification, manually requesting all configurations now");
+					warning(
+						"Didn't receive any configuration notification, manually requesting all configurations now");
 
-				int i;
-				foreach (uri, cfg; perWorkspaceConfigurationStore)
-					syncConfiguration(uri, ++i, perWorkspaceConfigurationStore.length + 1);
+					int i;
+					foreach (uri, cfg; perWorkspaceConfigurationStore)
+						syncConfiguration(uri, ++i, perWorkspaceConfigurationStore.length + 1);
 
-				emitExtensionEvent!onConfigFinished(perWorkspaceConfigurationStore.length);
+					emitExtensionEvent!onConfigFinished(perWorkspaceConfigurationStore.length);
+				}
+				else
+				{
+					warning("This Language Client doesn't support configuration requests and also didn't send any "
+						~ "configuration to serve-d. Initializing using default configuration");
+
+					emitExtensionEvent!onConfigChanged(ConfigWorkspace.unnamedWorkspace, null, globalConfiguration.config);
+				}
 			}
-		}
-		else
-		{
-			if (!syncedConfiguration && !syncingConfiguration)
-			{
-				warning("This Language Client doesn't support configuration requests and also didn't send any "
-					~ "configuration to serve-d. Initializing using default configuration");
-
-				emitExtensionEvent!onConfigChanged(ConfigWorkspace.unnamedWorkspace, null, globalConfiguration.config);
-			}
-		}
+		}, waitTimeMs);
 	}
 
 	@protocolNotification("workspace/didChangeConfiguration")
