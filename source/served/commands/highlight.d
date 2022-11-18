@@ -12,14 +12,25 @@ import workspaced.com.dcdext;
 DocumentHighlight[] provideDocumentHighlight(DocumentHighlightParams params)
 {
 	scope document = cast(immutable)documents[params.textDocument.uri].clone();
-	string file = document.uri.uriToFile;
 	auto currOffset = cast(int) document.positionToBytes(params.position);
 
-	if (!backend.hasBest!DCDComponent(file))
+	auto result = documentHighlightImpl(document, currOffset);
+
+	if (!result.length)
 		return fallbackDocumentHighlight(document, currOffset);
 
-	DocumentHighlight[] result;
+	return result;
+}
+
+package DocumentHighlight[] documentHighlightImpl(scope ref immutable(Document) document, int currOffset)
+{
+	string file = document.uri.uriToFile;
 	string codeText = document.rawText;
+
+	if (!backend.hasBest!DCDComponent(file))
+		return null;
+
+	DocumentHighlight[] result;
 
 	Position cachePos;
 	size_t cacheBytes;
@@ -42,13 +53,10 @@ DocumentHighlight[] provideDocumentHighlight(DocumentHighlightParams params)
 		result ~= DocumentHighlight(TextRange(start, end), DocumentHighlightKind.read.opt);
 	}
 
-	if (!result.length)
-		return fallbackDocumentHighlight(document, currOffset);
-
 	return result;
 }
 
-private DocumentHighlight[] fallbackDocumentHighlight(scope ref immutable(Document) document, int currOffset)
+package DocumentHighlight[] fallbackDocumentHighlight(scope ref immutable(Document) document, int currOffset)
 {
 	string file = document.uri.uriToFile;
 	if (!backend.hasBest!DCDExtComponent(file))
