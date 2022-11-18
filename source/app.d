@@ -64,7 +64,10 @@ int main(string[] args)
 	debug globalLogLevel = LogLevel.trace;
 	else globalLogLevel = LogLevel.info;
 
-	sharedLog = new FileLogger(io.stderr);
+	static if (__VERSION__ < 2101)
+		sharedLog = new FileLogger(io.stderr);
+	else
+		sharedLog = (() @trusted => cast(shared) new FileLogger(io.stderr))();
 
 	bool printVer;
 	string[] features;
@@ -92,7 +95,11 @@ int main(string[] args)
 
 	void setLogFile(string option, string file)
 	{
-		sharedLog = new FileLogger(file, LogLevel.all, CreateFolder.no);
+		auto fileLogger = new FileLogger(file, LogLevel.all, CreateFolder.no);
+		static if (__VERSION__ < 2101)
+			sharedLog = fileLogger;
+		else
+			sharedLog = (() @trusted => cast(shared) fileLogger)();
 	}
 
 	//dfmt off

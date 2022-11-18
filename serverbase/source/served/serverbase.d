@@ -592,7 +592,10 @@ unittest
 	mixin LanguageServerRouter!(UTServer) server;
 
 	globalLogLevel = LogLevel.trace;
-	sharedLog = new FileLogger(io.stderr);
+	static if (__VERSION__ < 2101)
+		sharedLog = new FileLogger(io.stderr);
+	else
+		sharedLog = (() @trusted => cast(shared) new FileLogger(io.stderr))();
 
 	MockRPC mockRPC;
 	mockRPC.testRPC((rpc) {
