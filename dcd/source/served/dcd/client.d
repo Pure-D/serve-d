@@ -220,7 +220,37 @@ class ExternalDCDClient : IDCDClient
 
 	LocalUse requestLocalUse(CodeRequest loc)
 	{
-		return LocalUse.init; // TODO: implement
+		auto pipes = doClient([
+				"--localUse",
+				"-c", loc.cursorPosition.to!string
+			]);
+		scope (exit)
+		{
+			pipes.pid.wait();
+			pipes.destroy();
+		}
+		pipes.stdin.write(loc.sourceCode);
+		pipes.stdin.close();
+		
+		string header = (() @trusted => pipes.stdout.readln())().chomp;
+		if (header == "00000" || !header.length)
+			return LocalUse.init;
+
+		LocalUse ret;
+		auto headerParts = header.split('\t');
+		if (headerParts.length < 2)
+			return LocalUse.init;
+
+		ret.declarationFilePath = headerParts[0];
+		ret.declarationLocation = headerParts[1].length ? headerParts[1].to!size_t : 0;
+		while (pipes.stdout.isOpen && !pipes.stdout.eof)
+		{
+			string line = (() @trusted => pipes.stdout.readln())().chomp;
+			if (line.length == 0)
+				continue;
+			ret.uses ~= line.to!size_t;
+		}
+		return ret;
 	}
 
 	Completion requestAutocomplete(CodeRequest loc)
