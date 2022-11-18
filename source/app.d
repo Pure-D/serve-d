@@ -53,9 +53,24 @@ void printVersion(io.File output = io.stdout)
 	output.writefln("Included features: %(%s, %)", IncludedFeatures);
 	// There will always be a line which starts with `Built: ` forever, it is considered stable. If there is no line, assume version 0.1.2
 	output.writefln("Built: %s", __TIMESTAMP__);
+
+	version (AArch64)
+		string arch = "aarch64";
+	else version (ARM)
+		string arch = "arm";
+	else version (X86_64)
+		string arch = "x86_64";
+	else version (X86)
+		string arch = "x86";
+	else version (PPC64)
+		string arch = "ppc64";
+	else version (PPC)
+		string arch = "ppc";
+	else
+		string arch = "unknown arch";
 	output.writeln("with compiler ", Compiler.name, " v",
 			Compiler.version_major.to!string, ".", Compiler.version_minor.to!string,
-			" on ", OS.os.to!string, " ", OS.endian.to!string);
+			" on ", OS.os.to!string, " ", arch);
 	output.writefln(BundledDependencies);
 }
 
