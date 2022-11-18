@@ -42,6 +42,7 @@ public import served.commands.dub;
 public import served.commands.file_search;
 public import served.commands.format;
 public import served.commands.highlight;
+public import served.commands.rename;
 public import served.commands.symbol_search;
 public import served.commands.test_provider;
 public import served.workers.profilegc;
@@ -279,6 +280,9 @@ InitializeResult initialize(InitializeParams params)
 	ServerWorkspaceCapabilities workspaceCapabilities = {
 		workspaceFolders: workspaceFolderCapabilities
 	};
+	RenameOptions renameProvider = {
+		prepareProvider: true
+	};
 	ServerCapabilities serverCapabilities = {
 		textDocumentSync: documents.syncKind,
 		// only provide fixes when doCompleteSnippets is requested
@@ -294,6 +298,7 @@ InitializeResult initialize(InitializeParams params)
 		documentRangeFormattingProvider: true,
 		colorProvider: DocumentColorOptions.init,
 		documentHighlightProvider: true,
+		renameProvider: renameProvider,
 		workspace: workspaceCapabilities
 	};
 	result.capabilities = serverCapabilities;
@@ -1043,6 +1048,7 @@ alias members = AliasSeq!(
 	__traits(derivedMembers, served.commands.file_search),
 	__traits(derivedMembers, served.commands.format),
 	__traits(derivedMembers, served.commands.highlight),
+	__traits(derivedMembers, served.commands.rename),
 	__traits(derivedMembers, served.commands.symbol_search),
 	__traits(derivedMembers, served.commands.test_provider),
 	__traits(derivedMembers, served.workers.profilegc),
