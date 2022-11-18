@@ -216,6 +216,7 @@ class DCDComponent : ComponentWrapper
 		else
 			serverArgs = [serverPath, "--port", client.runningPort.to!string];
 
+		trace("Start dcd-server ", serverArgs);
 		serverPipes = raw(serverArgs ~ imports,
 				Redirect.stdin | Redirect.stderr | Redirect.stdoutToStderr);
 		while (!serverPipes.stderr.eof)
