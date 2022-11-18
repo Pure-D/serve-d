@@ -60,6 +60,8 @@ void changedConfig(ConfigWorkspace target, string[] paths, served.types.Configur
 
 	reportProgress(ProgressType.configLoad, target.index, target.numWorkspaces, target.uri);
 
+	ensureStartedUp(config);
+
 	if (!target.uri.length)
 	{
 		if (!target.isUnnamedWorkspace)
@@ -69,12 +71,6 @@ void changedConfig(ConfigWorkspace target, string[] paths, served.types.Configur
 		}
 		trace("Updated fallback config (user settings) for sections ", paths);
 		target.uri = fallbackWorkspace.folder.uri;
-	}
-
-	if (!target.isUnnamedWorkspace)
-	{
-		syncedConfiguration = true;
-		ensureStartedUp();
 	}
 
 	Workspace* proj = &workspace(target.uri);
@@ -92,7 +88,7 @@ void changedConfig(ConfigWorkspace target, string[] paths, served.types.Configur
 
 	if (!proj.initialized)
 	{
-		doStartup(proj.folder.uri);
+		doStartup(proj.folder.uri, config);
 		proj.initialized = true;
 	}
 
@@ -317,16 +313,16 @@ InitializeResult initialize(InitializeParams params)
 	return result;
 }
 
-void ensureStartedUp()
+void ensureStartedUp(UserConfiguration config)
 {
 	static __gshared bool startedUp = false;
 	if (startedUp)
 		return;
 	startedUp = true;
-	doGlobalStartup();
+	doGlobalStartup(config);
 }
 
-void doGlobalStartup()
+void doGlobalStartup(UserConfiguration config)
 {
 	import workspaced.backend : Configuration;
 
@@ -336,12 +332,12 @@ void doGlobalStartup()
 
 		backend.globalConfiguration.base = [
 			"dcd": Configuration.Section([
-				"clientPath": Configuration.ValueT(firstConfig.dcdClientPath.userPath),
-				"serverPath": Configuration.ValueT(firstConfig.dcdServerPath.userPath),
+				"clientPath": Configuration.ValueT(config.dcdClientPath.userPath),
+				"serverPath": Configuration.ValueT(config.dcdServerPath.userPath),
 				"port": Configuration.ValueT(9166)
 			]),
 			"dmd": Configuration.Section([
-				"path": Configuration.ValueT(firstConfig.d.dmdPath.userPath)
+				"path": Configuration.ValueT(config.d.dmdPath.userPath)
 			])
 		];
 
@@ -383,7 +379,7 @@ void doGlobalStartup()
 			dcdUpdating = true;
 			dcdUpdateReason = format!"DCD is outdated. Expected: %(%s.%), got %s"(
 					DCDComponent.latestKnownVersion, installed);
-			if (firstConfig.d.aggressiveUpdate)
+			if (config.d.aggressiveUpdate)
 				spawnFiber((&updateDCD).toDelegate);
 			else
 			{
@@ -478,9 +474,9 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 	return ret;
 }
 
-void doStartup(string workspaceUri)
+void doStartup(string workspaceUri, UserConfiguration userConfig)
 {
-	ensureStartedUp();
+	ensureStartedUp(userConfig);
 
 	Workspace* proj = &workspace(workspaceUri);
 	if (proj is &fallbackWorkspace)
@@ -843,7 +839,7 @@ void didChangeWorkspaceFolders(DidChangeWorkspaceFoldersParams params)
 	{
 		workspaces ~= Workspace(toAdd);
 		syncConfiguration(toAdd.uri, i, params.event.added.length, true);
-		doStartup(toAdd.uri);
+		doStartup(toAdd.uri, anyConfig);
 	}
 }
 

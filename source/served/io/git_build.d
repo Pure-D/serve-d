@@ -61,7 +61,7 @@ bool compileDependency(string cwd, string name, string gitURI, string[][] comman
 			}
 		}
 		auto ret = run([
-				firstConfig.git.userPath, "clone", "--recursive", "--depth=1", gitURI,
+				anyConfig.git.userPath, "clone", "--recursive", "--depth=1", gitURI,
 				name
 				], cwd);
 		if (ret != 0)

@@ -445,10 +445,10 @@ ref Configuration config(string uri, bool userExecuted = true,
 	return workspace(uri, userExecuted, file, line).config;
 }
 
-ref Configuration firstConfig()
+ref Configuration anyConfig()
 {
 	if (!workspaces.length)
-		throw new Exception("No config available");
+		return fallbackWorkspace.config;
 	return workspaces[0].config;
 }
 

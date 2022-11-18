@@ -158,6 +158,7 @@ mixin template ConfigHandler(TConfig)
 		setTimeout({
 			if (!syncedConfiguration && !syncingConfiguration)
 			{
+				syncedConfiguration = true;
 				if (_hasConfigurationCapability)
 				{
 					if (!syncConfiguration(null, 0, perWorkspaceConfigurationStore.length + 1))
@@ -199,7 +200,10 @@ mixin template ConfigHandler(TConfig)
 	{
 		syncingConfiguration = true;
 		scope (exit)
+		{
 			syncingConfiguration = false;
+			syncedConfiguration = true;
+		}
 
 		if (_hasConfigurationCapability && perWorkspaceConfigurationStore.length >= 2)
 		{

@@ -128,7 +128,7 @@ void updateDCD()
 		success = compileDependency(outputFolder, "DCD",
 				"https://github.com/dlang-community/DCD.git", [
 					[
-						firstConfig.git.userPath, "submodule", "update", "--init",
+						anyConfig.git.userPath, "submodule", "update", "--init",
 						"--recursive"
 					], ["dub", "build", "--config=client"],
 					["dub", "build", "--config=server"]
