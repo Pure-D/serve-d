@@ -968,6 +968,54 @@ class DCDExtComponent : ComponentWrapper
 		return ret;
 	}
 
+	FoldingRange[] getFoldingRanges(scope const(char)[] code)
+	{
+		auto ret = appender!(FoldingRange[]);
+		LexerConfig config = this.config;
+
+		config.whitespaceBehavior = WhitespaceBehavior.skip;
+		config.commentBehavior = CommentBehavior.noIntern;
+
+		auto tokens = appender!(Token[])();
+		auto lexer = DLexer(code, config, &workspaced.stringCache);
+		loop: foreach (token; lexer) switch (token.type)
+		{
+		case tok!"specialTokenSequence":
+		case tok!"whitespace":
+			break;
+		case tok!"comment":
+			auto commentText = token.text;
+			if (commentText.canFind("\n"))
+			{
+				ret ~= FoldingRange(
+					token.index,
+					token.index + token.text.length,
+					FoldingRangeType.comment
+				);
+			}
+			break;
+		case tok!"__EOF__":
+			break loop;
+		default:
+			tokens.put(token);
+			break;
+		}
+
+		if (!tokens.data.length)
+			return ret.data;
+
+		RollbackAllocator rba;
+		scope parsed = parseModule(tokens.data, "getFoldingRanges_input.d", &rba);
+
+		scope visitor = new FoldingRangeGenerator();
+		visitor.visit(parsed);
+		foreach (found; visitor.ranges.data)
+			if (found.start != -1 && found.end != -1)
+				ret ~= found;
+
+		return ret.data;
+	}
+
 	/// Formats DCD definitions (symbol declarations) in a readable format.
 	/// For functions this formats each argument in a separate line.
 	/// For other symbols the definition is returned as-is.
@@ -1289,6 +1337,27 @@ struct Related
 	size_t[2] range;
 }
 
+/// Represents the kind of folding range
+enum FoldingRangeType
+{
+	/// Represents a generic region, such as code blocks
+	region,
+	/// Emitted on comments that are larger than one line
+	comment,
+	/// TODO: Not emitted yet, going to be emitted on blocks of imports
+	imports,
+}
+
+/// Represents a folding range where code can be collapsed.
+struct FoldingRange
+{
+	/// Start and end byte positions (before the first character and after the
+	/// last character respectively)
+	size_t start, end;
+	/// Describes what kind of range this is.
+	FoldingRangeType type;
+}
+
 private:
 
 bool isCalltipable(IdType type)
@@ -1305,6 +1374,14 @@ int[2] tokenRange(const Token token)
 int tokenEnd(const Token token)
 {
 	return cast(int)(token.index + token.tokenText.length);
+}
+
+int tokenEnd(const Token[] token)
+{
+	if (token.length)
+		return tokenEnd(token[$ - 1]);
+	else
+		return -1;
 }
 
 int tokenIndex(const(Token)[] tokens, ptrdiff_t i)
@@ -2718,7 +2795,6 @@ unittest
 ]);
 }
 
-
 final class DeclarationFinder : ASTVisitor
 {
 	this(size_t targetPosition, bool includeDefinition)
@@ -2877,4 +2953,610 @@ unittest
 }`.normLF;
 	assert(dcdext.getDeclarationRange(tplCode, 9, false) == [0, 14]);
 	assert(dcdext.getDeclarationRange(tplCode, 9, true) == [0, tplCode.length]);
+}
+
+class FoldingRangeGenerator : ASTVisitor
+{
+	enum supressBlockMixin = `bool _supressTmp = suppressThisBlock; suppressThisBlock = true; scope (exit) suppressThisBlock = _supressTmp;`;
+	enum supressArgListMixin = `bool _supressTmp2 = suppressThisArgumentList; suppressThisArgumentList = true; scope (exit) suppressThisArgumentList = _supressTmp2;`;
+
+	Appender!(FoldingRange[]) ranges;
+	bool suppressThisBlock;
+	bool suppressThisArgumentList;
+	size_t lastCase = -1;
+
+	this()
+	{
+		ranges = appender!(FoldingRange[]);
+	}
+
+	alias visit = ASTVisitor.visit;
+
+	override void visit(const IfStatement stmt)
+	{
+		mixin(supressBlockMixin);
+
+		if (stmt.thenStatement && stmt.expression)
+			ranges.put(FoldingRange(
+				// go 1 token over length because that's our `)` token (which should exist because stmt.thenStatement is defined)
+				stmt.expression.tokens.ptr[stmt.expression.tokens.length].tokenEnd,
+				stmt.thenStatement.tokens.tokenEnd,
+				FoldingRangeType.region));
+
+		if (stmt.thenStatement && stmt.elseStatement)
+			ranges.put(FoldingRange(
+				// go 1 token over length because that's our `else` token (which should exist because stmt.elseStatement is defined)
+				stmt.thenStatement.tokens.ptr[stmt.thenStatement.tokens.length].tokenEnd,
+				stmt.elseStatement.tokens.tokenEnd,
+				FoldingRangeType.region));
+
+		stmt.accept(this);
+	}
+
+	override void visit(const ConditionalStatement stmt)
+	{
+		mixin(supressBlockMixin);
+
+		if (stmt.trueStatement && stmt.compileCondition)
+			ranges.put(FoldingRange(
+				stmt.compileCondition.tokens[$ - 1].tokenEnd,
+				stmt.trueStatement.tokens.tokenEnd,
+				FoldingRangeType.region));
+
+		if (stmt.trueStatement && stmt.falseStatement)
+			ranges.put(FoldingRange(
+				// go 1 token over length because that's our `else` token (which should exist because stmt.falseStatement is defined)
+				stmt.trueStatement.tokens.ptr[stmt.trueStatement.tokens.length].tokenEnd,
+				stmt.falseStatement.tokens.tokenEnd,
+				FoldingRangeType.region));
+
+		stmt.accept(this);
+	}
+
+	override void visit(const ConditionalDeclaration stmt)
+	{
+		mixin(supressBlockMixin);
+
+		if (stmt.trueDeclarations.length)
+		{
+			auto lastTrueConditionToken = &stmt.compileCondition.tokens[$ - 1];
+			// we go one over to see if there is a `:`
+			if (stmt.trueStyle == DeclarationListStyle.colon
+				&& lastTrueConditionToken[1].type == tok!":")
+				lastTrueConditionToken++;
+			ranges.put(FoldingRange(
+				(*lastTrueConditionToken).tokenEnd,
+				stmt.trueDeclarations[$ - 1].tokens.tokenEnd,
+				FoldingRangeType.region));
+		}
+
+		if (stmt.hasElse && stmt.falseDeclarations.length)
+		{
+			auto elseToken = &stmt.falseDeclarations[0].tokens[0];
+			foreach (i; 0 .. 4)
+			{
+				if ((*elseToken).type == tok!"else")
+					break;
+				elseToken--;
+			}
+			if ((*elseToken).type == tok!"else")
+			{
+				if (stmt.falseStyle == DeclarationListStyle.colon
+					&& elseToken[1].type == tok!":")
+					elseToken++;
+				ranges.put(FoldingRange(
+					(*elseToken).tokenEnd,
+					stmt.falseDeclarations[$ - 1].tokens.tokenEnd,
+					FoldingRangeType.region));
+			}
+		}
+
+		stmt.accept(this);
+	}
+
+	override void visit(const SwitchStatement stmt)
+	{
+		mixin(supressBlockMixin);
+
+		if (stmt.expression && stmt.statement)
+			ranges.put(FoldingRange(
+				// go 1 token over length because that's our `)` token (which should exist because stmt.statement is defined)
+				stmt.expression.tokens.ptr[stmt.expression.tokens.length].tokenEnd,
+				stmt.tokens.tokenEnd,
+				FoldingRangeType.region
+			));
+
+		stmt.accept(this);
+	}
+
+	static foreach (T; AliasSeq!(CaseStatement, DefaultStatement, CaseRangeStatement))
+		override void visit(const T stmt)
+		{
+			if (stmt.declarationsAndStatements && stmt.declarationsAndStatements.declarationsAndStatements.length)
+			{
+				if (lastCase != -1 && ranges.data[lastCase].end == stmt.tokens.tokenEnd)
+				{
+					// fallthrough from previous case, adjust range of it
+					ranges.data[lastCase].end = stmt.tokens.ptr[-1].tokenEnd;
+				}
+				lastCase = ranges.data.length;
+				ranges.put(FoldingRange(
+					stmt.colonLocation + 1,
+					stmt.tokens.tokenEnd,
+					FoldingRangeType.region
+				));
+			}
+
+			scope (exit)
+				lastCase = -1;
+
+			stmt.accept(this);
+		}
+
+	override void visit(const FunctionDeclaration decl)
+	{
+		mixin(supressBlockMixin);
+
+		if (decl.parameters)
+			ranges.put(FoldingRange(
+				decl.parameters.tokens.tokenEnd,
+				decl.tokens.tokenEnd,
+				FoldingRangeType.region
+			));
+
+		decl.accept(this);
+	}
+
+	override void visit(const Unittest decl)
+	{
+		mixin(supressBlockMixin);
+
+		size_t unittestTok = -1;
+		foreach (i, t; decl.tokens)
+		{
+			if (t.type == tok!"unittest")
+			{
+				unittestTok = i;
+				break;
+			}
+		}
+
+		if (unittestTok != -1)
+			ranges.put(FoldingRange(
+				decl.tokens[unittestTok].tokenEnd,
+				decl.tokens.tokenEnd,
+				FoldingRangeType.region
+			));
+
+		decl.accept(this);
+	}
+
+	static foreach (Ctor; AliasSeq!(Constructor, Postblit, Destructor))
+	override void visit(const Ctor stmt)
+	{
+		mixin(supressBlockMixin);
+
+		if (stmt.functionBody && stmt.functionBody.tokens.length)
+			ranges.put(FoldingRange(
+				stmt.functionBody.tokens.ptr[-1].tokenEnd,
+				stmt.functionBody.tokens[$ - 1].tokenEnd,
+				FoldingRangeType.region
+			));
+		
+		stmt.accept(this);
+	}
+
+	override void visit(const BlockStatement stmt)
+	{
+		auto localSuppress = suppressThisBlock;
+		if (!localSuppress)
+			ranges.put(FoldingRange(
+				stmt.startLocation,
+				stmt.endLocation,
+				FoldingRangeType.region
+			));
+		suppressThisBlock = false;
+		scope (exit)
+			suppressThisBlock = localSuppress;
+		stmt.accept(this);
+	}
+
+	static foreach (T; AliasSeq!(
+		ClassDeclaration,
+		UnionDeclaration,
+		StructDeclaration,
+		InterfaceDeclaration,
+		TemplateDeclaration
+	))
+		override void visit(const T decl)
+		{
+			mixin(supressBlockMixin);
+
+			size_t start = decl.name.tokenEnd;
+			if (decl.templateParameters)
+				start = decl.templateParameters.tokens.tokenEnd;
+
+			ranges.put(FoldingRange(
+				start,
+				decl.tokens.tokenEnd,
+				FoldingRangeType.region
+			));
+
+			decl.accept(this);
+		}
+
+	override void visit(const StructBody stmt)
+	{
+		auto localSuppress = suppressThisBlock;
+		if (!localSuppress)
+			ranges.put(FoldingRange(
+				stmt.startLocation,
+				stmt.endLocation,
+				FoldingRangeType.region
+			));
+		suppressThisBlock = false;
+		scope (exit)
+			suppressThisBlock = localSuppress;
+		stmt.accept(this);
+	}
+
+	override void visit(const EnumBody stmt)
+	{
+		ranges.put(FoldingRange(
+			stmt.tokens.ptr[-1].tokenEnd,
+			stmt.tokens[$ - 1].tokenEnd,
+			FoldingRangeType.region
+		));
+		stmt.accept(this);
+	}
+
+	override void visit(const StaticForeachDeclaration decl)
+	{
+		mixin(supressBlockMixin);
+
+		if (decl.declarations.length)
+		{
+			auto start = decl.declarations[0].tokens.ptr;
+			foreach (i; 0 .. 4)
+			{
+				start--;
+				if ((*start).type == tok!")")
+					break;
+			}
+			if ((*start).type == tok!")")
+			ranges.put(FoldingRange(
+					(*start).tokenEnd,
+				decl.tokens.tokenEnd,
+				FoldingRangeType.region
+			));
+		}
+
+		decl.accept(this);
+	}
+
+	static foreach (T; AliasSeq!(ForeachStatement, ForStatement, WhileStatement, WithStatement))
+		override void visit(const T stmt)
+		{
+			mixin(supressBlockMixin);
+
+			if (stmt.declarationOrStatement)
+				ranges.put(FoldingRange(
+					stmt.declarationOrStatement.tokens.ptr[-1].tokenEnd,
+					stmt.tokens.tokenEnd,
+					FoldingRangeType.region
+				));
+
+			stmt.accept(this);
+		}
+
+	override void visit(const DoStatement stmt)
+	{
+		mixin(supressBlockMixin);
+
+		if (stmt.statementNoCaseNoDefault && stmt.expression)
+			ranges.put(FoldingRange(
+				stmt.statementNoCaseNoDefault.tokens.ptr[-1].tokenEnd,
+				stmt.expression.tokens.ptr[-2].index,
+				FoldingRangeType.region
+			));
+
+		stmt.accept(this);
+	}
+
+	static foreach (T; AliasSeq!(ArrayLiteral, AssocArrayLiteral, ArrayInitializer, StructInitializer))
+		override void visit(const T literal)
+		{
+			mixin(supressArgListMixin);
+
+			if (literal.tokens.length > 2)
+				ranges.put(FoldingRange(
+					literal.tokens[0].tokenEnd,
+					literal.tokens[$ - 1].index,
+					FoldingRangeType.region
+				));
+
+			literal.accept(this);
+		}
+
+	override void visit(const AsmStatement stmt)
+	{
+		mixin(supressBlockMixin);
+
+		if (stmt.functionAttributes.length)
+			ranges.put(FoldingRange(
+				stmt.functionAttributes[$ - 1].tokens.tokenEnd,
+				stmt.tokens.tokenEnd,
+				FoldingRangeType.region
+			));
+		else if (stmt.tokens.length > 3)
+			ranges.put(FoldingRange(
+				stmt.tokens[0].tokenEnd,
+				stmt.tokens.tokenEnd,
+				FoldingRangeType.region
+			));
+
+		stmt.accept(this);
+	}
+
+	override void visit(const FunctionLiteralExpression expr)
+	{
+		mixin(supressBlockMixin);
+
+		if (expr.specifiedFunctionBody && expr.specifiedFunctionBody.tokens.length)
+			ranges.put(FoldingRange(
+				expr.specifiedFunctionBody.tokens[0].tokenEnd,
+				expr.specifiedFunctionBody.tokens[$ - 1].index,
+				FoldingRangeType.region
+			));
+
+		expr.accept(this);
+	}
+
+	static foreach (T; AliasSeq!(TemplateArgumentList, ArgumentList))
+		override void visit(const T stmt)
+		{
+			auto localSuppress = suppressThisArgumentList;
+			suppressThisArgumentList = false;
+			scope (exit)
+				suppressThisArgumentList = localSuppress;
+
+			stmt.accept(this);
+
+			// add this after other ranges (so they are prioritized)
+			if (!localSuppress && stmt.tokens.length && stmt.tokens[0].line != stmt.tokens[$ - 1].line)
+				ranges.put(FoldingRange(
+					stmt.tokens.ptr[-1].tokenEnd,
+					stmt.tokens[$ - 1].tokenEnd,
+					FoldingRangeType.region
+				));
+		}
+}
+
+unittest
+{
+	scope backend = new WorkspaceD();
+	auto workspace = makeTemporaryTestingWorkspace;
+	auto instance = backend.addInstance(workspace.directory);
+	backend.register!DCDExtComponent;
+	DCDExtComponent dcdext = instance.get!DCDExtComponent;
+
+	auto foldings = dcdext.getFoldingRanges(`/**
+ * This does foo
+ */
+void foo()
+{
+	foreach (a; b)
+		return;
+
+	if (foo)
+	{
+		if (bar)
+			doFoo();
+		else
+			doBar();
+		ok();
+	} else
+		doBaz();
+
+	void bar()
+	{
+		return;
+	}
+
+	switch (x)
+	{
+		case 1:
+		case 2:
+			writeln("1 or 2");
+			break;
+		case 3:
+			writeln("drei");
+			break;
+		default:
+			writeln("default");
+			break;
+	}
+
+	return;
+}`.normLF);
+
+	assert(foldings == [
+		FoldingRange(0, 24, FoldingRangeType.comment),
+		FoldingRange(35, 342),
+		FoldingRange(53, 63),
+		FoldingRange(74, 130),
+		FoldingRange(135, 146),
+		FoldingRange(88, 100),
+		FoldingRange(107, 119),
+		FoldingRange(159, 175),
+		FoldingRange(188, 330),
+		FoldingRange(211, 243),
+		FoldingRange(253, 283), // wrong case end
+		FoldingRange(294, 327),
+	], foldings.map!(to!string).join(",\n"));
+
+	assert(dcdext.getFoldingRanges(`unittest {
+}`.normLF) == [FoldingRange(8, 12)]);
+
+	assert(dcdext.getFoldingRanges(`unittest {
+	if (x)
+		y = z;
+}`.normLF)[1 .. $] == [FoldingRange(18, 27)], "if not folding properly");
+
+	assert(dcdext.getFoldingRanges(`unittest {
+	static if (x)
+		y = z;
+	else
+		bar = baz;
+}`.normLF)[1 .. 3] == [FoldingRange(25, 34), FoldingRange(40, 53)], "static if not folding properly");
+
+	assert(dcdext.getFoldingRanges(`struct S {
+	static if (x)
+		int z;
+	else
+		int baz;
+}`.normLF)[1 .. 3] == [FoldingRange(25, 34), FoldingRange(40, 51)], "static if (decl only) not folding properly");
+
+	assert(dcdext.getFoldingRanges(`unittest {
+	version (foo)
+		y = z;
+	else
+		bar = baz;
+}`.normLF)[1 .. 3] == [FoldingRange(25, 34), FoldingRange(40, 53)], "version not folding properly");
+
+	assert(dcdext.getFoldingRanges(`struct S {
+	version (foo)
+		int z;
+	else
+		int baz;
+}`.normLF)[1 .. 3] == [FoldingRange(25, 34), FoldingRange(40, 51)], "version (decl only) not folding properly");
+
+	assert(dcdext.getFoldingRanges(`unittest {
+	debug (foooo)
+		y = z;
+	else
+		bar = baz;
+}`.normLF)[1 .. 3] == [FoldingRange(25, 34), FoldingRange(40, 53)], "debug not folding properly");
+
+	assert(dcdext.getFoldingRanges(`struct S {
+	debug (foooo)
+		int z;
+	else
+		int baz;
+}`.normLF)[1 .. 3] == [FoldingRange(25, 34), FoldingRange(40, 51)], "debug (decl only) not folding properly");
+
+	assert(dcdext.getFoldingRanges(`unittest {
+	foreach (x; y) {
+		foo();
+	}
+}`.normLF)[1 .. $] == [FoldingRange(26, 40)], "foreach not folding properly");
+
+	assert(dcdext.getFoldingRanges(`struct S {
+	static foreach (x; y) {
+		int x;
+	}
+}`.normLF)[1 .. $] == [FoldingRange(33, 47)], "static foreach (decl only) not folding properly");
+
+	assert(dcdext.getFoldingRanges(`unittest {
+	static foreach (x; y) {
+		foo();
+	}
+}`.normLF)[1 .. $] == [FoldingRange(33, 47)], "static foreach not folding properly");
+
+	assert(dcdext.getFoldingRanges(`unittest {
+	for (int i = 0; i < 10; i++) {
+		foo();
+	}
+}`.normLF)[1 .. $] == [FoldingRange(40, 54)], "for loop not folding properly");
+
+	assert(dcdext.getFoldingRanges(`unittest {
+	while (x) {
+		foo();
+	}
+}`.normLF)[1 .. $] == [FoldingRange(21, 35)], "while loop not folding properly");
+
+	assert(dcdext.getFoldingRanges(`unittest {
+	do {
+		foo();
+	} while (x);
+}`.normLF)[1 .. $] == [FoldingRange(14, 29)], "do-while not folding properly");
+
+	assert(dcdext.getFoldingRanges(`unittest {
+	with (Foo) {
+		bar();
+	}
+}`.normLF)[1 .. $] == [FoldingRange(22, 36)], "with not folding properly");
+
+	assert(dcdext.getFoldingRanges(`unittest {
+	int[] x = [
+		1,
+		2,
+		3
+	];
+}`.normLF)[1 .. $] == [FoldingRange(23, 39)], "array not folding properly");
+
+	assert(dcdext.getFoldingRanges(`unittest {
+	int[string] x = [
+		"a": 1,
+		"b": 2,
+		"c": 3,
+	];
+}`.normLF)[1 .. $] == [FoldingRange(29, 61)], "AA not folding properly");
+
+	assert(dcdext.getFoldingRanges(`unittest {
+	Foo foo = {
+		a: 1,
+		b: 2,
+		c: 3
+	};
+}`.normLF)[1 .. $] == [FoldingRange(23, 48)], "struct initializer not folding properly");
+
+	// TODO: asm folding not working properly yet
+	assert(dcdext.getFoldingRanges(`unittest {
+	asm {
+		nop;
+	}
+}`.normLF)[1 .. $] == [FoldingRange(15, 27)], "asm not folding properly");
+
+	assert(dcdext.getFoldingRanges(`unittest {
+	asm nothrow {
+		nop;
+	}
+}`.normLF)[1 .. $] == [FoldingRange(23, 35)], "asm with attributes not folding properly");
+
+	assert(dcdext.getFoldingRanges(`unittest {
+	foo(() {
+		bar();
+	}, () {
+		baz();
+	});
+}`.normLF)[1 .. $] == [FoldingRange(20, 31), FoldingRange(38, 49), FoldingRange(16, 50)], "delegate not folding properly");
+
+	assert(dcdext.getFoldingRanges(`unittest {
+	tp!(() {
+		bar();
+	}, () {
+		baz();
+	});
+}`.normLF)[1 .. $] == [FoldingRange(20, 31), FoldingRange(38, 49), FoldingRange(16, 50)], "delegate (template) not folding properly");
+
+	assert(dcdext.getFoldingRanges(`struct Foo {
+	int a;
+}`.normLF) == [FoldingRange(10, 22)], "struct not folding properly");
+
+	assert(dcdext.getFoldingRanges(`enum Foo {
+	a,
+	b,
+	c
+}`.normLF) == [FoldingRange(8, 23)], "enum not folding properly");
+
+	assert(dcdext.getFoldingRanges(`unittest {
+	writeln(
+		"hello",
+		"world"
+	);
+}`.normLF)[1 .. $] == [
+	FoldingRange(20, 41),
+], "multi-line call not folding properly");
+
 }
