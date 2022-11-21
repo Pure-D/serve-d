@@ -594,6 +594,15 @@ interface ProfileGCEntry
 }
 ```
 
+#### Notification `served/didConfigurationChange`
+
+**Params**: Exactly as for `workspace/didConfigurationChange`
+
+This notification triggers the use of alternate configuration notifications.
+Once this is received, the server will ignore `workspace/didConfigurationChange`
+notifications.  This mechanisms exists to support some client/plugin combinations
+where the plugin needs more direct control over the configuration.
+
 ------
 
 #### Client notification `coded/updateSetting`
