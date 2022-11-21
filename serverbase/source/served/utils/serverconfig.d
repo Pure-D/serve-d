@@ -129,7 +129,7 @@ mixin template ConfigHandler(TConfig)
 
 	private __gshared bool _hasConfigurationCapability = false;
 
-	__gshared bool nonStandardConfiguration = false;
+	private __gshared bool nonStandardConfiguration = false;
 
 	@postProtocolMethod("initialize")
 	void postInit_setupConfig(InitializeParams params)
