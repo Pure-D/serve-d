@@ -47,7 +47,7 @@ struct ConfigWorkspace
 
 	string toString() const @safe {
 		import std.conv : text;
-	
+
 		return isUnnamedWorkspace
 			? "(unnamed workspace)"
 			: uri;
@@ -129,6 +129,8 @@ mixin template ConfigHandler(TConfig)
 
 	private __gshared bool _hasConfigurationCapability = false;
 
+	private __gshared bool nonStandardConfiguration = false;
+
 	@postProtocolMethod("initialize")
 	void postInit_setupConfig(InitializeParams params)
 	{
@@ -188,10 +190,25 @@ mixin template ConfigHandler(TConfig)
 	void didChangeConfiguration(RootJsonToken params)
 	{
 		import std.exception;
-
+		if (nonStandardConfiguration) { // client prefers non-standard API
+			return;
+		}
 		enforce(params.json.looksLikeJsonObject, "invalid non-object parameter to didChangeConfiguration");
 		auto settings = params.json.parseKeySlices!"settings".settings;
 		enforce(settings.length, `didChangeConfiguration must contain a "settings" key`);
+
+		processConfigChange(settings.deserializeJson!TConfig);
+	}
+
+	@protocolNotification("served/didChangeConfiguration")
+	void didChangeConfigurationNonStd(RootJsonToken params)
+	{
+		import std.exception;
+		info("switching to nonstandard configuration mechanism");
+		nonStandardConfiguration = true; // client prefers non-standard API
+		enforce(params.json.looksLikeJsonObject, "invalid non-object parameter to served/didChangeConfiguration");
+		auto settings = params.json.parseKeySlices!"settings".settings;
+		enforce(settings.length, `served/didChangeConfiguration must contain a "settings key"`);
 
 		processConfigChange(settings.deserializeJson!TConfig);
 	}
