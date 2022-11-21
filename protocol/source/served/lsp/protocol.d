@@ -2237,13 +2237,12 @@ struct DidChangeConfigurationClientCapabilities
 /// You might want to use `RootJsonToken` instead of this type if you want to
 /// deserialize your custom config types.
 @serdeFallbackStruct
-@allowedMethods("workspace/didChangeConfiguration", "served/didChangeConfiguration")
+@allowedMethods("workspace/didChangeConfiguration")
 struct DidChangeConfigurationParams
 {
 	JsonValue settings;
 }
 
-@serdeFallbackStruct
 @serdeFallbackStruct
 @allowedMethods("workspace/configuration")
 struct ConfigurationParams
