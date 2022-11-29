@@ -182,6 +182,12 @@ int main(string[] args)
 			doCompleteSnippets = true;
 			trace("Context snippets handled by serve-d");
 			break;
+		case "default-snippets":
+			import served.extension : registerDefaultSnippets;
+
+			registerDefaultSnippets = true;
+			trace("Some dependency snippets will be registered by serve-d");
+			break;
 		case "test-runner":
 			import served.commands.test_provider : doTrackTests;
 

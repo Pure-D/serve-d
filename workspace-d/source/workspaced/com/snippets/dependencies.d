@@ -7,20 +7,21 @@ import workspaced.com.snippets;
 import std.algorithm;
 
 ///
-alias SnippetList = PlainSnippet[];
+alias SnippetList = const(PlainSnippet)[];
 
 /// A list of dependencies usable in an associative array
 struct DependencySet
 {
-	string[] sorted;
+	private string[] sorted;
 
-	void set(string[] deps)
+	void set(scope const(string)[] deps)
 	{
-		deps.sort!"a<b";
-		sorted = deps;
+		sorted.length = deps.length;
+		sorted[] = deps;
+		sorted.sort!"a<b";
 	}
 
-	bool hasAll(string[] deps) const
+	bool hasAll(scope string[] deps) const
 	{
 		deps.sort!"a<b";
 		int a, b;
@@ -57,11 +58,30 @@ struct DependencySet
 	}
 }
 
+/// Representation for a plain snippet with required dependencies. Maps to the
+/// parameters of `DependencyBasedSnippetProvider.addSnippet`.
+struct DependencySnippet
+{
+	///
+	const(string)[] requiredDependencies;
+	///
+	PlainSnippet snippet;
+}
+
+/// ditto
+struct DependencySnippets
+{
+	///
+	const(string)[] requiredDependencies;
+	///
+	const(PlainSnippet)[] snippets;
+}
+
 class DependencyBasedSnippetProvider : SnippetProvider
 {
 	SnippetList[DependencySet] snippets;
 
-	void addSnippet(string[] requiredDependencies, PlainSnippet snippet)
+	void addSnippet(const(string)[] requiredDependencies, const PlainSnippet snippet)
 	{
 		DependencySet set;
 		set.set(requiredDependencies);

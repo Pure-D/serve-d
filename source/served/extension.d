@@ -318,6 +318,9 @@ InitializeResult initialize(InitializeParams params)
 	return result;
 }
 
+/// Whether to register default dependency snippets
+__gshared bool registerDefaultSnippets = false;
+
 void ensureStartedUp(UserConfiguration config)
 {
 	static __gshared bool startedUp = false;
@@ -372,6 +375,14 @@ void doGlobalStartup(UserConfiguration config)
 		backend.register!ModulemanComponent;
 		trace("Starting snippets");
 		backend.register!SnippetsComponent;
+
+		if (registerDefaultSnippets)
+		{
+			if (!backend.has!SnippetsComponent)
+				error("SnippetsComponent failed to initialize, can't register default snippets");
+			else
+				backend.get!SnippetsComponent.registerBuiltinDependencySnippets();
+		}
 
 		if (!backend.has!DCDComponent || backend.get!DCDComponent.isOutdated)
 		{

@@ -17,10 +17,10 @@ import std.json;
 import std.string;
 import std.typecons;
 
+public import workspaced.com.snippets.control_flow;
+public import workspaced.com.snippets.dependencies;
 public import workspaced.com.snippets.plain;
 public import workspaced.com.snippets.smart;
-public import workspaced.com.snippets.dependencies;
-public import workspaced.com.snippets.control_flow;
 
 // ugly, but works for now
 import mir.algebraic_alias.json : JsonValue = JsonAlgebraic;
@@ -602,10 +602,20 @@ class SnippetsComponent : ComponentWrapper
 	/// Params:
 	///   requiredDependencies = The dependencies which must be present in order for this snippet to show up.
 	///   snippet = The snippet to suggest when the required dependencies are matched.
-	void addDependencySnippet(string[] requiredDependencies, PlainSnippet snippet)
+	void addDependencySnippet(scope const string[] requiredDependencies, const PlainSnippet snippet)
 	{
 		// maybe application global change isn't such a good idea? Current config system seems too inefficient for this.
 		dependencySnippets.addSnippet(requiredDependencies, snippet);
+	}
+
+	/// Registers snippets for a variety of popular DUB dependencies.
+	void registerBuiltinDependencySnippets()
+	{
+		import workspaced.com.snippets.external_builtin;
+
+		foreach (group; builtinDependencySnippets)
+			foreach (snippet; group.snippets)
+				addDependencySnippet(group.requiredDependencies, snippet);
 	}
 
 private:
