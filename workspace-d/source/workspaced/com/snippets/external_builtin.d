@@ -106,7 +106,7 @@ static immutable PlainSnippet[] builtinMirSerdeSnippets = [
 		documentation: "Custom mir-ion struct serializion code.\n\n"
 			~ "**Note:** a proxy might achieve the same thing if you just want to "
 			~ "serialize a single member.",
-		snippet: "void serialize(S)(scope ref S serializer) const @safe pure scope {\n"
+		snippet: "void serialize(S)(scope ref S serializer) const scope {\n"
 			~ "\timport mir.ser : serializeValue;\n"
 			~ "\n"
 			~ "\tserializeValue(serializer, ${1:this.impl});$0\n"
