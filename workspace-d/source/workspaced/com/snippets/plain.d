@@ -22,6 +22,8 @@ struct PlainSnippet
 	string plain;
 	/// true if this snippet shouldn't be formatted before inserting.
 	bool unformatted;
+	/// List of imports that should get imported with this snippet. (e.g. using the `ImporterComponent`)
+	string[] imports;
 
 	/// Creates a resolved snippet based on this plain snippet, filling in plain if neccessary. This drops the levels value.
 	/// Params:
@@ -38,6 +40,8 @@ struct PlainSnippet
 			: this.snippet.replaceAll(ctRegex!`\$(\d+|[A-Z_]+|\{.*?\})`, "");
 		built.resolved = true;
 		built.unformatted = unformatted;
+		if (imports.length)
+			built.imports = imports.dup;
 		return built;
 	}
 }

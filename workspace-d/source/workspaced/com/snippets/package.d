@@ -758,4 +758,6 @@ struct Snippet
 	bool resolved;
 	/// true if this snippet shouldn't be formatted.
 	bool unformatted;
+	/// List of imports that should be imported when using this snippet.
+	string[] imports;
 }

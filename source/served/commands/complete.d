@@ -11,6 +11,7 @@ import workspaced.com.dfmt : DfmtComponent;
 import workspaced.com.dcd;
 import workspaced.com.dcdext;
 import workspaced.com.snippets;
+import workspaced.com.importer;
 import workspaced.coms;
 
 import std.algorithm : among, any, canFind, chunkBy, endsWith, filter, findSplit,
@@ -809,6 +810,8 @@ private SnippetInfo provideSnippetComplete(TextDocumentPositionParams params, Wo
 		data["uri"] = JsonValue(params.textDocument.uri);
 		data["line"] = JsonValue(params.position.line);
 		data["column"] = JsonValue(params.position.character);
+		if (snippet.imports.length)
+			data["imports"] = JsonValue(snippet.imports.map!(i => JsonValue(i)).array);
 		item.data = JsonValue(data);
 		completion ~= item;
 	}
@@ -889,29 +892,55 @@ CompletionItem resolveCompletionItem(CompletionItem item)
 {
 	auto data = item.data;
 
-	if (item.insertTextFormat.orDefault == InsertTextFormat.snippet
-		&& item.kind.orDefault == CompletionItemKind.snippet
-		&& !data.isNone)
+	if (!data.isNone)
 	{
 		auto object = data.deref.get!(StringMap!JsonValue);
 		const resolved = "resolved" in object;
-		if (resolved && !resolved.get!bool)
+		const uriObj = "uri" in object;
+		const lineObj = "line" in object;
+		const columnObj = "column" in object;
+
+		if (uriObj && lineObj && columnObj)
 		{
-			auto uri = object["uri"].get!string;
-			auto line = cast(uint)object["line"].get!long;
-			auto column = cast(uint)object["column"].get!long;
+			auto uri = uriObj.get!string;
+			auto line = cast(uint)lineObj.get!long;
+			auto column = cast(uint)columnObj.get!long;
 
 			Document document = documents[uri];
 			auto f = document.uri.uriToFile;
 			auto instance = backend.getBestInstance(f);
 
-			if (instance.has!SnippetsComponent)
+			if (resolved && !resolved.get!bool)
 			{
-				auto snippets = instance.get!SnippetsComponent;
-				auto snippet = snippetFromCompletionItem(item);
-				snippet = snippets.resolveSnippet(f, document.rawText,
-						cast(int) document.positionToBytes(Position(line, column)), snippet).getYield;
-				item = snippetToCompletionItem(snippet);
+				if (instance.has!SnippetsComponent)
+				{
+					auto snippets = instance.get!SnippetsComponent;
+					auto snippet = snippetFromCompletionItem(item);
+					snippet = snippets.resolveSnippet(f, document.rawText,
+							cast(int) document.positionToBytes(Position(line, column)), snippet).getYield;
+					item = snippetToCompletionItem(snippet);
+				}
+			}
+
+			if (const importsJson = "imports" in object)
+			{
+				if (instance.has!ImporterComponent)
+				{
+					auto importer = instance.get!ImporterComponent;
+					TextEdit[] additionalEdits = item.additionalTextEdits.orDefault;
+					auto imports = importsJson.get!(JsonValue[]);
+					foreach (importJson; imports)
+					{
+						string importName = importJson.get!string;
+						auto importInfo = importer.add(importName, document.rawText,
+								cast(int) document.positionToBytes(Position(line, column)));
+						// TODO: use renamed imports properly
+						foreach (edit; importInfo.replacements)
+							additionalEdits ~= edit.toTextEdit(document);
+					}
+					additionalEdits.sort!"a.range.start>b.range.start";
+					item.additionalTextEdits = additionalEdits;
+				}
 			}
 		}
 
@@ -931,7 +960,6 @@ CompletionItem resolveCompletionItem(CompletionItem item)
 			}
 		}
 
-		// TODO: format code
 		return item;
 	}
 	else

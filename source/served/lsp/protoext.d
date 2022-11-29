@@ -1,6 +1,9 @@
 module served.lsp.protoext;
 
 import served.lsp.protocol;
+import served.lsp.textdocumentmanager;
+
+import workspaced.api : CodeReplacement;
 
 import mir.serde;
 
@@ -230,6 +233,8 @@ struct SerializablePlainSnippet
 	@serdeOptional string plain;
 	/// true if this snippet shouldn't be formatted before inserting.
 	@serdeOptional bool unformatted;
+	/// List of imports that should get imported with this snippet. (done in resolveComplete)
+	string[] imports;
 }
 
 /// Parameters to pass when updating dub imports
@@ -321,4 +326,16 @@ struct ArchType
 	string value;
 	/// UI label override or null if none
 	string label;
+}
+
+/// Converts the given workspace-d CodeReplacement to an LSP TextEdit
+TextEdit toTextEdit(CodeReplacement replacement, scope const ref Document d)
+{
+	size_t lastIndex;
+	Position lastPosition;
+
+	auto startPos = d.nextPositionBytes(lastPosition, lastIndex, replacement.range[0]);
+	auto endPos = d.nextPositionBytes(lastPosition, lastIndex, replacement.range[1]);
+
+	return TextEdit([startPos, endPos], replacement.content);
 }
