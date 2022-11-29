@@ -83,9 +83,11 @@ If this is not set, an internal download function is used which calls `coded/log
 
 If this is set, the `served/implementMethods` request will return TextEdits with snippet strings inside of them as defined by vscode.
 
-**`--provide context-snippets`**
+**`--provide context-snippets --provide default-snippets`**
 
-If this is set, auto completion requests will also return built-in and custom defined snippets.
+If this is set, auto completion requests will also return built-in and custom defined snippets. Will register snippets for popular DUB dependencies that are built into serve-d.
+
+NOTE: these flags will be enabled by default in serve-d v0.9.0 and become obsolete then.
 
 <!-- TODO: --provide test-runner + commands to implement -->
 
