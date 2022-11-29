@@ -67,7 +67,7 @@ static immutable PlainSnippet[] builtinMirSerdeSnippets = [
 			~ "\timport mir.ion.type_code : IonTypeCode;\n"
 			~ "\n"
 			~ "\tif (value.descriptor.type == IonTypeCode.struct_) {\n"
-			~ "\t\t${1:this.impl} = deserializeIon!${2:DeserializeType}(symbolTable, value);\n"
+			~ "\t\t${1:this.impl} = deserializeIon!${2:DeserializeType}(symbolTable, value);$0\n"
 			~ "\t} else {\n"
 			~ "\t\treturn ionException(IonErrorCode.expectedStructValue);\n"
 			~ "\t}\n"
