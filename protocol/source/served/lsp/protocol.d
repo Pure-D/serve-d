@@ -1879,7 +1879,7 @@ struct GeneralClientCapabilities
 struct RegularExpressionsClientCapabilities
 {
 	string engine;
-	@serdeKeys("version") Optional!string version_;
+	@serdeKeys("version") @serdeOptional Optional!string version_;
 }
 
 unittest
