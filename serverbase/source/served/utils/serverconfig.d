@@ -213,7 +213,7 @@ mixin template ConfigHandler(TConfig)
 		processConfigChange(settings.deserializeJson!TConfig);
 	}
 
-	void processConfigChange(TConfig configuration)
+	private void processConfigChange(TConfig configuration, bool allowConfigurationRequest = true)
 	{
 		syncingConfiguration = true;
 		scope (exit)
@@ -222,7 +222,9 @@ mixin template ConfigHandler(TConfig)
 			syncedConfiguration = true;
 		}
 
-		if (_hasConfigurationCapability && perWorkspaceConfigurationStore.length >= 2)
+		if (_hasConfigurationCapability
+			&& allowConfigurationRequest
+			&& perWorkspaceConfigurationStore.length >= 2)
 		{
 			ConfigurationItem[] items;
 			items = getGlobalConfigurationItems(); // default workspace
@@ -237,7 +239,10 @@ mixin template ConfigHandler(TConfig)
 			const expected = perWorkspaceConfigurationStore.length + 1;
 			string[] settings = validateConfigurationItemsResponse(res, expected);
 			if (!settings.length)
-				return;
+			{
+				trace("Config request failed, so falling back to global config...");
+				return processConfigChange(configuration, false);
+			}
 
 			for (size_t i = 0; i < expected; i++)
 			{
