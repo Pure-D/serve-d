@@ -68,8 +68,16 @@ void main()
 	}
 	else version (OSX)
 	{
-		string zip = "dcd-v" ~ ver ~ "-osx-x86_64.tar.gz";
-		string url = format!"https://github.com/dlang-community/DCD/releases/download/v%s/dcd-v%s-osx-x86_64.tar.gz"(ver, ver);
+		version (AArch64)
+		{
+			string zip = "dcd-v" ~ ver ~ "-osx-arm64.tar.gz";
+			string url = format!"https://github.com/dlang-community/DCD/releases/download/v%s/dcd-v%s-osx-arm64.tar.gz"(ver, ver);
+		}
+		else
+		{
+			string zip = "dcd-v" ~ ver ~ "-osx-x86_64.tar.gz";
+			string url = format!"https://github.com/dlang-community/DCD/releases/download/v%s/dcd-v%s-osx-x86_64.tar.gz"(ver, ver);
+		}
 		void extract()
 		{
 			spawnShell("tar -xzvf " ~ zip ~ " > /dev/null").wait;

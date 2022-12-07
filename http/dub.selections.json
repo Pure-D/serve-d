@@ -1,7 +1,10 @@
 {
 	"fileVersion": 1,
 	"versions": {
-		"cachetools": "0.3.1",
-		"requests": "2.0.9"
+		"automem": "0.6.8",
+		"cachetools": "0.4.0",
+		"requests": "2.0.9",
+		"test_allocator": "0.3.3",
+		"unit-threaded": "0.10.8"
 	}
 }

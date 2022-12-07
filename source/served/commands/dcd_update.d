@@ -56,6 +56,13 @@ else version (X86_64)
 	}
 	else version = DCDFromSource;
 }
+else version (AArch64)
+{
+	version (OSX)
+	{
+	}
+	else version = DCDFromSource;
+}
 else
 {
 	version = DCDFromSource;
@@ -114,7 +121,7 @@ void updateDCD()
 	enum latestReleaseBinaryBroken = false;
 
 	// the latest version that has downloads available
-	enum bundledDCDVersion = "v0.13.6";
+	enum bundledDCDVersion = "v0.15.0";
 
 	bool compileFromSource = isDCDFromSource || latestReleaseBinaryBroken;
 	if (!compileFromSource
@@ -157,7 +164,12 @@ void updateDCD()
 		else version (linux)
 			url = commonPrefix ~ "-linux-x86_64.tar.gz";
 		else version (OSX)
-			url = commonPrefix ~ "-osx-x86_64.tar.gz";
+		{
+			version (AArch64)
+				url = commonPrefix ~ "-osx-arm64.tar.gz";
+			else
+				url = commonPrefix ~ "-osx-x86_64.tar.gz";
+		}
 
 		if (!url.length)
 			assert(false, "this branch should not be reachable on this platform");
