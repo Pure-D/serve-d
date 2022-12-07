@@ -128,6 +128,7 @@ mixin template ConfigHandler(TConfig)
 	__gshared bool syncingConfiguration = false;
 
 	private __gshared bool _hasConfigurationCapability = false;
+	private __gshared TConfig* initializeConfig = null;
 
 	private __gshared bool nonStandardConfiguration = false;
 
@@ -146,6 +147,31 @@ mixin template ConfigHandler(TConfig)
 		_hasConfigurationCapability = capabilities
 			.workspace.orDefault
 			.configuration.orDefault;
+
+		if (!params.initializationOptions.isNone) {
+			// we might have the following options
+			// - nonStandardConfiguration - `bool`
+			// - startupConfiguration - a Configuration object
+			//
+			// this lets us initialize with a configuration right away, without
+			// waiting for a client - or an editor extension.
+			//
+			// Editor extensions can use `nonStandardConfiguration` to
+			// circumvent limitations in the LSP frameworks they have to work
+			// with.
+			auto options = params.initializationOptions.deref.get!(StringMap!JsonValue);
+
+			const nsc = "nonStandardConfiguration" in options;
+			if (nsc) {
+				nonStandardConfiguration = nsc.get!bool;
+			}
+
+			const settings = "startupConfiguration" in options;
+			if (settings) {
+				initializeConfig = new TConfig();
+				*initializeConfig = jsonValueTo!TConfig(*settings);
+			}
+		}
 	}
 
 	@protocolNotification("initialized")
@@ -153,37 +179,50 @@ mixin template ConfigHandler(TConfig)
 	{
 		import served.utils.async : setTimeout;
 
-		// add 250ms timeout after `initialized` notification to give clients
-		// the chance to send `workspace/didChangeConfiguration` proactively
-		// before requesting all configs ourselves.
-		enum waitTimeMs = 250;
-		setTimeout({
-			if (!syncedConfiguration && !syncingConfiguration)
+		if (initializeConfig)
+		{
+			processConfigChange(*initializeConfig);
+			initializeConfig = null;
+		}
+		else
+		{
+			// add 250ms timeout after `initialized` notification to give clients
+			// the chance to send `workspace/didChangeConfiguration` proactively
+			// before requesting all configs ourselves.
+			enum waitTimeMs = 250;
+			setTimeout({
+				setupConfig_loadAfterTimeout();
+			}, waitTimeMs);
+		}
+	}
+
+	private void setupConfig_loadAfterTimeout()
+	{
+		if (!syncedConfiguration && !syncingConfiguration)
+		{
+			syncedConfiguration = true;
+			if (_hasConfigurationCapability)
 			{
-				syncedConfiguration = true;
-				if (_hasConfigurationCapability)
-				{
-					if (!syncConfiguration(null, 0, perWorkspaceConfigurationStore.length + 1))
-						error("Syncing user configuration failed!");
+				if (!syncConfiguration(null, 0, perWorkspaceConfigurationStore.length + 1))
+					error("Syncing user configuration failed!");
 
-					warning(
-						"Didn't receive any configuration notification, manually requesting all configurations now");
+				warning(
+					"Didn't receive any configuration notification, manually requesting all configurations now");
 
-					int i;
-					foreach (uri, cfg; perWorkspaceConfigurationStore)
-						syncConfiguration(uri, ++i, perWorkspaceConfigurationStore.length + 1);
+				int i;
+				foreach (uri, cfg; perWorkspaceConfigurationStore)
+					syncConfiguration(uri, ++i, perWorkspaceConfigurationStore.length + 1);
 
-					emitExtensionEvent!onConfigFinished(perWorkspaceConfigurationStore.length);
-				}
-				else
-				{
-					warning("This Language Client doesn't support configuration requests and also didn't send any "
-						~ "configuration to serve-d. Initializing using default configuration");
-
-					emitExtensionEvent!onConfigChanged(ConfigWorkspace.unnamedWorkspace, null, globalConfiguration.config);
-				}
+				emitExtensionEvent!onConfigFinished(perWorkspaceConfigurationStore.length);
 			}
-		}, waitTimeMs);
+			else
+			{
+				warning("This Language Client doesn't support configuration requests and also didn't send any "
+					~ "configuration to serve-d. Initializing using default configuration");
+
+				emitExtensionEvent!onConfigChanged(ConfigWorkspace.unnamedWorkspace, null, globalConfiguration.config);
+			}
+		}
 	}
 
 	@protocolNotification("workspace/didChangeConfiguration")
