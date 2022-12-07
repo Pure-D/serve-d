@@ -339,3 +339,34 @@ TextEdit toTextEdit(CodeReplacement replacement, scope const ref Document d)
 
 	return TextEdit([startPos, endPos], replacement.content);
 }
+
+///
+@serdeFallbackStruct
+struct ServedInfoParams
+{
+@serdeOptional:
+	bool includeConfig;
+}
+
+///
+@serdeFallbackStruct
+struct ServedInfoResponse
+{
+	import served.types;
+
+	/// Same as in the initialized response.
+	ServerInfo serverInfo;
+
+	/// Only included if `ServedInfoParams.includeConfig` is true
+	@serdeOptional Optional!Configuration currentConfiguration;
+
+	/// Describes the global workspace.
+	typeof(Workspace.init.describeState()) globalWorkspace;
+
+	/// Describes all available workspaces.
+	typeof(Workspace.init.describeState())[] workspaces;
+
+	/// First index inside the `workspaces` array sent along this value, where
+	/// `selected` is set to true, or -1 for global workspace.
+	int selectedWorkspaceIndex;
+}

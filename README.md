@@ -607,6 +607,49 @@ where the plugin needs more direct control over the configuration.
 
 ------
 
+#### Request `served/getInfo`
+
+**Params**: `ServedInfoParams`
+
+Returns all profilegc.log entries parsed and combined.
+
+**Returns**: `ServedInfoResponse`
+
+```js
+interface ServedInfoParams
+{
+	includeConfig?: boolean;
+}
+
+interface ServedInfoResponse
+{
+	/** Same as in the initialized response. (the LSP server info) */
+	serverInfo: ServerInfo;
+
+	/**
+	 * Only included if `ServedInfoParams.includeConfig` is true.
+	 * 
+	 * Contains the entire config object, e.g. `{"d":{...}, ...}`
+	 */
+	currentConfiguration?: Configuration;
+
+	/**
+	 * Describes the global workspace, same type as in
+	 * `coded/changedSelectedWorkspace`
+	 */
+	globalWorkspace: WorkspaceState;
+
+	/** Describes all available workspaces. */
+	workspaces: WorkspaceState[];
+
+	/**
+	 * First index inside the `workspaces` array sent along this value, where
+	 * `selected` is set to true, or -1 for global workspace.
+	 */
+	selectedWorkspaceIndex: number;
+}
+```
+
 #### Client notification `coded/updateSetting`
 
 **Params**: `UpdateSettingParams`
@@ -660,6 +703,15 @@ interface WorkspaceState
 	initialized: boolean;
 	/** true if this is the active instance */
 	selected: boolean;
+	/**
+	 * May contain errors that are pending and will be shown once the user with
+	 * this workspace.
+	 *
+	 * Key: URI folder or file in which startup issues occured. (compare with
+	 * startsWith)
+	 * Value: human readable message.
+	 * */
+	pendingErrors: { [folderUri: string]: string };
 }
 ```
 

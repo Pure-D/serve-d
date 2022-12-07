@@ -225,7 +225,6 @@ string[] getPossibleSourceRoots(string workspaceFolder)
 
 InitializeResult initialize(InitializeParams params)
 {
-	import served.info;
 	import std.file : chdir;
 
 	if (params.trace == "verbose")
@@ -307,15 +306,27 @@ InitializeResult initialize(InitializeParams params)
 	else
 	{
 		// only included in non-test builds, because served.info is excluded from the unittest configurations
+		result.serverInfo = makeServerInfo;
+	}
+
+	return result;
+}
+
+ServerInfo makeServerInfo()
+{
+	version (unittest) { assert(false, "can't call makeServerInfo from unittest"); }
+	else
+	{
+		import served.info;
+
+		// only included in non-test builds, because served.info is excluded from the unittest configurations
 		ServerInfo serverInfo = {
 			name: "serve-d",
 			version_: format!"v%(%s.%)%s"(Version,
 				VersionSuffix.length ? text('-', VersionSuffix) : VersionSuffix)
 		};
-		result.serverInfo = serverInfo;
+		return serverInfo;
 	}
-
-	return result;
 }
 
 /// Whether to register default dependency snippets
@@ -969,6 +980,36 @@ DScannerIniSection[] getDscannerConfig(SimpleTextDocumentIdentifierParams params
 	}
 
 	return [sec];
+}
+
+@protocolMethod("served/getInfo")
+ServedInfoResponse getServedInfo(ServedInfoParams params)
+{
+	ServedInfoResponse response;
+	version (unittest) {}
+	else
+	{
+		response.serverInfo = makeServerInfo();
+	}
+
+	if (params.includeConfig)
+	{
+		auto uri = selectedWorkspaceUri;
+		response.currentConfiguration = config(uri, false);
+	}
+
+	response.globalWorkspace = fallbackWorkspace.describeState;
+	response.workspaces = workspaces.map!"a.describeState".array;
+
+	response.selectedWorkspaceIndex = -1;
+	foreach (i, ref w; response.workspaces)
+		if (w.selected)
+		{
+			response.selectedWorkspaceIndex = cast(int)i;
+			break;
+		}
+
+	return response;
 }
 
 @protocolNotification("textDocument/didSave")

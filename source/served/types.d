@@ -262,6 +262,7 @@ struct Workspace
 			string uri, name;
 			bool initialized;
 			bool selected;
+			const(string)[string] pendingErrors;
 		}
 
 		WorkspaceState state;
@@ -269,6 +270,7 @@ struct Workspace
 		state.name = folder.name;
 		state.initialized = initialized;
 		state.selected = selected;
+		state.pendingErrors = startupErrorNotifications.dup;
 		return state;
 	}
 
