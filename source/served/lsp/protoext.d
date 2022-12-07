@@ -234,7 +234,7 @@ struct SerializablePlainSnippet
 	/// true if this snippet shouldn't be formatted before inserting.
 	@serdeOptional bool unformatted;
 	/// List of imports that should get imported with this snippet. (done in resolveComplete)
-	string[] imports;
+	@serdeOptional string[] imports;
 }
 
 /// Parameters to pass when updating dub imports
