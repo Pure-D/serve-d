@@ -372,10 +372,7 @@ struct AllowedMethods
 
 AllowedMethods allowedMethods(immutable string[] methods...)
 {
-	if (__ctfe)
-		return AllowedMethods(methods);
-	else
-		return AllowedMethods(methods.idup);
+	return AllowedMethods(methods.idup);
 }
 
 alias Optional(T) = Variant!(void, T);
