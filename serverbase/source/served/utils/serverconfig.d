@@ -220,6 +220,8 @@ mixin template ConfigHandler(TConfig)
 				warning("This Language Client doesn't support configuration requests and also didn't send any "
 					~ "configuration to serve-d. Initializing using default configuration");
 
+				assert(globalConfiguration, __FUNCTION__ ~ " called while globalConfiguration wasn't initialized");
+
 				emitExtensionEvent!onConfigChanged(ConfigWorkspace.unnamedWorkspace, null, globalConfiguration.config);
 			}
 		}
@@ -283,6 +285,8 @@ mixin template ConfigHandler(TConfig)
 				return processConfigChange(configuration, false);
 			}
 
+			assert(globalConfiguration, __FUNCTION__ ~ " called while globalConfiguration wasn't initialized");
+
 			for (size_t i = 0; i < expected; i++)
 			{
 				const isDefault = i == 0;
@@ -320,6 +324,8 @@ mixin template ConfigHandler(TConfig)
 		else
 		{
 			info("initializing config for global fallback workspace");
+			assert(globalConfiguration, __FUNCTION__ ~ " called while globalConfiguration wasn't initialized");
+
 			auto changed = globalConfiguration.replace(configuration);
 			emitExtensionEvent!onConfigChanged(
 				ConfigWorkspace.unnamedWorkspace, changed, globalConfiguration.config);
@@ -342,7 +348,10 @@ mixin template ConfigHandler(TConfig)
 				return false;
 			}
 			else if (!proj)
+			{
+				assert(globalConfiguration, __FUNCTION__ ~ " called while globalConfiguration wasn't initialized");
 				proj = globalConfiguration;
+			}
 
 			ConfigurationItem[] items;
 			if (workspaceUri.length)

@@ -115,12 +115,9 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			auto initResult = ExtensionModule.initialize(initParams);
 			eventProcessor.emitExtensionEvent!initializeHook(initParams, initResult);
 			res.resultJson = initResult.serializeJson;
+			processRequestObservers(msg, initResult);
 			trace("Initialized");
 			serverInitializeCalled = true;
-			pushFiber({
-				Fiber.yield();
-				processRequestObservers(msg, initResult);
-			});
 			return res;
 		}
 
