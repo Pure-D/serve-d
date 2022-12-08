@@ -30,7 +30,7 @@ string[] listConfigurations()
 }
 
 @protocolMethod("served/switchConfig")
-bool switchConfig(string value)
+bool switchConfig(SwitchConfigParams value)
 {
 	if (!activeInstance || !activeInstance.has!DubComponent)
 		return false;
@@ -73,7 +73,7 @@ Variant!(string, ArchType)[] listArchTypes(ListArchTypesParams params)
 }
 
 @protocolMethod("served/switchArchType")
-bool switchArchType(string value)
+bool switchArchType(SwitchArchTypeParams value)
 {
 	if (!activeInstance || !activeInstance.has!DubComponent)
 		return false;
@@ -97,7 +97,7 @@ string[] listBuildTypes()
 }
 
 @protocolMethod("served/switchBuildType")
-bool switchBuildType(string value)
+bool switchBuildType(SwitchBuildTypeParams value)
 {
 	if (!activeInstance || !activeInstance.has!DubComponent)
 		return false;
@@ -121,7 +121,7 @@ string getCompiler()
 }
 
 @protocolMethod("served/switchCompiler")
-bool switchCompiler(string value)
+bool switchCompiler(SwitchCompilerParams value)
 {
 	if (!activeInstance || !activeInstance.has!DubComponent)
 		return false;
@@ -320,7 +320,7 @@ void onDidSaveDubRecipe(DidSaveTextDocumentParams params)
 }
 
 @protocolMethod("served/listDependencies")
-DubDependency[] listDependencies(string packageName)
+DubDependency[] listDependencies(ListDependenciesParams params)
 {
 	auto instance = activeInstance;
 	DubDependency[] ret;
@@ -328,7 +328,7 @@ DubDependency[] listDependencies(string packageName)
 		return ret;
 
 	auto allDeps = instance.get!DubComponent.dependencies;
-	if (!packageName.length)
+	if (!params.packageName.length)
 	{
 		auto deps = instance.get!DubComponent.rootDependencies;
 		foreach (dep; deps)
@@ -357,7 +357,7 @@ DubDependency[] listDependencies(string packageName)
 	{
 		string[string] aa;
 		foreach (other; allDeps)
-			if (other.name == packageName)
+			if (other.name == params.packageName)
 			{
 				aa = other.dependencies;
 				break;

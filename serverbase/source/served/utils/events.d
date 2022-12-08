@@ -204,12 +204,12 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 					}
 					else static if (symbolArgs.length == 1)
 					{
-						return symbol(params.deserializeJson!(symbolArgs[0]));
+						return symbol(implParseParam!(symbolArgs[0])(params));
 					}
 					else static if (availableExtraArgs.length > 0
 						&& symbolArgs.length <= 1 + availableExtraArgs.length)
 					{
-						return symbol(params.deserializeJson!(symbolArgs[0]), forward!(
+						return symbol(implParseParam!(symbolArgs[0])(params), forward!(
 							availableExtraArgs[0 .. symbolArgs.length + -1]));
 					}
 					else
@@ -243,51 +243,6 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 		import std.typecons : tuple;
 		ensureImpure();
 
-		T parseParam(T)()
-		{
-			import served.lsp.protocol;
-
-			try
-			{
-				if (params.length && params.ptr[0] == '[')
-				{
-					// positional parameter support
-					// only supports passing a single argument
-					string got;
-					params.visitJsonArray!((item) {
-						if (!got.length)
-							got = item;
-						else
-							throw new Exception("Mismatched parameter count");
-					});
-					return got.deserializeJson!T;
-				}
-				else if (params.length && params.ptr[0] == '{')
-				{
-					// named parameter support
-					// only supports passing structs (not parsing names of D method arguments)
-					return params.deserializeJson!T;
-				}
-				else
-				{
-					// no parameters passed - parse empty JSON for the type or
-					// use default value.
-					static if (is(T == struct))
-						return `{}`.deserializeJson!T;
-					else
-						return T.init;
-				}
-			}
-			catch (Exception e)
-			{
-				ResponseError error;
-				error.code = ErrorCode.invalidParams;
-				error.message = "Failed converting input parameter `" ~ params ~ "` to needed type `" ~ T.stringof ~ "`: " ~ e.msg;
-				error.data = JsonValue(e.toString);
-				throw new MethodException(error);
-			}
-		}
-
 		return iterateExtensionMethodsByUDA!(UDA, (name, symbol, uda) {
 			if (uda.method == method)
 			{
@@ -301,12 +256,12 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 				}
 				else static if (symbolArgs.length == 1)
 				{
-					auto arguments = tuple(parseParam!(symbolArgs[0]));
+					auto arguments = tuple(implParseParam!(symbolArgs[0])(params));
 				}
 				else static if (availableExtraArgs.length > 0
 					&& symbolArgs.length <= 1 + availableExtraArgs.length)
 				{
-					auto arguments = tuple(parseParam!(symbolArgs[0]), forward!(
+					auto arguments = tuple(implParseParam!(symbolArgs[0])(params), forward!(
 						availableExtraArgs[0 .. symbolArgs.length + -1]));
 				}
 				else
@@ -397,4 +352,50 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 
 		return found;
 	}
+
+	private T implParseParam(T)(string params)
+	{
+		import served.lsp.protocol;
+
+		try
+		{
+			if (params.length && params.ptr[0] == '[')
+			{
+				// positional parameter support
+				// only supports passing a single argument
+				string got;
+				params.visitJsonArray!((item) {
+					if (!got.length)
+						got = item;
+					else
+						throw new Exception("Mismatched parameter count");
+				});
+				return got.deserializeJson!T;
+			}
+			else if (params.length && params.ptr[0] == '{')
+			{
+				// named parameter support
+				// only supports passing structs (not parsing names of D method arguments)
+				return params.deserializeJson!T;
+			}
+			else
+			{
+				// no parameters passed - parse empty JSON for the type or
+				// use default value.
+				static if (is(T == struct))
+					return `{}`.deserializeJson!T;
+				else
+					return T.init;
+			}
+		}
+		catch (Exception e)
+		{
+			ResponseError error;
+			error.code = ErrorCode.invalidParams;
+			error.message = "Failed converting input parameter `" ~ params ~ "` to needed type `" ~ T.stringof ~ "`: " ~ e.msg;
+			error.data = JsonValue(e.toString);
+			throw new MethodException(error);
+		}
+	}
+
 }

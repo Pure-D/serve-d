@@ -370,3 +370,119 @@ struct ServedInfoResponse
 	/// `selected` is set to true, or -1 for global workspace.
 	int selectedWorkspaceIndex;
 }
+
+/// Mixin template that puts in a value called "value" of type `T`. Puts in a
+/// custom deserializer that allows this struct to be both deserialized from a
+/// full struct (if a struct has been sent) or any other value, directly getting
+/// assigned to the `T value;` member.
+///
+/// This means `T` must not be anything that deserializes from a struct, as that
+/// branch will never be called.
+mixin template SingleValueParams(T, string valueName = "value")
+if (!is(T == struct) && !is(T == Dummy[string], Dummy))
+{
+	import mir.ion.exception;
+	import mir.ion.value;
+
+	T _implicitValue;
+
+	alias _implicitValue this;
+
+	mixin("alias " ~ valueName ~ " = _implicitValue;");
+
+	@safe pure scope
+	IonException deserializeFromIon(scope const char[][] symbolTable, IonDescribedValue fullValue)
+	{
+		import mir.deser.ion : deserializeIon;
+		import mir.ion.type_code : IonTypeCode;
+
+		if (fullValue.descriptor.type == IonTypeCode.struct_)
+		{
+			auto struct_ = fullValue.get!(IonStruct).withSymbols(symbolTable);
+
+			bool hasValue = false;
+
+			foreach (error, key, value; struct_)
+			{
+				if (error)
+					return error.ionException;
+
+			Switch:
+				switch (key)
+				{
+				case valueName:
+					hasValue = true;
+					_implicitValue = deserializeIon!(typeof(_implicitValue))(
+						symbolTable, value);
+					break Switch;
+
+					static foreach (i, member; typeof(this).tupleof)
+					{
+						static if (__traits(identifier, member) != valueName)
+						{
+						case __traits(identifier, member):
+							this.tupleof[i] = deserializeIon!(typeof(member))(
+								symbolTable, value);
+							break Switch;
+						}
+					}
+				default:
+					break;
+				}
+			}
+
+			if (!hasValue)
+				return new IonException(
+					"Missing required `{\"value\":...}` parameter or must pass "
+					~ "value as RPC array `[value]`.");
+
+			return null;
+		}
+		else
+		{
+			_implicitValue = deserializeIon!T(symbolTable, fullValue);
+			return null;
+		}
+	}
+}
+
+/// Used in `served/switchConfig`
+struct SwitchConfigParams
+{
+	mixin SingleValueParams!string;
+}
+
+unittest
+{
+	import std.exception;
+
+	assert(deserializeJson!SwitchConfigParams(`{"value":"foo"}`).value == "foo");
+	assert(deserializeJson!SwitchConfigParams(`{"value":"foo","x":"y"}`).value == "foo");
+	assertThrown(deserializeJson!SwitchConfigParams(`{"x":"y"}`));
+	assert(deserializeJson!SwitchConfigParams(`"foo"`).value == "foo");
+	assertThrown(deserializeJson!SwitchConfigParams(`4`).value);
+}
+
+/// Used in `served/switchArchType`
+struct SwitchArchTypeParams
+{
+	mixin SingleValueParams!string;
+}
+
+/// Used in `served/switchBuildType`
+struct SwitchBuildTypeParams
+{
+	mixin SingleValueParams!string;
+}
+
+/// Used in `served/switchCompiler`
+struct SwitchCompilerParams
+{
+	mixin SingleValueParams!string;
+}
+
+/// Used in `served/listDependencies`
+struct ListDependenciesParams
+{
+	mixin SingleValueParams!(string, "packageName");
+}
