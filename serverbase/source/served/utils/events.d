@@ -37,14 +37,26 @@ struct EventProcessorConfig
 }
 
 /// Hooks into initialization, possibly manipulating the InitializeResponse.
-/// Called after the extension entry point `initialize()` method.
+/// Called after the extension entry point `initialize()` method, but before the
+/// initialize response was sent to the client.
+///
+/// If it's desired not to stall the initialization routine, use
+/// `@postProtocolMethod("initialized")` instead of these UDAs, which runs in a
+/// separate fiber after the response has been sent. Warning: other requests and
+/// notifications may have been called within this switching time window, so
+/// if these functions depend on what is being called in the initialize hook,
+/// they will break.
 ///
 /// Annotated method is expected to have this type signature:
 /// ```d
 /// @initializeHook
 /// void myInitHook(InitializeParams params, ref InitializeResult result);
+/// @onInitialize
+/// void otherHook(InitializeParams params);
 /// ```
 enum initializeHook;
+/// ditto
+enum onInitialize;
 
 /// Implements the event processor for a given extension module exposing a
 /// `members` field defining all potential methods.

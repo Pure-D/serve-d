@@ -132,7 +132,7 @@ mixin template ConfigHandler(TConfig)
 
 	private __gshared bool nonStandardConfiguration = false;
 
-	@postProtocolMethod("initialize")
+	@onInitialize
 	void postInit_setupConfig(InitializeParams params)
 	{
 		auto workspaces = params.getWorkspaceFolders;
