@@ -72,7 +72,7 @@ struct Configuration
 	struct D
 	{
 		@serdeOptional:
-		JsonValue stdlibPath = JsonValue("auto");
+		Nullable!(string, string[]) stdlibPath = Nullable!(string, string[])("auto");
 		string dcdClientPath = "dcd-client", dcdServerPath = "dcd-server";
 		string dubPath = "dub";
 		string dmdPath = "dmd";
@@ -149,20 +149,15 @@ struct Configuration
 
 	string[] stdlibPath(string cwd = null) const
 	{
-		auto p = d.stdlibPath;
-		if (p.kind == JsonValue.Kind.array)
-			return p.get!(JsonValue[]).map!(a => a.get!string.userPath).array;
-		else
-		{
-			if (p.kind != JsonValue.Kind.string || p.get!string == "auto")
-			{
-				import served.utils.stdlib_detect;
+		import served.utils.stdlib_detect;
 
-				return autoDetectStdlibPaths(cwd, d.dubCompiler);
-			}
-			else
-				return [p.get!string.userPath];
-		}
+		return d.stdlibPath.match!(
+			(const typeof(null) _) => autoDetectStdlibPaths(cwd, d.dubCompiler),
+			(const string s) => s == "auto"
+				? autoDetectStdlibPaths(cwd, d.dubCompiler)
+				: [s.userPath],
+			(const string[] a) => a.map!(s => s.userPath).array
+		);
 	}
 
 	string dcdClientPath() const
