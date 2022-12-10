@@ -9,7 +9,7 @@ extension facility.  This extension utilizes serve-d for LSP functionality.
 Installing this will enable D support to work in Nova.
 
 It will also enable syntax highlighting, folding, and
-indentation features via the Tree-sitter [D grammar][4].
+indentation features via the Tree-sitter [D grammar][3].
 
 ## Requirements
 
