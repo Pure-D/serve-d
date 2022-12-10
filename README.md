@@ -505,7 +505,7 @@ Searches for a given filename (optionally also with subfolders) and returns all 
 
 Lists all files with a given module name in the project and all dependencies and standard library.
 
-#### Request `served/doDscanner`
+#### Request `served/getDscannerConfig`
 
 **Params**: `DocumentLinkParams`
 
