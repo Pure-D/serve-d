@@ -292,7 +292,7 @@ MarkedString[] markdownToMarked(string md)
 		if (line.strip == "```d")
 			ret ~= MarkedString("", "d");
 		else if (line.strip == "```")
-			ret ~= MarkedString("");
+			ret ~= MarkedString("", "text");
 		else
 			ret[$ - 1].value ~= line;
 	}
