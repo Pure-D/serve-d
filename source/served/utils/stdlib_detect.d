@@ -56,7 +56,7 @@ string[] autoDetectStdlibPaths(string cwd = null, string compilerPath = null)
 	}
 	else
 	{
-		trace("returning to default hardcoded fallback phobos paths");
+		warning("returning to default hardcoded fallback phobos paths");
 		version (Windows)
 			return [`C:\D\dmd2\src\druntime\import`, `C:\D\dmd2\src\phobos`];
 		else version (OSX)
@@ -108,6 +108,11 @@ bool detectDMDStdlibPaths(string cwd, out string[] ret, string dmdPath = null)
 				&& parseDmdConfImports(buildPath(dmdDir, confName), dmdDir, ret))
 			return true;
 	}
+	else
+	{
+		warning("Could not find DMD in $PATH for stdlib auto-detection! ",
+			"Checking for dmd.conf at hardcoded system-wide location...");
+	}
 
 	version (Windows)
 	{
@@ -140,6 +145,9 @@ bool detectDMDStdlibPaths(string cwd, out string[] ret, string dmdPath = null)
 	else version (Posix)
 	{
 		if (fs.exists("/etc/dmd.conf") && parseDmdConfImports("/etc/dmd.conf", "/etc", ret))
+			return true;
+
+		if (fs.exists("/usr/local/etc/dmd.conf") && parseDmdConfImports("/usr/local/etc/dmd.conf", "/usr/local/etc", ret))
 			return true;
 
 		return false;
@@ -220,6 +228,10 @@ bool detectLDCStdlibPaths(string cwd, out string[] ret, string ldcPath = null)
 		if (tryPath(chainPath("/etc", confName), ldcDir, ret))
 			return true;
 		if (tryPath(chainPath("/etc/ldc", confName), ldcDir, ret))
+			return true;
+		if (tryPath(chainPath("/usr/local/etc", confName), ldcDir, ret))
+			return true;
+		if (tryPath(chainPath("/usr/local/etc/ldc", confName), ldcDir, ret))
 			return true;
 	}
 
@@ -339,7 +351,10 @@ bool parseDmdConfImports(R)(R confPath, scope const(char)[] confDirPath, out str
 		}
 	}
 
-	return match != Region.none || paths.length > 0;
+	bool ret = match != Region.none || paths.length > 0;
+	if (!ret)
+		warning("failed to find phobos/druntime paths in dmd conf ", confPath, " - going to continue looking elsewhere...");
+	return ret;
 }
 
 bool parseLdcConfImports(string confPath, scope const(char)[] binDirPath, out string[] paths)
@@ -382,6 +397,8 @@ bool parseLdcConfImports(string confPath, scope const(char)[] binDirPath, out st
 	}
 
 	paths = ret.data;
+	if (!ret.data.length)
+		warning("failed to find phobos/druntime paths in ldc conf ", confPath, " - going to continue looking elsewhere...");
 	return ret.data.length > 0;
 }
 
