@@ -62,7 +62,8 @@ class RPCProcessor : Fiber
 		{
 			buf[len++] = `,"error":`;
 			buf[len++] = res.error.serializeJson;
-			stderr.writeln(buf[len - 1]);
+
+			trace("Sending response error: ", buf[len - 1]);
 		}
 
 		buf[len++] = `}`;
@@ -86,7 +87,7 @@ class RPCProcessor : Fiber
 		{
 			buf[len++] = `,"error":`;
 			buf[len++] = res.error.serializeJson;
-			stderr.writeln(buf[len - 1]);
+			trace("Sending response error: ", buf[len - 1]);
 		}
 
 		buf[len++] = `}`;
