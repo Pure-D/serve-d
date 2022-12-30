@@ -9,7 +9,7 @@ import workspaced.api;
 import workspaced.coms;
 import workspaced.com.dscanner : DefinitionElement;
 
-import std.algorithm : canFind, filter, map, startsWith;
+import std.algorithm : canFind, filter, map;
 import std.array : appender, array, join;
 import std.path : extension, isAbsolute;
 import std.string : toLower;
@@ -29,7 +29,7 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 			auto indexer = backend.get!IndexComponent(folderPath);
 			indexer.iterateAll(delegate(const(string[]) mod, string fileName, scope const ref DefinitionElement def) {
 				if (!def.isVerboseType && !def.insideFunction
-					&& def.name.toLower.startsWith(params.query.toLower))
+					&& def.name.roughlyContains(params.query))
 				{
 					Position p;
 					p.line = def.line - 1;
@@ -42,6 +42,30 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 		}
 	}
 	return infos.data;
+}
+
+/// Checks if doesThis contains matchThis in a way that a fuzzy search would
+/// find it.
+private bool roughlyContains(string doesThis, string matchThis)
+{
+	import std.utf : byUTF, decode;
+	import std.uni : toUpper;
+
+	if (!matchThis.length)
+		return true;
+
+	size_t i = 0;
+	dchar next = matchThis.decode(i).toUpper;
+	foreach (c; doesThis.byUTF!dchar)
+	{
+		if (toUpper(c) == next)
+		{
+			if (i >= matchThis.length)
+				return true;
+			next = matchThis.decode(i).toUpper;
+		}
+	}
+	return false;
 }
 
 @protocolMethod("textDocument/documentSymbol")
