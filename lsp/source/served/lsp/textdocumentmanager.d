@@ -165,7 +165,7 @@ struct Document
 	///
 	/// If used on an immutable Document, the text cannot be changed and thus
 	/// returns a full string instead of a const(char)[] slice.
-	const(char)[] rawText() const
+	const(char)[] rawText() const scope return
 	{
 		return text;
 	}
