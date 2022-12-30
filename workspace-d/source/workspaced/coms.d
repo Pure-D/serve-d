@@ -10,5 +10,6 @@ public import workspaced.com.dscanner : DscannerComponent;
 public import workspaced.com.dub : DubComponent;
 public import workspaced.com.fsworkspace : FSWorkspaceComponent;
 public import workspaced.com.importer : ImporterComponent;
+public import workspaced.com.index : IndexComponent;
 public import workspaced.com.moduleman : ModulemanComponent;
 public import workspaced.com.snippets : SnippetsComponent;

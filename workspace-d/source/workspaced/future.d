@@ -2,15 +2,16 @@ module workspaced.future;
 
 import core.time;
 
+import std.algorithm;
 import std.parallelism;
-import std.traits : isCallable;
+import std.traits : isCallable, isCopyable;
 
 class Future(T)
 {
 	import core.thread : Fiber, Thread;
 
 	static if (!is(T == void))
-		T value;
+		private T value;
 	Throwable exception;
 	bool has;
 	void delegate() _onDone;
@@ -43,7 +44,7 @@ class Future(T)
 		static Future!T fromResult(T value)
 		{
 			auto ret = new typeof(return);
-			ret.value = value;
+			ret.value = move(value);
 			ret.has = true;
 			return ret;
 		}
@@ -70,7 +71,7 @@ class Future(T)
 		return ret;
 	}
 
-	static Future!T fromError(T)(Throwable error)
+	static Future!T fromError(Throwable error)
 	{
 		auto ret = new typeof(return);
 		ret.error = error;
@@ -90,7 +91,7 @@ class Future(T)
 		void finish(T value)
 		{
 			assert(!has);
-			this.value = value;
+			this.value = move(value);
 			has = true;
 			if (_onDone)
 				_onDone();
@@ -106,7 +107,7 @@ class Future(T)
 	}
 
 	/// Waits for the result of this future using Thread.sleep
-	T getBlocking(alias sleepDur = 1.msecs)()
+	T getBlockingImpl(bool moveValue, alias sleepDur = 1.msecs)()
 	{
 		while (!has)
 			Thread.sleep(sleepDur);
@@ -118,11 +119,24 @@ class Future(T)
 		if (exception)
 			throw exception;
 		static if (!is(T == void))
-			return value;
+		{
+			static if (moveValue)
+				return move(value);
+			else
+				return value;
+		}
 	}
 
+	/// ditto
+	static if (is(T == void) || isCopyable!T)
+		alias getBlocking(alias sleepDur = 1.msecs) = getBlockingImpl!(false, sleepDur);
+
+	/// ditto
+	static if (!is(T == void))
+		alias moveBlocking(alias sleepDur = 1.msecs) = getBlockingImpl!(true, sleepDur);
+
 	/// Waits for the result of this future using Fiber.yield
-	T getYield()
+	T getYieldImpl(bool moveValue)()
 	{
 		assert(Fiber.getThis() !is null,
 			"Attempted to getYield without being in a Fiber context");
@@ -137,8 +151,70 @@ class Future(T)
 		if (exception)
 			throw exception;
 		static if (!is(T == void))
-			return value;
+		{
+			static if (moveValue)
+				return move(value);
+			else
+				return value;
+		}
 	}
+
+	/// ditto
+	static if (is(T == void) || isCopyable!T)
+		alias getYield = getYieldImpl!false;
+
+	/// ditto
+	static if (!is(T == void))
+		alias moveYield = getYieldImpl!true;
+		
+	/// Waits for the result of this future using Fiber.yield
+	T getImmediatelyImpl(bool moveValue)()
+	{
+		assert(has,
+			"Attempted to getImmediately without data being ready");
+
+		if (_worker)
+		{
+			_worker.join();
+			_worker = null;
+		}
+		if (exception)
+			throw exception;
+		static if (!is(T == void))
+		{
+			static if (moveValue)
+				return move(value);
+			else
+				return value;
+		}
+	}
+
+	/// ditto
+	static if (is(T == void) || isCopyable!T)
+		alias getImmediately = getImmediatelyImpl!false;
+
+	/// ditto
+	static if (!is(T == void))
+		alias moveImmediately = getImmediatelyImpl!true;
+}
+
+static void whenAllDone(T)(Future!T[] futs, void delegate() callback)
+{
+	if (!futs.length)
+		return callback();
+
+	size_t i = 0;
+	void onDone()
+	{
+		while (i < futs.length && futs[i].has)
+			i++;
+
+		if (i == futs.length)
+			callback();
+		else
+			futs[i].onDone(&onDone);
+	}
+	futs[0].onDone(&onDone);
 }
 
 enum string gthreadsAsyncProxy(string call) = `auto __futureRet = new typeof(return);
