@@ -35,6 +35,7 @@ static immutable sortPrefixDoc = "0_";
 static immutable sortPrefixSnippets = "2_5_";
 // dcd additionally sorts inside with sortFromDCDType return value (appends to this)
 static immutable sortPrefixDCD = "2_";
+// additional sorting inside with std.* = 0_, core.* & etc.* = 1_
 static immutable sortPrefixAutoImport = "3_";
 
 CompletionItemKind convertFromDCDType(string type)
@@ -852,16 +853,29 @@ private void provideAutoImports(TextDocumentPositionParams params, WorkspaceD.In
 
 	idx.iterateSymbolsStartingWith(prefixIdentifier,
 		(string symbol, char type, scope const ModuleRef mod) {
+			string subSorter = "3_";
+			if (mod.length && mod[0] == "std")
+				subSorter = "0_";
+			else if (mod.length && (mod[0] == "core" || mod[0] == "etc"))
+				subSorter = "1_";
+			else if (mod.length && mod[0] == "object")
+				return;
+
 			if (auto hasImport = mod in modLookup)
 			{
 				// TODO: offer completion, adding rename or selective
 			}
 			else
 			{
+				CompletionItemLabelDetails labelDetails = {
+					detail: " (import " ~ mod.join(".") ~ ")"
+				};
+
 				CompletionItem item = {
 					label: symbol,
+					labelDetails: labelDetails,
 					detail: "auto-import from " ~ mod.join("."),
-					sortText: sortPrefixAutoImport ~ symbol,
+					sortText: sortPrefixAutoImport ~ subSorter ~ symbol,
 					data: JsonValue([
 						"uri": JsonValue(params.textDocument.uri),
 						"line": JsonValue(params.position.line),
