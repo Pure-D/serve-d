@@ -132,8 +132,6 @@ SymbolInformationEx makeSymbolInfoEx(scope const ref DefinitionElement def, stri
 	info.location.range = TextRange(startPosition, endPosition);
 	info.kind = convertFromDscannerType(def.type, def.name);
 	info.extendedType = convertExtendedFromDscannerType(def.type);
-	if (def.type == "f" && def.name == "this")
-		info.kind = SymbolKind.constructor;
 	const(string)* ptr;
 	auto attribs = def.attributes;
 	if ((ptr = "struct" in attribs) !is null || (ptr = "class" in attribs) !is null
