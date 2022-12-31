@@ -24,11 +24,12 @@ void reindexAll()
 {
 	foreach (workspace; workspaces)
 	{
+		auto stdlib = workspace.stdlibPath;
 		auto folderPath = workspace.folder.uri.uriToFile;
 		if (backend.has!IndexComponent(folderPath))
 		{
 			auto indexer = backend.get!IndexComponent(folderPath);
-			indexer.autoIndexSources().getYield();
+			indexer.autoIndexSources(stdlib).getYield();
 		}
 	}
 

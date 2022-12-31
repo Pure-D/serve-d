@@ -9,7 +9,7 @@ import workspaced.api;
 import workspaced.coms;
 import workspaced.com.dscanner : DefinitionElement;
 
-import std.algorithm : canFind, filter, map;
+import std.algorithm : among, canFind, filter, map;
 import std.array : appender, array, join;
 import std.path : extension, isAbsolute;
 import std.string : toLower;
@@ -28,7 +28,8 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 		{
 			auto indexer = backend.get!IndexComponent(folderPath);
 			indexer.iterateAll(delegate(const(string[]) mod, string fileName, scope const ref DefinitionElement def) {
-				if (!def.isVerboseType && !def.insideFunction
+				if (def.isImportable
+					&& !mod.isStdLib
 					&& def.name.roughlyContains(params.query))
 				{
 					Position p;
@@ -42,6 +43,11 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 		}
 	}
 	return infos.data;
+}
+
+private bool isStdLib(const(string[]) mod)
+{
+	return mod.length && mod[0].among!("std", "core", "etc", "object");
 }
 
 /// Checks if doesThis contains matchThis in a way that a fuzzy search would

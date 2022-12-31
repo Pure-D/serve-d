@@ -139,7 +139,7 @@ class IndexComponent : ComponentWrapper
 		store.require(refInstance).cache.remove(key);
 	}
 
-	Future!void autoIndexSources()
+	Future!void autoIndexSources(string[] stdlib)
 	{
 		if (!refInstance)
 			throw new Exception("index.autoIndexSources requires to be instanced");
@@ -150,9 +150,11 @@ class IndexComponent : ComponentWrapper
 			try
 			{
 				auto files = appender!(string[]);
-				files ~= importFiles();
+				foreach (path; stdlib)
+					appendSourceFiles(files, path);
 				foreach (path; importPaths())
 					appendSourceFiles(files, path);
+				files ~= importFiles();
 
 				trace("Indexing ", files.data.length, " files inside ", refInstance.cwd, "...");
 
@@ -483,16 +485,47 @@ private void appendSourceFiles(R)(ref R range, string path)
 
 private void insertSet(alias less = "a<b", T)(ref T[] arr, T item)
 {
-	auto i = assumeSorted!less(arr).lowerBound(item).length;
-	if (i == arr.length)
+	import std.functional : binaryFun;
+
+	if (arr.length == 0)
+	{
 		arr ~= item;
-	else if (arr[i] != item)
-		arr = arr[0 .. i] ~ item ~ arr[i .. $];
+	}
+	else if (arr.length == 1)
+	{
+		if (binaryFun!less(item, arr[0]))
+			arr = item ~ arr;
+		else
+			arr ~= item;
+	}
+	else
+	{
+		auto i = assumeSorted!less(arr).lowerBound(item).length;
+		if (i == arr.length)
+			arr ~= item;
+		else if (arr[i] != item)
+			arr = arr[0 .. i] ~ item ~ arr[i .. $];
+	}
 }
 
 private void removeSet(alias less = "a<b", T)(ref T[] arr, T item)
 {
-	auto i = assumeSorted!less(arr).lowerBound(item).length;
-	if (i != arr.length && arr[i] == item)
-		arr = arr.remove(i);
+	if (arr.length == 0)
+		return;
+	else if (arr.length == 1)
+	{
+		if (arr[0] == item)
+			arr.length = 0;
+	}
+	else
+	{
+		auto i = assumeSorted!less(arr).lowerBound(item).length;
+		if (i != arr.length && arr[i] == item)
+			arr = arr.remove(i);
+	}
+}
+
+private bool isStdLib(const ModuleRef mod)
+{
+	return mod.length && mod[0].among!("std", "core", "etc", "object");
 }
