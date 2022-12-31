@@ -65,10 +65,21 @@ bool endsWithKeyword(scope const(char)[] code, string keyword) @safe @nogc
 			.isIdentifierChar);
 }
 
-bool isIdentifierSeparatingChar(dchar c) @safe @nogc
+deprecated("use isDIdentifierSeparatingChar instead")
+alias isIdentifierSeparatingChar = isDIdentifierSeparatingChar;
+
+bool isDIdentifierSeparatingChar(dchar c) @safe @nogc
 {
 	return c < 48 || (c > 57 && c < 65) || c == '[' || c == '\\' || c == ']'
 		|| c == '`' || (c > 122 && c < 128) || c == '\u2028' || c == '\u2029'; // line separators
+}
+
+bool isValidDIdentifier(scope const(char)[] s)
+{
+	import std.algorithm : any;
+	import std.ascii : isDigit;
+
+	return s.length && !s[0].isDigit && !s.any!isDIdentifierSeparatingChar;
 }
 
 version (unittest)

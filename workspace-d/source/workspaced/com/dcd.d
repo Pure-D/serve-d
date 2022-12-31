@@ -450,7 +450,7 @@ class DCDComponent : ComponentWrapper
 				}
 
 				// We need to move by one character on identifier characters to ensure the start character fits.
-				if (!isIdentifierSeparatingChar(code[pos]))
+				if (!isDIdentifierSeparatingChar(code[pos]))
 					pos++;
 
 				auto info = client.requestSymbolInfo(CodeRequest("stdin", code, pos));
@@ -480,7 +480,7 @@ class DCDComponent : ComponentWrapper
 				}
 
 				// We need to move by one character on identifier characters to ensure the start character fits.
-				if (!isIdentifierSeparatingChar(code[pos]))
+				if (!isDIdentifierSeparatingChar(code[pos]))
 					pos++;
 
 				auto doc = client.requestDocumentation(CodeRequest("stdin", code, pos));
@@ -510,7 +510,7 @@ class DCDComponent : ComponentWrapper
 				}
 
 				// We need to move by one character on identifier characters to ensure the start character fits.
-				if (!isIdentifierSeparatingChar(code[pos]))
+				if (!isDIdentifierSeparatingChar(code[pos]))
 					pos++;
 
 				auto localUse = client.requestLocalUse(CodeRequest("stdin", code, pos));

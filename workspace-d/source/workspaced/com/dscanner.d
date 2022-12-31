@@ -263,7 +263,7 @@ class DscannerComponent : ComponentWrapper
 			// span from start of last word
 			size_t issueStart = min(max(0, cast(ptrdiff_t)tokens.length - 1), currentToken + 1);
 			// if a non-identifier was expected, include word before
-			if (issueStart > 0 && s.length > 2 && s[1].isIdentifierSeparatingChar)
+			if (issueStart > 0 && s.length > 2 && s[1].isDIdentifierSeparatingChar)
 				issueStart--;
 			foreach_reverse (i, token; tokens[0 .. issueStart])
 			{
