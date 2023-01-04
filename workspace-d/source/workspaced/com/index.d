@@ -541,7 +541,7 @@ class IndexComponent : ComponentWrapper
 		cache.remove(key);
 	}
 
-	Future!void autoIndexSources(string[] stdlib)
+	Future!void autoIndexSources(string[] stdlib, bool save)
 	{
 		auto ret = new typeof(return)();
 		gthreads.create({
@@ -566,7 +566,8 @@ class IndexComponent : ComponentWrapper
 
 				whenAllDone(tasks, {
 					trace("Done indexing ", files.data.length, " files in ", sw.peek);
-					saveIndex();
+					if (save)
+						saveIndex();
 					ret.finish();
 				});
 			}

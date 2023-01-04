@@ -30,7 +30,7 @@ void reindexAll()
 		if (backend.has!IndexComponent(folderPath))
 		{
 			auto indexer = backend.get!IndexComponent(folderPath);
-			indexer.autoIndexSources(stdlib).getYield();
+			indexer.autoIndexSources(stdlib, true).getYield();
 		}
 	}
 
