@@ -240,14 +240,24 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				size_t reservedLength = 1 + partialResults.length;
 				foreach (partial; partialResults)
 				{
-					assert(partial.looksLikeJsonArray);
-					reservedLength += partial.length - 2;
+					if (partial == "[]")
+					{
+						reservedLength--;
+					}
+					else
+					{
+						assert(partial.looksLikeJsonArray);
+						reservedLength += partial.length - 2;
+					}
 				}
 				char[] resJson = new char[reservedLength];
 				size_t i = 0;
 				resJson.ptr[i++] = '[';
 				foreach (partial; partialResults)
 				{
+					if (partial == "[]")
+						continue;
+
 					assert(i + partial.length - 2 < resJson.length);
 					resJson.ptr[i .. i += (partial.length - 2)] = partial[1 .. $ - 1];
 					resJson.ptr[i++] = ',';
