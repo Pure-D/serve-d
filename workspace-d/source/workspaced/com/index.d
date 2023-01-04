@@ -376,25 +376,13 @@ class IndexComponent : ComponentWrapper
 			if (auto cache = fileIndex.getIfActive(file))
 			{
 				auto modName = cache.modName;
-				auto ret = new typeof(return)();
-				gthreads.create({
-					mixin(traceTask);
-					try
-					{
-						forceReindexFromCache(
-							file,
-							cache.lastModified,
-							cache.fileSize,
-							cache.modName,
-							cache.elements);
-						ret.finish(modName);
-					}
-					catch (Throwable t)
-					{
-						ret.error(t);
-					}
-				});
-				return ret;
+				forceReindexFromCache(
+					file,
+					cache.lastModified,
+					cache.fileSize,
+					cache.modName,
+					cache.elements);
+				return typeof(return).fromResult(modName);
 			}
 			else
 			{
@@ -465,21 +453,24 @@ class IndexComponent : ComponentWrapper
 
 	private void forceReindexFromCache(string file, SysTime lastWrite, ulong fileSize, const ModuleRef mod, const DefinitionElement[] cache)
 	{
-		auto storeCacheEntry = &this.cache
-			.require(mod, ImportCacheEntry(true, file, SysTime.init, 0));
+		synchronized (cachesMutex)
+		{
+			auto storeCacheEntry = &this.cache
+				.require(mod, ImportCacheEntry(true, file, SysTime.init, 0));
 
-		if (cast()storeCacheEntry.fileName == file
-			&& cast()storeCacheEntry.lastModified == lastWrite
-			&& cast()storeCacheEntry.fileSize == fileSize
-			&& cast()storeCacheEntry._definitions.length == cache.length)
-			return;
+			if (cast()storeCacheEntry.fileName == file
+				&& cast()storeCacheEntry.lastModified == lastWrite
+				&& cast()storeCacheEntry.fileSize == fileSize
+				&& cast()storeCacheEntry._definitions.length == cache.length)
+				return;
 
-		auto duped = new DefinitionElement[cache.length];
-		foreach (i; 0 .. duped.length)
-			duped[i] = cache[i].dup;
+			auto duped = new DefinitionElement[cache.length];
+			foreach (i; 0 .. duped.length)
+				duped[i] = cache[i].dup;
 
-		auto entry = generateCacheEntry(file, lastWrite, fileSize, duped);
-		this.cache[mod].replaceFrom(mod, entry, this);
+			auto entry = generateCacheEntry(file, lastWrite, fileSize, duped);
+			this.cache[mod].replaceFrom(mod, entry, this);
+		}
 	}
 
 	void saveIndex()
@@ -501,13 +492,13 @@ class IndexComponent : ComponentWrapper
 
 	void iterateAll(scope void delegate(const ModuleRef mod, string fileName, scope const ref DefinitionElement definition) cb)
 	{
-		foreach (mod, ref entry; cache)
+		synchronized (cachesMutex)
 		{
-			if (!entry.success)
-				continue;
-
-			synchronized (cachesMutex)
+			foreach (mod, ref entry; cache)
 			{
+				if (!entry.success)
+					continue;
+
 				foreach (scope ref d; entry._definitions)
 					cb(mod, entry.fileName, cast()d);
 			}
@@ -516,13 +507,13 @@ class IndexComponent : ComponentWrapper
 
 	void iterateDefinitions(ModuleRef mod, scope void delegate(scope const DefinitionElement definition) cb)
 	{
-		if (auto v = mod in cache)
+		synchronized (cachesMutex)
 		{
-			if (!v.success)
-				return;
-
-			synchronized (cachesMutex)
+			if (auto v = mod in cache)
 			{
+				if (!v.success)
+					return;
+
 				foreach (scope ref d; v._definitions)
 					cb(cast()d);
 			}
@@ -538,7 +529,15 @@ class IndexComponent : ComponentWrapper
 
 	void dropIndex(ModuleRef key)
 	{
-		cache.remove(key);
+		synchronized (cachesMutex)
+		{
+			if (auto entry = key in cache)
+			{
+				ImportCacheEntry cleared;
+				entry.replaceFrom(key, cleared, this);
+				cache.remove(key);
+			}
+		}
 	}
 
 	Future!void autoIndexSources(string[] stdlib, bool save)
