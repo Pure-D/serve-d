@@ -619,7 +619,7 @@ class DubComponent : ComponentWrapper
 								{
 									issues ~= BuildIssue(deprMatch[2].to!int, deprMatch[3].toOr!int(1),
 										deprMatch[1], ErrorType.Deprecation,
-										deprMatch[4] ~ " is deprecated, use " ~ deprMatch[5] ~ " instead.");
+										deprMatch[4] ~ " is deprecated" ~ deprMatch[5]);
 								}
 							}
 						}
@@ -813,7 +813,7 @@ enum harmlessExceptionFormat = ctRegex!(`failed with exit code`, "g");
 enum errorFormat = ctRegex!(`(.*?)\((\d+)(?:,(\d+))?\): (Deprecation|Warning|Error): (.*)`, "gi");
 enum errorFormatCont = ctRegex!(`(.*?)\((\d+)(?:,(\d+))?\):[ ]{6,}(.*)`, "g");
 enum deprecationFormat = ctRegex!(
-			`(.*?)\((\d+)(?:,(\d+))?\): (.*?) is deprecated, use (.*?) instead.$`, "g");
+			`(.*?)\((\d+)(?:,(\d+))?\): (.*?) is deprecated(.*)`, "g");
 
 struct DubPackageInfo
 {
