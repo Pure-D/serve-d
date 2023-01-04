@@ -1103,7 +1103,7 @@ final class DefinitionFinder : ASTVisitor
 			return;
 
 		auto tok = dec.token;
-		auto def = makeDefinition(tok.tokenText, tok.line, 'v', context,
+		auto def = makeDefinition(tok.tokenText, tok.line, 'V', context,
 				[
 					cast(int) tok.index,
 					cast(int) tok.index + cast(int) tok.text.length
@@ -1393,11 +1393,12 @@ unittest
 		},
 		(code, parts, line) {
 			assert(parts.length == 6, "malformed definition test line: " ~ line);
+			assert(parts[2].length == 1, "malformed type in test line: " ~ line);
 
 			auto expected = DefinitionElement(
 				parts[0],
 				parts[1].to!int,
-				parts[2],
+				parts[2][0],
 				null,
 				[parts[4].to!int, parts[5].to!int]
 			);
