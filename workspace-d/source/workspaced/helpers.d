@@ -71,6 +71,18 @@ bool endsWithKeyword(scope const(char)[] code, string keyword) @safe @nogc
 			.isIdentifierChar);
 }
 
+inout(char)[] getIdentifierAt(scope return inout(char)[] code, size_t index) @safe
+{
+	while (index > 0 && code[index - 1].isIdentifierChar)
+		index--;
+
+	size_t end = index;
+	while (end < code.length && !code[end].isDIdentifierSeparatingChar)
+		end++;
+
+	return code[index .. end];
+}
+
 deprecated("use isDIdentifierSeparatingChar instead")
 alias isIdentifierSeparatingChar = isDIdentifierSeparatingChar;
 

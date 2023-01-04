@@ -43,6 +43,7 @@ public import served.commands.file_search;
 public import served.commands.format;
 public import served.commands.highlight;
 public import served.commands.index;
+public import served.commands.references;
 public import served.commands.rename;
 public import served.commands.symbol_search;
 public import served.commands.test_provider;
@@ -287,6 +288,7 @@ InitializeResult initialize(InitializeParams params)
 		textDocumentSync: documents.syncKind,
 		// only provide fixes when doCompleteSnippets is requested
 		completionProvider: completionProvider,
+		referencesProvider: true,
 		signatureHelpProvider: signatureHelpProvider,
 		workspaceSymbolProvider: true,
 		definitionProvider: true,
@@ -389,6 +391,8 @@ void doGlobalStartup(UserConfiguration config)
 		backend.register!SnippetsComponent;
 		trace("Starting index");
 		backend.register!IndexComponent;
+		trace("Starting references");
+		backend.register!ReferencesComponent;
 
 		if (registerDefaultSnippets)
 		{
@@ -1105,6 +1109,7 @@ alias members = AliasSeq!(
 	__traits(derivedMembers, served.commands.format),
 	__traits(derivedMembers, served.commands.highlight),
 	__traits(derivedMembers, served.commands.index),
+	__traits(derivedMembers, served.commands.references),
 	__traits(derivedMembers, served.commands.rename),
 	__traits(derivedMembers, served.commands.symbol_search),
 	__traits(derivedMembers, served.commands.test_provider),

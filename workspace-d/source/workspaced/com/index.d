@@ -529,6 +529,16 @@ class IndexComponent : ComponentWrapper
 		});
 	}
 
+	void iterateModuleReferences(ModuleRef mod, scope void delegate(ModuleRef definition) cb)
+	{
+		synchronized (cachesMutex)
+		{
+			if (auto v = mod in reverseImports)
+				foreach (subMod; *v)
+					cb(subMod);
+		}
+	}
+
 	void dropIndex(ModuleRef key)
 	{
 		synchronized (cachesMutex)
@@ -540,6 +550,16 @@ class IndexComponent : ComponentWrapper
 				cache.remove(key);
 			}
 		}
+	}
+
+	string getIndexedFileName(ModuleRef forModule)
+	{
+		synchronized (cachesMutex)
+		{
+			if (auto entry = forModule in cache)
+				return entry.fileName;
+		}
+		return null;
 	}
 
 	Future!void autoIndexSources(string[] stdlib, bool save)
