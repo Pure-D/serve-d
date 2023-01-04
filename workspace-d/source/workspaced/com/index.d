@@ -566,6 +566,7 @@ class IndexComponent : ComponentWrapper
 
 				whenAllDone(tasks, {
 					trace("Done indexing ", files.data.length, " files in ", sw.peek);
+					saveIndex();
 					ret.finish();
 				});
 			}
