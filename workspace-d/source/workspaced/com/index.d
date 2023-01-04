@@ -952,17 +952,6 @@ private void insertSet(alias less = "a<b", T)(ref T[] arr, T item, int initialRe
 		arr.reserve(initialReserve);
 		arr ~= move(item);
 	}
-	else if (arr.length == 1)
-	{
-		if (binaryFun!less(item, arr.ptr[0]))
-		{
-			arr.length++;
-			move(arr.ptr[0], arr.ptr[1]);
-			move(item, arr.ptr[0]);
-		}
-		else
-			arr ~= move(item);
-	}
 	else
 	{
 		insertSortedNoDup!less(arr, move(item));
