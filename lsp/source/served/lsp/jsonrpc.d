@@ -550,7 +550,8 @@ private:
 
 		auto id = slices.id;
 		if (slices.result.length && slices.method.length
-			|| !slices.result.length && !slices.method.length && !slices.error.length)
+			|| !slices.result.length && !slices.method.length && !slices.error.length
+			|| slices.result.length && !slices.id.length)
 		{
 			ResponseMessage res;
 			if (id.length)
@@ -561,8 +562,9 @@ private:
 		}
 
 		bool isResponse = false;
-		if (id.length)
+		if (slices.result.length)
 		{
+			assert(id.length); // checked above
 			auto tok = id.deserializeJson!RequestToken;
 			foreach (ref waiting; responseTokens)
 			{
@@ -588,7 +590,7 @@ private:
 				return RequestMessageRaw.init;
 			}
 		}
-		if (!isResponse)
+		else
 		{
 			RequestMessageRaw request;
 			if (slices.id.length)
