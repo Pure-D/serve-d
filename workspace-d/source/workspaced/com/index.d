@@ -983,13 +983,41 @@ bool isStdLib(const ModuleRef mod)
 version (BenchmarkLocalCachedIndexing)
 unittest
 {
+	import std.stdio;
+	import std.experimental.logger;
+
+	globalLogLevel = LogLevel.trace;
+
+	static if (__VERSION__ < 2101)
+		sharedLog = new FileLogger(stderr);
+	else
+		sharedLog = (() @trusted => cast(shared) new FileLogger(stderr))();
+
 	scope backend = new WorkspaceD();
 	auto workspace = makeTemporaryTestingWorkspace;
 	auto instance = backend.addInstance(workspace.directory);
 	backend.register!IndexComponent;
 	backend.register!DscannerComponent;
+	backend.register!ModulemanComponent;
 	IndexComponent index = instance.get!IndexComponent;
-	index.autoIndexSources([
-		"/usr/include/dlang/dmd"
-	]).getBlocking();
+	StopWatch sw;
+
+	foreach (i; 0 .. 11)
+	{
+		index.clearAll();
+		if (i != 0)
+			sw.start();
+		index.autoIndexSources([
+			"/usr/include/dlang/dmd"
+		], i == 0).getBlocking();
+		if (i != 0)
+			sw.stop();
+		writeln("all globals: ", index.allGlobals.totalCount);
+		if (i == 0)
+		{
+			import core.thread;
+			Thread.sleep(1.seconds);
+		}
+	}
+	writeln("Total indexing time: ", sw.peek);
 }
