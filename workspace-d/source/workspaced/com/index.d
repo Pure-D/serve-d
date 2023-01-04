@@ -11,6 +11,7 @@ import dparse.rollback_allocator;
 import core.sync.mutex;
 import std.algorithm;
 import std.array;
+import std.container.rbtree;
 import std.conv;
 import std.datetime.stopwatch;
 import std.datetime.systime;
@@ -363,6 +364,7 @@ class IndexComponent : ComponentWrapper
 			trace("loaded file index with ", fileIndex.index.length, " entries in ", sw.peek);
 		}
 
+		allGlobals.initialize();
 		cachesMutex = new Mutex();
 		config.stringBehavior = StringBehavior.source;
 	}
@@ -640,15 +642,21 @@ private:
 	__gshared Mutex cachesMutex;
 	__gshared ImportCacheEntry[ModuleRef] cache;
 
-	__gshared ModuleRef[][ModuleRef] reverseImports;
-	__gshared ModuleRef[][string] reverseDefinitions;
-	// 0-9 = '0'-'9'
-	// 10-35 = 'A'-'Z'
-	// 36 = '_'
-	// 37-62 = 'a'-'z'
-	// 63 = other
-	__gshared InterestingGlobal[][10 + 26 * 2 + 2] allGlobals;
-	__gshared bool globalsLocked;
+	__gshared RedBlackTree!ModuleRef[ModuleRef] reverseImports;
+	__gshared RedBlackTree!ModuleRef[string] reverseDefinitions;
+	__gshared OrderedKeyedList!InterestingGlobal allGlobals;
+
+	version (unittest) void clearAll()
+	{
+		synchronized (cachesMutex)
+		{
+			cache = null;
+			reverseImports = null;
+			reverseDefinitions = null;
+			allGlobals.clear();
+			// fileIndex = IndexCache.load();
+		}
+	}
 
 	void iterateGlobalsStartingWith(string s, scope void delegate(scope InterestingGlobal g) item)
 	{
@@ -659,20 +667,22 @@ private:
 		{
 			if (s.length == 0)
 			{
-				foreach (arr; allGlobals)
+				foreach (arr; allGlobals.allBuckets)
 					foreach (ref g; arr)
 						item(g);
 			}
 			else if (s.length == 1)
 			{
-				foreach (ref g; globalsBucket(s))
+				InterestingGlobal q;
+				q.name = s;
+				foreach (ref g; allGlobals.bucket(q))
 					item(g);
 			}
 			else
 			{
 				InterestingGlobal q;
 				q.name = s;
-				auto bucket = globalsBucket(s);
+				auto bucket = allGlobals.bucket(q);
 				auto i = assumeSorted(bucket).lowerBound(q).length;
 				while (i < bucket.length && bucket.ptr[i].name.startsWith(s))
 				{
@@ -686,47 +696,35 @@ private:
 	void _addedImport(ref const DefinitionElement modElem, ModuleRef sourceModule)
 	{
 		auto mod = modElem.name;
-		auto ptr = &reverseImports.require(mod, null);
-		insertSet((*ptr).assumeSafeAppend, sourceModule, 32);
+		auto ptr = &reverseImports.require(mod, new RedBlackTree!ModuleRef);
+		ptr.insert(sourceModule);
+		// insertSet(*ptr, sourceModule, 32);
 	}
 
 	void _removedImport(ref const DefinitionElement modElem, ModuleRef sourceModule)
 	{
 		auto mod = modElem.name;
-		auto ptr = &reverseImports.require(mod, null);
-		removeSet(*ptr, sourceModule);
+		if (auto ptr = mod in reverseImports)
+			ptr.removeKey(sourceModule);
+			// removeSet(*ptr, sourceModule);
 	}
 
 	void _addedDefinition(ref const DefinitionElement def, ModuleRef sourceModule)
 	{
-		auto ptr = &reverseDefinitions.require(def.name, null);
-		insertSet((*ptr).assumeSafeAppend, sourceModule, 64);
+		auto ptr = &reverseDefinitions.require(def.name, new RedBlackTree!ModuleRef);
+		ptr.insert(sourceModule);
+		// insertSet(*ptr, sourceModule, 64);
 		if (isInterestingGlobal(def))
-			insertSet(globalsBucket(def.name).assumeSafeAppend, InterestingGlobal(def, sourceModule), 4096);
+			allGlobals.insert(InterestingGlobal(def, sourceModule));
 	}
 
 	void _removedDefinition(ref const DefinitionElement def, ModuleRef sourceModule)
 	{
-		auto ptr = &reverseDefinitions.require(def.name, null);
-		removeSet(*ptr, sourceModule);
+		if (auto ptr = def.name in reverseDefinitions)
+			ptr.removeKey(sourceModule);
+			// removeSet(*ptr, sourceModule);
 		if (isInterestingGlobal(def))
-			removeSet(globalsBucket(def.name), InterestingGlobal(def, sourceModule));
-	}
-
-	ref InterestingGlobal[] globalsBucket(string name)
-	{
-		assert(name.length);
-		char key = name[0];
-		if (key >= '0' && key <= '9')
-			return allGlobals[key - '0'];
-		else if (key >= 'A' && key <= 'Z')
-			return allGlobals[key - 'A' + 10];
-		else if (key == '_')
-			return allGlobals[36];
-		else if (key >= 'a' && key <= 'z')
-			return allGlobals[key - 'a' + 37];
-		else
-			return allGlobals[63];
+			allGlobals.remove(InterestingGlobal(def, sourceModule));
 	}
 
 	static bool isInterestingGlobal(ref const DefinitionElement def)
@@ -965,19 +963,93 @@ private void removeSet(alias less = "a<b", T)(ref T[] arr, const auto ref T item
 	else if (arr.length == 1)
 	{
 		if (arr.ptr[0] == item)
+		{
 			arr.length = 0;
+			arr = arr.assumeSafeAppend;
+		}
 	}
 	else
 	{
 		auto i = assumeSorted!less(arr).lowerBound(item).length;
 		if (i != arr.length && arr.ptr[i] == item)
+		{
 			arr = arr.remove(i);
+			arr = arr.assumeSafeAppend;
+		}
 	}
 }
 
 bool isStdLib(const ModuleRef mod)
 {
 	return mod.startsWith("std.", "core.", "etc.") || mod == "object";
+}
+
+struct OrderedKeyedList(T, alias key = "a.name")
+{
+	import std.functional;
+
+	// 0-9 = '0'-'9'
+	// 10-35 = 'A'-'Z'
+	// 36 = '_'
+	// 37-62 = 'a'-'z'
+	// 63 = other
+	T[][10 + 26 * 2 + 2] allBuckets;
+	// RedBlackTree!T[10 + 26 * 2 + 2] allBuckets;
+	// RedBlackTree!T allBuckets;
+
+	void initialize()
+	{
+		// allBuckets = new RedBlackTree!T;
+		// foreach (ref v; allBuckets)
+		// 	v = new RedBlackTree!T;
+	}
+
+	ref auto bucket(const ref T item)
+	{
+		auto name = unaryFun!key(item);
+		assert(name.length);
+		char key = name[0];
+		if (key >= '0' && key <= '9')
+			return allBuckets[key - '0'];
+		else if (key >= 'A' && key <= 'Z')
+			return allBuckets[key - 'A' + 10];
+		else if (key == '_')
+			return allBuckets[36];
+		else if (key >= 'a' && key <= 'z')
+			return allBuckets[key - 'a' + 37];
+		else
+			return allBuckets[63];
+	}
+
+	void clear()
+	{
+		// allBuckets.clear();
+		foreach (v; allBuckets)
+		{
+			// v.clear();
+			v.length = 0;
+		}
+	}
+
+	void insert(T item)
+	{
+		// allBuckets.insert(item);
+		insertSet(bucket(item), item, 4096);
+		// bucket(item).insert(item);
+	}
+
+	void remove(T item)
+	{
+		// allBuckets.removeKey(item);
+		removeSet(bucket(item), item);
+		// bucket(item).removeKey(item);
+	}
+
+	size_t totalCount() const @property
+	{
+		return allBuckets[].map!"a.length".sum;
+		// return allBuckets.length;
+	}
 }
 
 version (BenchmarkLocalCachedIndexing)
