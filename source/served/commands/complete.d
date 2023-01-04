@@ -847,18 +847,18 @@ private void provideAutoImports(TextDocumentPositionParams params, WorkspaceD.In
 
 	IndexComponent idx = instance.get!IndexComponent;
 	const availableImports = instance.get!ImporterComponent.get(document.rawText, byteOff);
-	scope size_t[const(string[])] modLookup;
+	scope size_t[string] modLookup;
 	foreach (n, imp; availableImports)
-		modLookup[imp.name] = n;
+		modLookup[imp.name.join('.')] = n;
 
 	idx.iterateSymbolsStartingWith(prefixIdentifier,
 		(string symbol, char type, scope const ModuleRef mod) {
 			string subSorter = "3_";
-			if (mod.length && mod[0] == "std")
+			if (mod.startsWith("std."))
 				subSorter = "0_";
-			else if (mod.length && (mod[0] == "core" || mod[0] == "etc"))
+			else if (mod.startsWith("core.", "etc."))
 				subSorter = "1_";
-			else if (mod.length && mod[0] == "object")
+			else if (mod == "object")
 				return;
 
 			if (auto hasImport = mod in modLookup)
@@ -868,20 +868,20 @@ private void provideAutoImports(TextDocumentPositionParams params, WorkspaceD.In
 			else
 			{
 				CompletionItemLabelDetails labelDetails = {
-					detail: " (import " ~ mod.join(".") ~ ")"
+					detail: " (import " ~ mod ~ ")"
 				};
 
 				CompletionItem item = {
 					label: symbol,
 					labelDetails: labelDetails,
-					detail: "auto-import from " ~ mod.join("."),
+					detail: "auto-import from " ~ mod,
 					sortText: sortPrefixAutoImport ~ subSorter ~ symbol,
 					data: JsonValue([
 						"uri": JsonValue(params.textDocument.uri),
 						"line": JsonValue(params.position.line),
 						"column": JsonValue(params.position.character),
 						"imports": JsonValue([
-							JsonValue(mod.join("."))
+							JsonValue(mod)
 						])
 					]),
 					kind: convertCompletionFromDScannerType(type)

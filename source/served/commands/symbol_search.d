@@ -8,6 +8,7 @@ import mir.serde;
 import workspaced.api;
 import workspaced.coms;
 import workspaced.com.dscanner : DefinitionElement;
+import workspaced.com.index;
 
 import std.algorithm : among, canFind, filter, map;
 import std.array : appender, array, join;
@@ -27,7 +28,7 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 		if (backend.has!IndexComponent(folderPath))
 		{
 			auto indexer = backend.get!IndexComponent(folderPath);
-			indexer.iterateAll(delegate(const(string[]) mod, string fileName, scope const ref DefinitionElement def) {
+			indexer.iterateAll(delegate(ModuleRef mod, string fileName, scope const ref DefinitionElement def) {
 				if (def.isImportable
 					&& !mod.isStdLib
 					&& def.name.roughlyContains(params.query))
@@ -36,18 +37,13 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 					p.line = def.line - 1;
 					auto info = makeSymbolInfoEx(def, fileName.uriFromFile, p, p).downcast;
 					if (info.containerName.isNone)
-						info.containerName = mod.join(".");
+						info.containerName = mod;
 					infos ~= info;
 				}
 			});
 		}
 	}
 	return infos.data;
-}
-
-private bool isStdLib(const(string[]) mod)
-{
-	return mod.length && mod[0].among!("std", "core", "etc", "object");
 }
 
 /// Checks if doesThis contains matchThis in a way that a fuzzy search would

@@ -1,5 +1,6 @@
 module served.commands.index;
 
+import std.datetime;
 import std.experimental.logger;
 
 import workspaced.api;
@@ -33,6 +34,8 @@ void reindexAll()
 		}
 	}
 
+	auto now = Clock.currTime;
+
 	foreach (ref doc; documents.documentStore)
 	{
 		if (doc.getLanguageId != "d")
@@ -41,7 +44,7 @@ void reindexAll()
 		if (backend.hasBest!IndexComponent(filePath))
 		{
 			auto indexer = backend.best!IndexComponent(filePath);
-			indexer.reindex(filePath, doc.rawText, true).getYield();
+			indexer.reindex(filePath, now, doc.rawText.length, doc.rawText, true).getYield();
 		}
 	}
 
@@ -52,6 +55,8 @@ void reindexAll()
 		{
 			auto indexer = backend.get!IndexComponent(folderPath);
 			traceIndexerStats(indexer);
+
+			delayedSaveIndex(indexer);
 		}
 	}
 }
@@ -70,8 +75,11 @@ void reindexOnChange(DidChangeTextDocumentParams params)
 		auto filePath = params.textDocument.uri.uriToFile;
 		if (backend.hasBest!IndexComponent(filePath))
 		{
+			auto now = Clock.currTime;
+			document = documents[params.textDocument.uri];
 			auto indexer = backend.best!IndexComponent(filePath);
-			indexer.reindex(filePath, document.rawText, false).getYield();
+			indexer.reindex(filePath, now, document.rawText.length, document.rawText, false).getYield();
+			delayedSaveIndex(indexer);
 		}
 	}, delay);
 }
@@ -81,15 +89,26 @@ void reindexOnSave(DidSaveTextDocumentParams params)
 {
 	auto document = documents[params.textDocument.uri];
 	auto filePath = params.textDocument.uri.uriToFile;
+	clearTimeout(reindexChangeTimeout);
 
 	if (document.getLanguageId == "d")
 	{
 		if (backend.hasBest!IndexComponent(filePath))
 		{
 			auto indexer = backend.best!IndexComponent(filePath);
-			indexer.reindex(filePath, document.rawText, true).getYield();
+			indexer.reindexSaved(filePath, document.rawText).getYield();
+			delayedSaveIndex(indexer);
 		}
 	}
+}
+
+int reindexSaveTimeout;
+private void delayedSaveIndex(IndexComponent index)
+{
+	clearTimeout(reindexSaveTimeout);
+	reindexSaveTimeout = setTimeout({
+		index.saveIndex();
+	}, 2_500);
 }
 
 private void traceIndexerStats(IndexComponent index)

@@ -12,6 +12,7 @@ import std.json;
 import std.meta : AliasSeq;
 import std.stdio;
 import std.sumtype;
+import std.traits;
 import std.typecons;
 
 import core.sync.mutex;
@@ -408,45 +409,7 @@ class DscannerComponent : ComponentWrapper
 			mixin(traceTask);
 			try
 			{
-				if (code.length && !file.length)
-					file = "stdin";
-				if (!code.length)
-					code = readText(file);
-				if (!code.length)
-				{
-					DefinitionElement[] arr;
-					ret.finish(arr);
-					return;
-				}
-
-				LexerConfig config;
-				auto tokens = getTokensForParser(cast(ubyte[]) code, config, &workspaced.stringCache);
-
-				RollbackAllocator r;
-				uint errorCount, warningCount;
-				ParserConfig pconfig = {
-					tokens: tokens,
-					fileName: file,
-					allocator: &r,
-					errorCount: &errorCount,
-					warningCount: &warningCount,
-				};
-
-				auto m = dparse.parser.parseModule(pconfig);
-
-				bool nullOnError = (extraMask & ExtraMask.nullOnError) != 0;
-				if (nullOnError && errorCount > 0)
-				{
-					ret.finish(null);
-					return;
-				}
-
-				auto defFinder = new DefinitionFinder();
-				defFinder.verbose = verbose;
-				defFinder.extraMask = extraMask;
-				defFinder.visit(m);
-
-				ret.finish(defFinder.definitions);
+				ret.finish(listDefinitionsSync(file, code, verbose, extraMask));
 			}
 			catch (Throwable e)
 			{
@@ -454,6 +417,48 @@ class DscannerComponent : ComponentWrapper
 			}
 		});
 		return ret;
+	}
+
+	/// ditto
+	DefinitionElement[] listDefinitionsSync(string file,
+		scope const(char)[] code = "", bool verbose = false,
+		ExtraMask extraMask = ExtraMask.none)
+	{
+		if (code.length && !file.length)
+			file = "stdin";
+		if (!code.length)
+			code = readText(file);
+		if (!code.length)
+		{
+			DefinitionElement[] arr;
+			return arr;
+		}
+
+		LexerConfig config;
+		auto tokens = getTokensForParser(cast(ubyte[]) code, config, &workspaced.stringCache);
+
+		RollbackAllocator r;
+		uint errorCount, warningCount;
+		ParserConfig pconfig = {
+			tokens: tokens,
+			fileName: file,
+			allocator: &r,
+			errorCount: &errorCount,
+			warningCount: &warningCount,
+		};
+
+		auto m = dparse.parser.parseModule(pconfig);
+
+		bool nullOnError = (extraMask & ExtraMask.nullOnError) != 0;
+		if (nullOnError && errorCount > 0)
+			return null;
+
+		auto defFinder = new DefinitionFinder();
+		defFinder.verbose = verbose;
+		defFinder.extraMask = extraMask;
+		defFinder.visit(m);
+
+		return defFinder.definitions;
 	}
 
 	/// Asynchronously finds all definitions of a symbol in the import paths.
@@ -611,6 +616,8 @@ enum ExtraMask
 /// Returned by list-definitions
 struct DefinitionElement
 {
+	import msgpack;
+
 	enum BasicVisibility
 	{
 		default_,
@@ -627,6 +634,35 @@ struct DefinitionElement
 	}
 
 	alias Visibility = SumType!(typeof(null), BasicVisibility, PackageVisibility);
+
+	DefinitionElement dup() const
+	{
+		DefinitionElement ret;
+		foreach (i, v; this.tupleof)
+		{
+			static if (is(typeof(ret.tupleof[i]) == string[string]))
+			{
+				foreach (k, subV; v)
+					ret.tupleof[i][k] = subV;
+			}
+			else
+				ret.tupleof[i] = v;
+		}
+		return ret;
+	}
+
+	int cmpTypeAndName(ref DefinitionElement rhs)
+	{
+		if (type < rhs.type)
+			return -1;
+		if (type > rhs.type)
+			return 1;
+		if (name < rhs.name)
+			return -1;
+		if (name > rhs.name)
+			return 1;
+		return 0;
+	}
 
 	///
 	string name;
@@ -674,6 +710,7 @@ struct DefinitionElement
 	/// template.
 	bool insideAggregate;
 
+	@serializedAs!SumTypePackProxy
 	Visibility visibility;
 
 	struct VersionCondition
@@ -683,9 +720,9 @@ struct DefinitionElement
 	}
 
 	/// List of `version (...)` identifiers that this symbol is inside.
-	VersionCondition[] versioned;
+	const(VersionCondition)[] versioned;
 	/// List of `debug (...)` identifiers that this symbol is inside.
-	VersionCondition[] debugVersioned;
+	const(VersionCondition)[] debugVersioned;
 	/// True if this statement is defined within a `static if` or otherwise
 	/// somehow potentially omitted depending on compile time constructs.
 	bool hasOtherConditional;
@@ -704,6 +741,88 @@ struct DefinitionElement
 		if (insideFunction || insideAggregate)
 			return false;
 		return !!type.among!('c', 's', 'i', 'T', 'f', 'g', 'u', 'e', 'v', 'a', 'D', 'V');
+	}
+
+	enum ubyte serializeVersion = 1;
+	static assert(hashFields!(typeof(this).tupleof) == 0x29460F10C62EDA9B,
+		"Updated fields or layout, but not version and hash! Please update serializeVersion and adjust this check to 0x"
+		~ hashFields!(typeof(this).tupleof).to!string(16));
+
+	ubyte[] serialize()
+	{
+		return pack(this);
+	}
+
+	static DefinitionElement deserialize(scope const(ubyte)[] data, int targetSerializeVersion)
+	{
+		if (targetSerializeVersion != serializeVersion)
+			throw new Exception("DefinitionElement cache format has changed, can't deserialize");
+
+		static struct DefinitionElementUnqual
+		{
+			static foreach (i, t; DefinitionElement.tupleof)
+			{
+				static if (is(typeof(t) == const(VersionCondition)[]))
+					mixin("VersionCondition[] ", __traits(identifier, DefinitionElement.tupleof[i]), ";");
+				else static if (is(typeof(t) == Visibility))
+					mixin("@serializedAs!SumTypePackProxy Visibility ", __traits(identifier, DefinitionElement.tupleof[i]), ";");
+				else
+					mixin("Unqual!(typeof(t)) ", __traits(identifier, DefinitionElement.tupleof[i]), ";");
+			}
+		}
+
+		return DefinitionElement(unpack!DefinitionElementUnqual(data).tupleof);
+	}
+}
+
+private static ulong hashFields(Args...)()
+{
+	import std.digest.crc : CRC64ISO;
+	import std.bitmanip;
+
+	CRC64ISO crc;
+	crc.put(Args.length.nativeToLittleEndian);
+	static foreach (Arg; Args)
+	{
+		crc.put(cast(const(ubyte)[]) __traits(identifier, Arg));
+		crc.put(cast(const(ubyte)[]) typeof(Arg).stringof);
+	}
+	return crc.finish.littleEndianToNative!ulong;
+}
+
+private static struct SumTypePackProxy
+{
+	import msgpack;
+
+	static void serialize(T)(ref Packer p, ref in T sumtype)
+	{
+		static assert(__traits(identifier, sumtype.tupleof[1]) == "tag");
+		p.pack(sumtype.tupleof[1]);
+		sumtype.match!((v) {
+			static if (!is(typeof(v) == typeof(null)))
+				p.pack(v);
+		});
+	}
+
+	static void deserialize(T)(ref Unpacker u, ref T sumtype)
+	{
+		static assert(__traits(identifier, sumtype.tupleof[1]) == "tag");
+		typeof(sumtype.tupleof[1]) tag;
+		u.unpack(tag);
+		S: switch (tag)
+		{
+			static foreach (i, U; T.Types)
+			{
+			case cast(typeof(tag))i:
+				U value;
+				static if (!is(U == typeof(null)))
+					u.unpack(value);
+				sumtype = value;
+				break S;
+			}
+		default:
+			throw new ConvException("Unsupported SumType value.");
+		}
 	}
 }
 
