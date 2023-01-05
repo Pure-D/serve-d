@@ -20,8 +20,12 @@ class ReferencesComponent : ComponentWrapper
 			throw new Exception("references component requires to be instanced");
 	}
 
-	/// basic text-search-based references lookup
-	Future!References findReferences(string file, scope const(char)[] code, int pos)
+	/// Basic text-search-based references lookup.
+	/// Be careful with the delegate, as it is being called from another thread.
+	/// Do NOT call any other async workspace-d APIs from this callback as it
+	/// could result in a deadlock.
+	Future!References findReferences(string file, scope const(char)[] code, int pos,
+		void delegate(References) asyncFoundPart)
 	{
 		auto future = new typeof(return);
 		auto declTask = get!DCDComponent.findDeclaration(code, pos);
@@ -57,13 +61,16 @@ class ReferencesComponent : ComponentWrapper
 							ret.references ~= References.Reference(
 								localUse.declarationFilePath, cast(int)use);
 
+						asyncFoundPart(ret);
+
 						if (identifier.length)
 						{
 							bool[ModuleRef] visited;
 							grepRecursive(ret,
 								startModule,
 								identifier,
-								visited);
+								visited,
+								asyncFoundPart);
 						}
 						future.finish(ret);
 					}
@@ -83,7 +90,7 @@ class ReferencesComponent : ComponentWrapper
 
 private:
 	void grepRecursive(ref References ret, ModuleRef start, string identifier,
-		ref bool[ModuleRef] visited)
+		ref bool[ModuleRef] visited, void delegate(References) asyncFoundPart)
 	{
 		if (start in visited)
 			return;
@@ -92,15 +99,17 @@ private:
 		get!IndexComponent.iterateModuleReferences(start, (other) {
 			auto filename = get!IndexComponent.getIndexedFileName(other);
 			scope content = readText(filename);
-			grepFileReferences(ret, content, filename, identifier);
+			auto slice = grepFileReferences(ret, content, filename, identifier);
+			asyncFoundPart(References(null, 0, slice));
 
-			grepRecursive(ret, other, identifier, visited);
+			grepRecursive(ret, other, identifier, visited, asyncFoundPart);
 		});
 	}
 
-	static void grepFileReferences(ref References ret, scope const(char)[] code, string file, string identifier)
+	static References.Reference[] grepFileReferences(ref References ret, scope const(char)[] code, string file, string identifier)
 	{
 		ptrdiff_t i = 0;
+		size_t start = ret.references.length;
 		while (true)
 		{
 			i = indexOfKeyword(code, identifier, i);
@@ -109,6 +118,7 @@ private:
 			ret.references ~= References.Reference(file, cast(int)i);
 			i++;
 		}
+		return ret.references[start .. $];
 	}
 }
 
