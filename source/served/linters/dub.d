@@ -111,9 +111,11 @@ void lint(Document document)
 	scope (exit)
 		dubLintRunning = false;
 
-	while (true)
+	while (!retryDubAtEnd)
 	{
-		stderr.writeln("Running dub build");
+		retryDubAtEnd = false;
+
+		trace("Running dub build in ", instance.cwd);
 		currentBuildToken++;
 		int startToken = currentBuildToken;
 		setTimeout({
@@ -212,11 +214,6 @@ void lint(Document document)
 
 		diagnostics[DiagnosticSlot] = result.data;
 		updateDiagnostics();
-
-		if (!retryDubAtEnd)
-			break;
-		else
-			retryDubAtEnd = false;
 	}
 }
 

@@ -83,6 +83,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 	import std.experimental.logger;
 	import std.functional;
 	import std.json;
+	import std.range.primitives;
 
 	import io = std.stdio;
 
@@ -172,7 +173,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				scope (exit)
 					working--;
 				auto thisId = working;
-				trace("Partial ", thisId, " / ", numHandlers, "...");
+				trace("Partial ", thisId, " / ", numHandlers, "... ", partialResultToken.length ? "(supported)" : "(no support)");
 				auto result = fn(args.expand);
 				trace("Partial ", thisId, " = ", result);
 				auto json = result.serializeJson;
@@ -181,6 +182,38 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				else
 					rpc.notifyProgressRaw(partialResultToken, json);
 				processRequestObservers(msg, result);
+			});
+		}
+
+		void handlePartialIterator(Symbol, Arguments)(Symbol fn, Arguments args)
+		{
+			working++;
+			pushFiber({
+				scope (exit)
+					working--;
+				auto thisId = working;
+				trace("Partial iterator as ", thisId, " / ", numHandlers, "... ", partialResultToken.length ? "(supported)" : "(no support)");
+				auto result = fn(args.expand);
+				foreach (chunk; result)
+				{
+					static if (is(typeof(chunk) == T[], T))
+					{
+						trace("Partial iterator #", thisId, " got ", chunk.length, " new entries");
+						auto partialResult = chunk;
+					}
+					else
+					{
+						trace("Partial iterator #", thisId, " got single new entry");
+						auto partialResult = [chunk];
+					}
+					auto json = partialResult.serializeJson;
+					if (!partialResultToken.length)
+						partialResults ~= json;
+					else
+						rpc.notifyProgressRaw(partialResultToken, json);
+					processRequestObservers(msg, partialResult);
+				}
+				trace("Partial iterator as ", thisId, " done");
 			});
 		}
 
@@ -200,6 +233,12 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 					res.resultJson = requestResult.serializeJson;
 					done = true;
 					processRequestObservers(msg, requestResult);
+				}
+				else static if (!is(RequestResultT : _[], _)
+					&& isInputRange!RequestResultT)
+				{
+					handlePartialIterator(symbol, arguments);
+					return;
 				}
 				else
 				{
@@ -240,14 +279,24 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				size_t reservedLength = 1 + partialResults.length;
 				foreach (partial; partialResults)
 				{
-					assert(partial.looksLikeJsonArray);
-					reservedLength += partial.length - 2;
+					if (partial == "[]")
+					{
+						reservedLength--;
+					}
+					else
+					{
+						assert(partial.looksLikeJsonArray);
+						reservedLength += partial.length - 2;
+					}
 				}
 				char[] resJson = new char[reservedLength];
 				size_t i = 0;
 				resJson.ptr[i++] = '[';
 				foreach (partial; partialResults)
 				{
+					if (partial == "[]")
+						continue;
+
 					assert(i + partial.length - 2 < resJson.length);
 					resJson.ptr[i .. i += (partial.length - 2)] = partial[1 .. $ - 1];
 					resJson.ptr[i++] = ',';
