@@ -201,13 +201,13 @@ bool statFile(R)(R name, uint* attributes, SysTime* writeTime, ulong* size)
 	{
 		import std.internal.cstring : tempCStringW;
 		import core.sys.windows.winnt : INVALID_FILE_ATTRIBUTES;
-		import core.sys.windows.winbase : GetFileAttributesExW, WIN32_FILE_ATTRIBUTE_DATA;
+		import core.sys.windows.winbase : GetFileAttributesExW, WIN32_FILE_ATTRIBUTE_DATA, GET_FILEEX_INFO_LEVELS;
 
 		auto namez = tempCStringW(name);
 		WIN32_FILE_ATTRIBUTE_DATA fad;
-		static bool trustedGetFileAttributesW(const(wchar)* namez, out WIN32_FILE_ATTRIBUTE_DATA fad) @trusted
+		static bool trustedGetFileAttributesW(const(wchar)* namez, WIN32_FILE_ATTRIBUTE_DATA* fad) @trusted
 		{
-			return GetFileAttributesExW(namez, GET_FILEEX_INFO_LEVELS.GetFileExInfoStandard, &fad);
+			return GetFileAttributesExW(namez, GET_FILEEX_INFO_LEVELS.GetFileExInfoStandard, fad);
 		}
 		if (!trustedGetFileAttributesW(namez, &fad))
 			return false;
@@ -215,7 +215,7 @@ bool statFile(R)(R name, uint* attributes, SysTime* writeTime, ulong* size)
 		if (attributes)
 			*attributes = fad.dwFileAttributes;
 		if (writeTime)
-			*writeTime = FILETIMEToSysTime(&ftLastWriteTime);
+			*writeTime = FILETIMEToSysTime(&fad.ftLastWriteTime);
 		if (size)
 			*size = makeUlong(fad.nFileSizeLow, fad.nFileSizeHigh);
 		return true;
