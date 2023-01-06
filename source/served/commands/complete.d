@@ -873,7 +873,7 @@ void provideAutoImports(TextDocumentPositionParams params, WorkspaceD.Instance i
 				{
 					// TODO: add selective non-imported to list
 				}
-				else
+				else if (prefix.length)
 				{
 					CompletionItemLabelDetails labelDetails = {
 						detail: prefix == mod
