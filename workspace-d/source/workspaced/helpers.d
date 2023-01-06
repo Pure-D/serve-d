@@ -16,7 +16,11 @@ string determineIndentation(scope const(char)[] code) @safe
 	{
 		if (line.strip.length == 0)
 			continue;
-		indent = line[0 .. $ - line.stripLeft.length];
+		(() @trusted {
+			// trusted to avoid 'scope variable `line` assigned to `indent` with longer lifetime'
+			// lifetime is fine, because line has lifetime of code (is just a slice of code)
+			indent = line[0 .. $ - line.stripLeft.length];
+		})();
 	}
 	return indent.idup;
 }
