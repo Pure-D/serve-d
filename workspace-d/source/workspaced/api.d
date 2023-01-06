@@ -16,9 +16,9 @@ import std.traits;
 public import workspaced.backend;
 public import workspaced.future;
 
-version (unittest)
+debug
 {
-	package import std.experimental.logger : trace;
+	public import std.experimental.logger : trace;
 }
 else
 {
@@ -271,6 +271,13 @@ class DefaultComponentFactory(T : ComponentWrapper) : ComponentFactory
 		catch (Exception e)
 		{
 			error = e;
+			try
+			{
+				trace("Failed to create " ~ T.stringof ~ " on instance ", instance, ": ", e);
+			}
+			catch (Exception)
+			{
+			}
 			return null;
 		}
 	}

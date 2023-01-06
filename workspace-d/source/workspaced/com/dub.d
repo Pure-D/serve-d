@@ -26,7 +26,6 @@ import dub.dependency;
 import dub.generators.build;
 import dub.generators.generator;
 
-import dub.internal.vibecompat.core.log;
 import dub.internal.vibecompat.inet.url;
 
 import dub.recipe.io;
@@ -45,6 +44,11 @@ class DubComponent : ComponentWrapper
 
 	static void registered()
 	{
+		static if (__traits(compiles, { import dub.internal.logging; }))
+			import dub.internal.logging;
+		else
+			import dub.internal.vibecompat.core.log;
+
 		setLogLevel(LogLevel.none);
 	}
 
@@ -101,8 +105,8 @@ class DubComponent : ComponentWrapper
 	{
 		_dubRunning = false;
 		_dub = new Dub(instance.cwd, null, SkipPackageSuppliers.none);
-		_dub.loadPackage();
 		_dub.packageManager.getOrLoadPackage(NativePath(instance.cwd));
+		_dub.loadPackage();
 		_dub.project.validate();
 
 		// mark all packages as optional so we don't crash
@@ -633,9 +637,6 @@ class DubComponent : ComponentWrapper
 				{
 					import workspaced.dub.lintgenerator : DubLintGenerator;
 					import std.file : chdir;
-
-					// TODO: make DUB not use getcwd, but use the dub.cwd
-					chdir(cwd);
 
 					new DubLintGenerator(_dub.project).generate(settings);
 				}

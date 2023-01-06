@@ -13,6 +13,15 @@ WorkspaceD backend;
 
 void main()
 {
+	import std.experimental.logger;
+
+	globalLogLevel = LogLevel.trace;
+
+	static if (__VERSION__ < 2101)
+		sharedLog = new FileLogger(stderr);
+	else
+		sharedLog = (() @trusted => cast(shared) new FileLogger(stderr))();
+
 	string dir = buildNormalizedPath(getcwd, "..", "tc_fsworkspace");
 	backend = new WorkspaceD();
 	backend.register!DubComponent;
