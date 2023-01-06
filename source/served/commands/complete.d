@@ -35,7 +35,7 @@ static immutable sortPrefixDoc = "0_";
 static immutable sortPrefixSnippets = "2_5_";
 // dcd additionally sorts inside with sortFromDCDType return value (appends to this)
 static immutable sortPrefixDCD = "2_";
-// additional sorting inside with std.* = 0_, core.* & etc.* = 1_
+// additional sorting inside with already imported values = 0_, std.* = 1_, core.* & etc.* = 2_
 static immutable sortPrefixAutoImport = "3_";
 
 CompletionItemKind convertFromDCDType(string type)
@@ -666,6 +666,13 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 	string line = document.rawText[lineRange[0] .. lineRange[1]].idup;
 	// TODO: do UTF-16 counting instead of just relying on byte offset
 	string prefix = line[0 .. min($, params.position.character)].strip;
+	
+	size_t idStart = prefix.length;
+	while (idStart > 0 && !prefix[idStart - 1].isDIdentifierSeparatingChar)
+		idStart--;
+	// just the identifier before the cursor
+	auto prefixIdentifier = prefix[idStart .. $];
+
 	CompletionItem[] completion;
 	Token commentToken;
 	if (document.rawText.isInComment(byteOff, backend, &commentToken))
@@ -724,8 +731,8 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 		else
 			snippetInfo = getSnippetInfo(instance, document, byteOff);
 	}, {
-		if (completeIndex && config.d.enableIndex)
-			provideAutoImports(params, instance, document, completion, byteOff, prefix);
+		if (completeIndex && config.d.enableIndex && prefixIdentifier.length)
+			provideAutoImports(params, instance, document, completion, byteOff, prefixIdentifier);
 	});
 
 	if (completeDCD && result != DCDCompletions.init)
@@ -833,33 +840,68 @@ private void provideDocComplete(TextDocumentPositionParams params, WorkspaceD.In
 	}
 }
 
-private void provideAutoImports(TextDocumentPositionParams params, WorkspaceD.Instance instance,
-		ref Document document, ref CompletionItem[] completion, int byteOff, string prefix)
+void provideAutoImports(TextDocumentPositionParams params, WorkspaceD.Instance instance,
+		ref Document document, ref CompletionItem[] completion, int byteOff, string prefixIdentifier,
+		bool exactMatch = false)
 {
-	size_t idStart = prefix.length;
-	while (idStart > 0 && !prefix[idStart - 1].isDIdentifierSeparatingChar)
-		idStart--;
-
-	if (idStart == prefix.length)
-		return;
-
-	auto prefixIdentifier = prefix[idStart .. $];
-
 	IndexComponent idx = instance.get!IndexComponent;
 	const availableImports = instance.get!ImporterComponent.get(document.rawText, byteOff);
 	scope size_t[string] modLookup;
 	foreach (n, imp; availableImports)
 		modLookup[imp.name.join('.')] = n;
 
+	// TODO: use previously indexed symbols from unused dependencies to
+	// support adding DUB packages from imports (at least popular ones)
+
 	idx.iterateSymbolsStartingWith(prefixIdentifier,
 		(string symbol, char type, scope const ModuleRef mod) {
-			if (mod == "object")
+			if (mod == "object" || !symbol.length)
 				return;
+			if (exactMatch && symbol != prefixIdentifier)
+				return;
+
 			string subSorter = mod.getModuleSortKey;
 
 			if (auto hasImport = mod in modLookup)
 			{
-				// TODO: offer completion, adding rename or selective
+				const ImportInfo impInfo = availableImports[*hasImport];
+				string prefix;
+				if (impInfo.isStatic || impInfo.rename.length)
+					prefix = impInfo.effectiveName;
+
+				if (impInfo.selectives.length)
+				{
+					// TODO: add selective non-imported to list
+				}
+				else
+				{
+					CompletionItemLabelDetails labelDetails = {
+						detail: prefix == mod
+							? " (" ~ mod ~ ")"
+							: " (" ~ prefix ~ " = " ~ mod ~ ")"
+					};
+
+					CompletionItem item = {
+						label: symbol,
+						labelDetails: labelDetails,
+						detail: "use renamed import " ~ prefix,
+						sortText: sortPrefixAutoImport ~ "0_" ~ subSorter ~ symbol,
+						insertText: prefix ~ "." ~ symbol,
+						data: JsonValue([
+							"uri": JsonValue(params.textDocument.uri),
+							"line": JsonValue(params.position.line),
+							"column": JsonValue(params.position.character),
+							"imports": JsonValue([
+								JsonValue(mod)
+							]),
+							// moduleName is used in other contexts that depend
+							// on this list. (e.g. code_actions.d)
+							"moduleName": JsonValue(mod),
+						]),
+						kind: convertCompletionFromDScannerType(type)
+					};
+					completion ~= item;
+				}
 			}
 			else
 			{
@@ -878,7 +920,10 @@ private void provideAutoImports(TextDocumentPositionParams params, WorkspaceD.In
 						"column": JsonValue(params.position.character),
 						"imports": JsonValue([
 							JsonValue(mod)
-						])
+						]),
+						// moduleName is used in other contexts that depend
+						// on this list. (e.g. code_actions.d)
+						"moduleName": JsonValue(mod),
 					]),
 					kind: convertCompletionFromDScannerType(type)
 				};

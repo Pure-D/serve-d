@@ -176,6 +176,40 @@ struct Document
 		return text;
 	}
 
+	/// Same as rawText, but only return a slice, not the whole text.
+	const(char)[] sliceRawText(TextRange r) const scope return
+	{
+		return sliceRawText(textRangeToByteRange(r));
+	}
+
+	/// ditto
+	const(char)[] sliceRawText(size_t[2] bytes) const scope return
+	{
+		if (bytes[1] > text.length)
+			bytes[1] = text.length;
+		if (bytes[0] > bytes[1])
+			bytes[0] = bytes[1];
+
+		return rawText[bytes[0] .. bytes[1]];
+	}
+
+	/// ditto
+	string sliceRawText(TextRange r) immutable
+	{
+		return sliceRawText(textRangeToByteRange(r));
+	}
+
+	/// ditto
+	string sliceRawText(size_t[2] bytes) immutable
+	{
+		if (bytes[1] > text.length)
+			bytes[1] = text.length;
+		if (bytes[0] > bytes[1])
+			bytes[0] = bytes[1];
+
+		return text[bytes[0] .. bytes[1]];
+	}
+
 	/// Returns the text length.
 	size_t length() const @property
 	{
@@ -462,6 +496,29 @@ struct Document
 			Position(0, 8),
 			Position(2, 16)
 		]);
+	}
+
+	/// Converts a byte range to an LSP position-based text range.
+	/// See_Also: $(LREF textRangeToByteRange)
+	TextRange byteRangeToTextRange(size_t[2] range) const
+	{
+		Position cachePos;
+		size_t cacheBytes;
+
+		auto start = nextPositionBytes(cachePos, cacheBytes, range[0]);
+		auto end = nextPositionBytes(cachePos, cacheBytes, range[1]);
+
+		return TextRange(start, end);
+	}
+
+	/// Converts an LSP position-based text range to a byte range.
+	/// See_Also: $(LREF byteRangeToTextRange)
+	size_t[2] textRangeToByteRange(TextRange range) const
+	{
+		return [
+			positionToBytes(range.start),
+			positionToBytes(range.end),
+		];
 	}
 
 	/// Returns the word range at a given line/column position.
