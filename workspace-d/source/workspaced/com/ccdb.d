@@ -4,6 +4,7 @@
 module workspaced.com.ccdb;
 
 import std.exception;
+import std.experimental.logger : trace;
 import std.file;
 import std.json;
 import std.stdio;
@@ -12,8 +13,6 @@ import workspaced.api;
 
 import containers.hashset;
 
-import dub.internal.vibecompat.core.log;
-
 @component("ccdb")
 class ClangCompilationDatabaseComponent : ComponentWrapper
 {
@@ -21,7 +20,7 @@ class ClangCompilationDatabaseComponent : ComponentWrapper
 
 	protected void load()
 	{
-		logDebug("loading ccdb component");
+		trace("loading ccdb component");
 
 		if (config.get!bool("ccdb", "registerImportProvider", true))
 			importPathProvider = &imports;
