@@ -227,8 +227,6 @@ string[] getPossibleSourceRoots(string workspaceFolder)
 
 InitializeResult initialize(InitializeParams params)
 {
-	import std.file : chdir;
-
 	if (params.trace == "verbose")
 		globalLogLevel = LogLevel.trace;
 

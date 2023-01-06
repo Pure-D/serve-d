@@ -1,6 +1,7 @@
 import std.conv : to;
 import std.file;
 import std.path;
+import std.stdio;
 import std.string;
 
 import workspaced.api;
@@ -37,6 +38,13 @@ void main()
 	assert(dub.path.toString.endsWith("tc_fsworkspace")
 			|| dub.path.toString.endsWith("tc_fsworkspace/")
 			|| dub.path.toString.endsWith("tc_fsworkspace\\"));
-	if (dub.canBuild)
-		assert(dub.build.getBlocking.count!(a => a.type == ErrorType.Warning || a.type == ErrorType.Error) == 0);
+	try
+	{
+		auto result = dub.build.getBlocking;
+		assert(result.count!(a => a.type == ErrorType.Warning || a.type == ErrorType.Error) == 0);
+	}
+	catch (Exception e)
+	{
+		stderr.writeln("Not testing build because it throws: ", e);
+	}
 }

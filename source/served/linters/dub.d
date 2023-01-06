@@ -111,7 +111,7 @@ void lint(Document document)
 	scope (exit)
 		dubLintRunning = false;
 
-	while (!retryDubAtEnd)
+	do
 	{
 		retryDubAtEnd = false;
 
@@ -215,6 +215,7 @@ void lint(Document document)
 		diagnostics[DiagnosticSlot] = result.data;
 		updateDiagnostics();
 	}
+	while (retryDubAtEnd);
 }
 
 void extendErrorRange(ref TextRange range, WorkspaceD.Instance instance,
