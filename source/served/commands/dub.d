@@ -206,7 +206,7 @@ auto addImport(AddImportParams params)
 {
 	auto document = documents[params.textDocument.uri];
 	return backend.get!ImporterComponent.add(params.name.idup, document.rawText,
-			params.location, params.insertOutermost);
+			cast(int) document.offsetToBytes(params.location), params.insertOutermost);
 }
 
 @protocolMethod("served/updateImports")
