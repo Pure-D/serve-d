@@ -101,8 +101,8 @@ class DubComponent : ComponentWrapper
 	{
 		_dubRunning = false;
 		_dub = new Dub(instance.cwd, null, SkipPackageSuppliers.none);
-		_dub.packageManager.getOrLoadPackage(NativePath(instance.cwd));
 		_dub.loadPackage();
+		_dub.packageManager.getOrLoadPackage(NativePath(instance.cwd));
 		_dub.project.validate();
 
 		// mark all packages as optional so we don't crash
@@ -254,8 +254,8 @@ class DubComponent : ComponentWrapper
 	/// Throws if configuration is invalid or targetType is none or source library, otherwise does nothing.
 	void validateBuildConfiguration()
 	{
-		if (!_dub.project.configurations.canFind(_configuration))
-			throw new Exception("Cannot use dub with invalid configuration");
+		validateConfiguration();
+
 		if (_settings.targetType == TargetType.none)
 			throw new Exception("Cannot build with dub with targetType == none");
 		if (_settings.targetType == TargetType.sourceLibrary)
@@ -559,6 +559,7 @@ class DubComponent : ComponentWrapper
 	}
 
 	/// Returns whether there is a target set to build. If this is false then build will throw an exception.
+	deprecated("catch an exception on build instead")
 	bool canBuild() const @property
 	{
 		if (_settings.targetType == TargetType.none || _settings.targetType == TargetType.sourceLibrary
@@ -585,7 +586,9 @@ class DubComponent : ComponentWrapper
 		settings.config = _configuration;
 		settings.buildType = _buildType;
 		settings.compiler = compiler;
-		settings.buildSettings = _settings;
+		settings.buildSettings = _dub.project.rootPackage.getBuildSettings(buildPlatform, _configuration);
+
+		string cwd = instance.cwd;
 
 		auto ret = new typeof(return);
 		new Thread({
@@ -594,6 +597,7 @@ class DubComponent : ComponentWrapper
 				auto issues = appender!(BuildIssue[]);
 
 				settings.compileCallback = (status, output) {
+					trace(status, " ", output);
 					string[] lines = output.splitLines;
 					foreach (line; lines)
 					{
@@ -628,13 +632,16 @@ class DubComponent : ComponentWrapper
 				try
 				{
 					import workspaced.dub.lintgenerator : DubLintGenerator;
+					import std.file : chdir;
+
+					// TODO: make DUB not use getcwd, but use the dub.cwd
+					chdir(cwd);
 
 					new DubLintGenerator(_dub.project).generate(settings);
 				}
-				catch (Exception e)
+				catch (CompilerInvocationException e)
 				{
-					if (!e.msg.matchFirst(harmlessExceptionFormat))
-						throw e;
+					// ignore compiler exiting with error
 				}
 				ret.finish(issues.data);
 			}
