@@ -1004,6 +1004,16 @@ bool isStdLib(const ModuleRef mod)
 	return mod.startsWith("std.", "core.", "etc.") || mod == "object";
 }
 
+string getModuleSortKey(const ModuleRef mod)
+{
+	if (mod.startsWith("std."))
+		return "1_";
+	else if (mod.startsWith("core.", "etc."))
+		return "2_";
+	else
+		return "3_";
+}
+
 struct OrderedKeyedList(T, alias key = "a.name")
 {
 	import std.functional;

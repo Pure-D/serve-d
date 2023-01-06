@@ -7,6 +7,7 @@ import served.utils.fibermanager;
 import workspaced.api;
 import workspaced.com.dcdext;
 import workspaced.com.importer;
+import workspaced.com.index;
 import workspaced.coms;
 
 import served.commands.format : generateDfmtArgs;
@@ -115,15 +116,24 @@ void addDubDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 			|| cast(bool)(match = diagnostic.message.matchFirst(undefinedTemplate))
 			|| cast(bool)(match = diagnostic.message.matchFirst(noProperty)))
 	{
-		string[] files;
-		string[] modules;
+		// assumptions:
+		// if [1] is non-empty, then [0] is used just for sorting
+		// if [1] is empty, [0] is assumed to be the file path to read the module from
+		string[2][] filesAndModules;
 		int lineNo;
 		joinAll({
-			files ~= instance.get!DscannerComponent.findSymbol(match[1])
-				.getYield.map!"a.file".array;
-		}, {
-			if (instance.has!DCDComponent)
-				files ~= instance.get!DCDComponent.searchSymbol(match[1]).getYield.map!"a.file".array;
+			if (instance.has!IndexComponent)
+			{
+				instance.get!IndexComponent.iterateSymbolsStartingWith(match[1],
+					(string symbol, char type, scope const ModuleRef mod) {
+						if (symbol != match[1] || mod == "object")
+							return;
+						string[2] fileAndMod;
+						fileAndMod[0] = mod.getModuleSortKey;
+						fileAndMod[1] = mod;
+						filesAndModules ~= fileAndMod;
+					});
+			}
 		} /*, {
 			struct Symbol
 			{
@@ -152,9 +162,13 @@ void addDubDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 				ret ~= Command("Import " ~ v.package_ ~ " from dub package " ~ v.project);
 		}*/
 		);
-		info("Files: ", files);
-		foreach (file; files.sort().uniq)
+		filesAndModules.sort();
+		trace("Files: ", filesAndModules);
+		foreach (ref fileAndMod; filesAndModules.uniq)
 		{
+			if (fileAndMod[1].length)
+				continue;
+			auto file = fileAndMod[0];
 			if (!isAbsolute(file))
 				file = buildNormalizedPath(instance.cwd, file);
 			if (!fs.exists(file))
@@ -167,16 +181,17 @@ void addDubDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 				auto match2 = line.matchFirst(moduleRegex);
 				if (match2)
 				{
-					modules ~= match2[1].replaceAll(whitespace, "").idup;
+					fileAndMod[1] = match2[1].replaceAll(whitespace, "").idup;
 					break;
 				}
 			}
 		}
-		foreach (mod; modules.sort().uniq)
-			ret ~= CodeAction(Command("Import " ~ mod, "code-d.addImport", [
-				JsonValue(mod),
-				JsonValue(document.positionToOffset(params.range[0]))
-			]));
+		foreach (mod; filesAndModules)
+			if (mod[1].length)
+				ret ~= CodeAction(Command("Import " ~ mod[1], "code-d.addImport", [
+					JsonValue(mod[1]),
+					JsonValue(document.positionToOffset(params.range[0]))
+				]));
 	}
 
 	if (diagnostic.message.startsWith("use `is` instead of `==`",

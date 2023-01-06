@@ -853,13 +853,9 @@ private void provideAutoImports(TextDocumentPositionParams params, WorkspaceD.In
 
 	idx.iterateSymbolsStartingWith(prefixIdentifier,
 		(string symbol, char type, scope const ModuleRef mod) {
-			string subSorter = "3_";
-			if (mod.startsWith("std."))
-				subSorter = "0_";
-			else if (mod.startsWith("core.", "etc."))
-				subSorter = "1_";
-			else if (mod == "object")
+			if (mod == "object")
 				return;
+			string subSorter = mod.getModuleSortKey;
 
 			if (auto hasImport = mod in modLookup)
 			{
