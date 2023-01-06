@@ -82,6 +82,7 @@ struct Configuration
 		bool enableDubLinting = true;
 		bool enableAutoComplete = true;
 		bool enableFormatting = true;
+		bool enableIndex = true;
 		bool enableDMDImportTiming = false;
 		bool enableCoverageDecoration = true;
 		bool enableGCProfilerDecorations = true;

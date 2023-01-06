@@ -724,7 +724,7 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 		else
 			snippetInfo = getSnippetInfo(instance, document, byteOff);
 	}, {
-		if (completeIndex)
+		if (completeIndex && config.d.enableIndex)
 			provideAutoImports(params, instance, document, completion, byteOff, prefix);
 	});
 

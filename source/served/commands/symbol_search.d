@@ -25,7 +25,7 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 	foreach (workspace; workspaces)
 	{
 		auto folderPath = workspace.folder.uri.uriToFile;
-		if (backend.has!IndexComponent(folderPath))
+		if (workspace.config.d.enableIndex && backend.has!IndexComponent(folderPath))
 		{
 			auto indexer = backend.get!IndexComponent(folderPath);
 			indexer.iterateAll(delegate(ModuleRef mod, string fileName, scope const ref DefinitionElement def) {
