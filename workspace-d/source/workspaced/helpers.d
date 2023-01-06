@@ -8,6 +8,8 @@ import std.string;
 
 version (Posix)
 	import core.sys.posix.sys.stat : stat, stat_t;
+else version (Windows)
+	import core.sys.windows.windef;
 
 string determineIndentation(scope const(char)[] code) @safe
 {
