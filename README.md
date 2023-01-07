@@ -15,6 +15,16 @@ The purpose of this project is to give every editor the same capabilities and ed
 
 ## Special Thanks
 
+### Corporate Sponsors
+
+Development on code-d/serve-d tools is sponsored by
+
+| [![Weka.IO Logo](sponsors/weka.png)](https://weka.io) |
+|:---:|
+| **[Weka.IO](https://weka.io)** |
+
+### Individual Sponsors
+
 **Thanks to the following big GitHub sponsors** financially supporting the code-d/serve-d tools:
 
 * Jaen ([@jaens](https://github.com/jaens))
