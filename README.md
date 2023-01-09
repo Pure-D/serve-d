@@ -13,7 +13,23 @@ This program is the heart of [code-d](https://github.com/Pure-D/code-d) and impl
 
 The purpose of this project is to give every editor the same capabilities and editing features as code-d through the widely available Microsoft Language Server Protocol (LSP).
 
+Looking for **your Editor**? Check out the [Usage section](#usage)
+
 ## Special Thanks
+
+### Corporate Sponsors
+
+Development on code-d/serve-d tools is sponsored by
+
+| [![Weka.IO Logo](sponsors/weka.png)](https://weka.io) |
+|:---:|
+| **[Weka.IO](https://weka.io)** |
+
+If you are looking for a Job with D, check out the companies listed above!
+
+_For professional D consulting, programming services or corporate support with D IDE tools, DUB and the ecosystem, contact me through [dlang@wfr.software](mailto:dlang@wfr.software)_
+
+### Individual Sponsors
 
 **Thanks to the following big GitHub sponsors** financially supporting the code-d/serve-d tools:
 
