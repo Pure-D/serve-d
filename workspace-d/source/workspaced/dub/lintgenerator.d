@@ -29,9 +29,15 @@ import std.string;
 
 class DubLintGenerator : ProjectGenerator
 {
-	this(Project project)
+	private
+	{
+		NativePath m_cwd;
+	}
+
+	this(Project project, NativePath cwd)
 	{
 		super(project);
+		m_cwd = cwd;
 	}
 
 	override void generateTargets(GeneratorSettings settings, in TargetInfo[string] targets)
@@ -48,14 +54,12 @@ class DubLintGenerator : ProjectGenerator
 	private void performDirectBuild(GeneratorSettings settings,
 			ref BuildSettings buildsettings, in Package pack, string config)
 	{
-		auto cwd = NativePath(getcwd());
-
 		tracef("%s %s: building configuration %s", pack.name, pack.version_, config);
 
 		// make all target/import paths relative
 		string makeRelative(string path)
 		{
-			return shrinkPath(NativePath(path), cwd);
+			return shrinkPath(NativePath(path), m_cwd);
 		}
 
 		buildsettings.targetPath = makeRelative(buildsettings.targetPath);
@@ -81,11 +85,13 @@ class DubLintGenerator : ProjectGenerator
 		buildsettings.lflags = null;
 		buildsettings.addOptions(BuildOption.syntaxOnly);
 		buildsettings.sourceFiles = buildsettings.sourceFiles.filter!(f => !isLinkerFile(settings.platform, f)).array;
-		trace("Build settings: ", buildsettings);
 
 		settings.compiler.prepareBuildSettings(buildsettings, settings.platform, BuildSetting.commandLine);
 
-		settings.compiler.invoke(buildsettings, settings.platform, settings.compileCallback);
+		static if (is(typeof(settings.toolWorkingDirectory)))
+			settings.compiler.invoke(buildsettings, settings.platform, settings.compileCallback, settings.toolWorkingDirectory);
+		else
+			settings.compiler.invoke(buildsettings, settings.platform, settings.compileCallback);
 	}
 }
 

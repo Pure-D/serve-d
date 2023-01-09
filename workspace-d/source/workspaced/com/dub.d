@@ -585,14 +585,15 @@ class DubComponent : ComponentWrapper
 		auto compiler = _compiler;
 		auto buildPlatform = _platform;
 
+		string cwd = instance.cwd;
+
 		GeneratorSettings settings;
 		settings.platform = buildPlatform;
 		settings.config = _configuration;
 		settings.buildType = _buildType;
 		settings.compiler = compiler;
-		settings.buildSettings = _dub.project.rootPackage.getBuildSettings(buildPlatform, _configuration);
-
-		string cwd = instance.cwd;
+		static if (is(typeof(settings.overrideToolWorkingDirectory)))
+			settings.overrideToolWorkingDirectory = NativePath(cwd);
 
 		auto ret = new typeof(return);
 		new Thread({
@@ -638,7 +639,7 @@ class DubComponent : ComponentWrapper
 					import workspaced.dub.lintgenerator : DubLintGenerator;
 					import std.file : chdir;
 
-					new DubLintGenerator(_dub.project).generate(settings);
+					new DubLintGenerator(_dub.project, NativePath(cwd)).generate(settings);
 				}
 				catch (CompilerInvocationException e)
 				{
