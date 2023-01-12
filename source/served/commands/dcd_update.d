@@ -121,7 +121,7 @@ void updateDCD()
 	enum latestReleaseBinaryBroken = false;
 
 	// the latest version that has downloads available
-	enum bundledDCDVersion = "v0.15.1";
+	enum bundledDCDVersion = "v0.15.2";
 
 	bool compileFromSource = isDCDFromSource || latestReleaseBinaryBroken;
 	if (!compileFromSource
