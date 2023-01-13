@@ -19,7 +19,8 @@ void main()
 	auto issues = dscanner.lint("", "dscanner.ini",
 			"void main() { int unused = 0; } void undocumented() { }").getBlocking;
 	assert(issues.length >= 3);
-	auto defs = dscanner.listDefinitions("app.d", import("app.d")).getBlocking;
+	auto defs = dscanner.listDefinitions("app.d", import("app.d")).getBlocking
+		.definitions;
 	assert(defs.length == 2);
 	assert(defs[0].name == "mainLine");
 	assert(defs[0].line == mainLine - 1);

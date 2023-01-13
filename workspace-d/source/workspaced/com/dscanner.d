@@ -400,7 +400,7 @@ class DscannerComponent : ComponentWrapper
 	///
 	/// Set verbose to true if you want to receive more temporary symbols and
 	/// things that could be considered clutter as well.
-	Future!(DefinitionElement[]) listDefinitions(string file,
+	Future!ModuleDefinition listDefinitions(string file,
 		scope const(char)[] code = "", bool verbose = false,
 		ExtraMask extraMask = ExtraMask.none)
 	{
@@ -420,7 +420,7 @@ class DscannerComponent : ComponentWrapper
 	}
 
 	/// ditto
-	DefinitionElement[] listDefinitionsSync(string file,
+	ModuleDefinition listDefinitionsSync(string file,
 		scope const(char)[] code = "", bool verbose = false,
 		ExtraMask extraMask = ExtraMask.none)
 	{
@@ -429,10 +429,7 @@ class DscannerComponent : ComponentWrapper
 		if (!code.length)
 			code = readText(file);
 		if (!code.length)
-		{
-			DefinitionElement[] arr;
-			return arr;
-		}
+			return ModuleDefinition.init;
 
 		LexerConfig config;
 		auto tokens = getTokensForParser(cast(ubyte[]) code, config, &workspaced.stringCache);
@@ -451,14 +448,17 @@ class DscannerComponent : ComponentWrapper
 
 		bool nullOnError = (extraMask & ExtraMask.nullOnError) != 0;
 		if (nullOnError && errorCount > 0)
-			return null;
+			return ModuleDefinition.init;
 
 		auto defFinder = new DefinitionFinder();
 		defFinder.verbose = verbose;
 		defFinder.extraMask = extraMask;
 		defFinder.visit(m);
 
-		return defFinder.definitions;
+		return ModuleDefinition(
+			defFinder.definitions,
+			defFinder.hasMixin,
+		);
 	}
 
 	/// Asynchronously finds all definitions of a symbol in the import paths.
@@ -609,8 +609,10 @@ enum ExtraMask
 	nullOnError = 1 << 0,
 	/// Will include all imports inside the definition list
 	imports = 1 << 1,
-	/// Will include definitions from inside functions and unittests as well
+	/// Will include definitions (except variable declarations) from inside functions and unittests as well
 	includeFunctionMembers = 1 << 2,
+	/// Include variable declarations inside functions and unittests
+	includeVariablesInFunctions = 1 << 3,
 }
 
 /// Returned by list-definitions
@@ -773,6 +775,14 @@ struct DefinitionElement
 
 		return DefinitionElement(unpack!DefinitionElementUnqual(data).tupleof);
 	}
+}
+
+struct ModuleDefinition
+{
+	DefinitionElement[] definitions;
+	bool hasMixin;
+
+	alias definitions this;
 }
 
 private static ulong hashFields(Args...)()
@@ -1415,6 +1425,18 @@ final class DefinitionFinder : ASTVisitor
 			process(decl.importBindings.singleImport);
 	}
 
+	override void visit(const MixinDeclaration decl)
+	{
+		hasMixin = true;
+		decl.accept(this);
+	}
+
+	override void visit(const MixinExpression expr)
+	{
+		hasMixin = true;
+		expr.accept(this);
+	}
+
 	bool shouldAddVariable() const @property
 	{
 		return !context.insideFunction
@@ -1426,6 +1448,7 @@ final class DefinitionFinder : ASTVisitor
 	ContextType context;
 	AccessState accessSt;
 	DefinitionElement[] definitions;
+	bool hasMixin;
 	bool verbose;
 	ExtraMask extraMask;
 }
@@ -1556,7 +1579,8 @@ unittest
 			expectedDefinitions ~= expected;
 		},
 		(code) {
-			auto defs = dscanner.listDefinitions("stdin", code, verbose).getBlocking();
+			auto defs = dscanner.listDefinitions("stdin", code, verbose).getBlocking()
+				.definitions;
 			highlightDiff(defs, expectedDefinitions);
 		});
 }

@@ -757,7 +757,8 @@ private void provideDocComplete(TextDocumentPositionParams params, WorkspaceD.In
 	if (lineStripped.among!("", "/", "/*", "/+", "//", "///", "/**", "/++"))
 	{
 		auto defs = instance.get!DscannerComponent.listDefinitions(uriToFile(
-				params.textDocument.uri), document.rawText[lineRange[1] .. $]).getYield;
+				params.textDocument.uri), document.rawText[lineRange[1] .. $]).getYield
+				.definitions;
 		ptrdiff_t di = -1;
 		FuncFinder: foreach (i, def; defs)
 		{

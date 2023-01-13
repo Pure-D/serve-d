@@ -67,10 +67,17 @@ private struct IndexCache
 		ModuleRef modName;
 
 		DefinitionElement[] elements;
+		bool hasMixin;
 
 		bool opCast(T : bool)() const
 		{
 			return fileName.length > 0;
+		}
+
+
+		inout(ModuleDefinition) moduleDefinition() inout
+		{
+			return typeof(return)(elements, hasMixin);
 		}
 	}
 
@@ -108,6 +115,9 @@ private struct IndexCache
 		try
 		{
 			IndexCache ret = IndexCache(new Mutex(), fileName);
+
+			if (!existsAndIsFile(fileName))
+				goto defaultReturn;
 
 			scope f = File(fileName, "rb");
 			ubyte[2048] stackBuffer;
@@ -163,6 +173,8 @@ private struct IndexCache
 				idx.modName = cast(string) readData(modNameLen, "modName from entry @" ~ fileOffset.to!string).idup;
 				idx.lastModified = SysTime(readDataFix!8.littleEndianToNative!long);
 				idx.fileSize = readDataFix!8.littleEndianToNative!ulong;
+				auto flags = readDataFix!4;
+				idx.hasMixin = flags[0] == 1;
 
 				uint numItems = readDataFix!4.littleEndianToNative!uint;
 				idx.elements.length = numItems;
@@ -189,8 +201,9 @@ private struct IndexCache
 		{
 			info("Failed to parse IndexCache, rebuilding cache: ", e.msg);
 			trace(e);
-			return IndexCache(new Mutex(), defaultFilename);
 		}
+	defaultReturn:
+		return IndexCache(new Mutex(), defaultFilename);
 	}
 
 	void save()
@@ -261,6 +274,9 @@ private struct IndexCache
 			rawWrite(cast(const(ubyte)[]) idx.modName);
 			rawWrite(nativeToLittleEndian(long(idx.lastModified.stdTime)));
 			rawWrite(nativeToLittleEndian(ulong(idx.fileSize)));
+			ubyte[4] flags;
+			flags[0] = idx.hasMixin ? 1 : 0;
+			rawWrite(flags);
 			rawWrite(nativeToLittleEndian(cast(uint) idx.elements.length));
 			foreach (e; idx.elements)
 			{
@@ -271,7 +287,8 @@ private struct IndexCache
 		}
 	}
 
-	void setFile(string file, SysTime lastWrite, ulong fileSize, ModuleRef modName, DefinitionElement[] elements)
+	void setFile(string file, SysTime lastWrite, ulong fileSize, ModuleRef modName, DefinitionElement[] elements,
+		bool hasMixin)
 	{
 		if (!lookupMutex)
 			throw new Exception("Missing mutex on this instance");
@@ -285,14 +302,14 @@ private struct IndexCache
 					&& index[*existing].elements.length == elements.length)
 					return;
 
-				index[*existing] = IndexedFile(file, lastWrite, fileSize, modName, elements);
+				index[*existing] = IndexedFile(file, lastWrite, fileSize, modName, elements, hasMixin);
 				appendOnly = size_t.max;
 			}
 			else
 			{
 				auto i = index.length;
 				lookup[file] = i;
-				index ~= IndexedFile(file, lastWrite, fileSize, modName, elements);
+				index ~= IndexedFile(file, lastWrite, fileSize, modName, elements, hasMixin);
 			}
 		}
 	}
@@ -383,7 +400,7 @@ class IndexComponent : ComponentWrapper
 					cache.lastModified,
 					cache.fileSize,
 					cache.modName,
-					cache.elements);
+					cache.moduleDefinition);
 				return typeof(return).fromResult(modName);
 			}
 			else
@@ -453,7 +470,7 @@ class IndexComponent : ComponentWrapper
 		}
 	}
 
-	private void forceReindexFromCache(string file, SysTime lastWrite, ulong fileSize, const ModuleRef mod, const DefinitionElement[] cache)
+	private void forceReindexFromCache(string file, SysTime lastWrite, ulong fileSize, const ModuleRef mod, const ModuleDefinition cache)
 	{
 		synchronized (cachesMutex)
 		{
@@ -463,12 +480,14 @@ class IndexComponent : ComponentWrapper
 			if (cast()storeCacheEntry.fileName == file
 				&& cast()storeCacheEntry.lastModified == lastWrite
 				&& cast()storeCacheEntry.fileSize == fileSize
-				&& cast()storeCacheEntry._definitions.length == cache.length)
+				&& cast()storeCacheEntry._definitions.length == cache.definitions.length)
 				return;
 
-			auto duped = new DefinitionElement[cache.length];
+			ModuleDefinition duped;
+			duped.hasMixin = cache.hasMixin;
+			duped.definitions = new DefinitionElement[cache.definitions.length];
 			foreach (i; 0 .. duped.length)
-				duped[i] = cache[i].dup;
+				duped.definitions[i] = cache.definitions[i].dup;
 
 			auto entry = generateCacheEntry(file, lastWrite, fileSize, duped);
 			this.cache[mod].replaceFrom(mod, entry, this);
@@ -481,12 +500,16 @@ class IndexComponent : ComponentWrapper
 		{
 			foreach (mod, ref entry; cache)
 				if (entry.success)
+				{
+					auto hasMixin = entry.isIncomplete;
 					fileIndex.setFile(
 						entry.fileName,
 						cast()entry.lastModified,
 						entry.fileSize,
 						mod,
-						cast(DefinitionElement[])entry._definitions);
+						cast(DefinitionElement[])entry._definitions,
+						hasMixin);
+				}
 			fileIndex.save();
 		}
 		trace("Saved file index with ", fileIndex.index.length, " entries to ", fileIndex.fileName);
@@ -536,6 +559,18 @@ class IndexComponent : ComponentWrapper
 			if (auto v = mod in reverseImports)
 				foreach (subMod; *v)
 					cb(subMod);
+		}
+	}
+
+	void iterateIncompleteModules(scope void delegate(ModuleRef definition) cb)
+	{
+		synchronized (cachesMutex)
+		{
+			foreach (mod, ref entry; cache)
+			{
+				if (entry.success && entry.isIncomplete)
+					cb(mod);
+			}
 		}
 	}
 
@@ -773,9 +808,9 @@ private:
 		definitions.onDone(delegate() {
 			try
 			{
-				auto defs = definitions.getImmediately;
-				defs.sort!"a.cmpTypeAndName(b) < 0";
-				ret.finish(generateCacheEntry(file, writeTime, fileSize, defs));
+				auto modDef = definitions.getImmediately;
+				modDef.definitions.sort!"a.cmpTypeAndName(b) < 0";
+				ret.finish(generateCacheEntry(file, writeTime, fileSize, modDef));
 			}
 			catch (Throwable t)
 			{
@@ -785,14 +820,15 @@ private:
 		return ret;
 	}
 
-	ImportCacheEntry generateCacheEntry(string file, SysTime writeTime, ulong fileSize, DefinitionElement[] elems)
+	ImportCacheEntry generateCacheEntry(string file, SysTime writeTime, ulong fileSize, ModuleDefinition elems)
 	{
 		ImportCacheEntry result;
 		result.fileName = file;
 		result.lastModified = writeTime;
 		result.fileSize = fileSize;
 		result.success = true;
-		result._definitions = elems;
+		result.isIncomplete = elems.hasMixin;
+		result._definitions = elems.definitions;
 		return result;
 	}
 }
@@ -805,6 +841,7 @@ struct ImportCacheEntry
 	string fileName;
 	SysTime lastModified;
 	ulong fileSize;
+	bool isIncomplete;
 
 	private DefinitionElement[] _allImports;
 	private DefinitionElement[] _definitions;
@@ -819,6 +856,7 @@ struct ImportCacheEntry
 		fileName = other.fileName;
 		cast()lastModified = cast()other.lastModified;
 		fileSize = other.fileSize;
+		isIncomplete = other.isIncomplete;
 
 		synchronized (index.cachesMutex)
 		{
