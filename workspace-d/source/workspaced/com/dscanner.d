@@ -908,10 +908,10 @@ final class DefinitionFinder : ASTVisitor
 		if (!dec.structBody)
 			return;
 		definitions ~= makeDefinition(dec.name.text, dec.name.line, 'c', context,
-				[
-					cast(int) dec.structBody.safeStartLocation,
-					cast(int) dec.structBody.safeEndLocation
-				]);
+			[
+				cast(int) dec.structBody.safeStartLocation,
+				cast(int) dec.structBody.safeEndLocation
+			]);
 		auto c = context;
 		context = ContextType(["class": dec.name.text], null, c, DefinitionElement.BasicVisibility.default_);
 		context.insideAggregate = true;
@@ -929,10 +929,10 @@ final class DefinitionFinder : ASTVisitor
 			return;
 		}
 		definitions ~= makeDefinition(dec.name.text, dec.name.line, 's', context,
-				[
-					cast(int) dec.structBody.safeStartLocation,
-					cast(int) dec.structBody.safeEndLocation
-				]);
+			[
+				cast(int) dec.structBody.safeStartLocation,
+				cast(int) dec.structBody.safeEndLocation
+			]);
 		auto c = context;
 		context = ContextType(["struct": dec.name.text], null, c, DefinitionElement.BasicVisibility.default_);
 		context.insideAggregate = true;
@@ -945,10 +945,10 @@ final class DefinitionFinder : ASTVisitor
 		if (!dec.structBody)
 			return;
 		definitions ~= makeDefinition(dec.name.text, dec.name.line, 'i', context,
-				[
-					cast(int) dec.structBody.safeStartLocation,
-					cast(int) dec.structBody.safeEndLocation
-				]);
+			[
+				cast(int) dec.structBody.safeStartLocation,
+				cast(int) dec.structBody.safeEndLocation
+			]);
 		auto c = context;
 		context = ContextType(["interface:": dec.name.text], null, context);
 		context.insideAggregate = true;
@@ -959,7 +959,7 @@ final class DefinitionFinder : ASTVisitor
 	override void visit(const TemplateDeclaration dec)
 	{
 		auto def = makeDefinition(dec.name.text, dec.name.line, 'T', context,
-				[cast(int) dec.safeStartLocation, cast(int) dec.safeEndLocation]);
+			[cast(int) dec.safeStartLocation, cast(int) dec.safeEndLocation]);
 		def.attributes["signature"] = paramsToString(dec);
 		definitions ~= def;
 		auto c = context;
@@ -972,10 +972,10 @@ final class DefinitionFinder : ASTVisitor
 	override void visit(const FunctionDeclaration dec)
 	{
 		auto def = makeDefinition(dec.name.text, dec.name.line, 'f', context,
-				[
-					cast(int) dec.functionBody.safeStartLocation,
-					cast(int) dec.functionBody.safeEndLocation
-				]);
+			[
+				cast(int) dec.functionBody.safeStartLocation,
+				cast(int) dec.functionBody.safeEndLocation
+			]);
 		def.attributes["signature"] = paramsToString(dec);
 		if (dec.returnType !is null)
 			def.attributes["return"] = astToString(dec.returnType);
@@ -986,10 +986,10 @@ final class DefinitionFinder : ASTVisitor
 	override void visit(const Constructor dec)
 	{
 		auto def = makeDefinition("this", dec.line, 'f', context,
-				[
-					cast(int) dec.functionBody.safeStartLocation,
-					cast(int) dec.functionBody.safeEndLocation
-				]);
+			[
+				cast(int) dec.functionBody.safeStartLocation,
+				cast(int) dec.functionBody.safeEndLocation
+			]);
 		def.attributes["signature"] = paramsToString(dec);
 		definitions ~= def;
 		dec.accept(this);
@@ -998,19 +998,17 @@ final class DefinitionFinder : ASTVisitor
 	override void visit(const Destructor dec)
 	{
 		definitions ~= makeDefinition("~this", dec.line, 'f', context,
-				[
-					cast(int) dec.functionBody.safeStartLocation,
-					cast(int) dec.functionBody.safeEndLocation
-				]);
+			[
+				cast(int) dec.functionBody.safeStartLocation,
+				cast(int) dec.functionBody.safeEndLocation
+			]);
 		dec.accept(this);
 	}
 
 	override void visit(const Postblit dec)
 	{
-		if (!verbose)
-			return;
-
-		definitions ~= makeDefinition("this(this)", dec.line, 'f', context,
+		if (verbose)
+			definitions ~= makeDefinition("this(this)", dec.line, 'f', context,
 				[
 					cast(int) dec.functionBody.safeStartLocation,
 					cast(int) dec.functionBody.safeEndLocation
@@ -1054,9 +1052,6 @@ final class DefinitionFinder : ASTVisitor
 
 	override void visit(const FunctionBody fn)
 	{
-		if ((extraMask & ExtraMask.includeFunctionMembers) == 0)
-			return;
-
 		auto c = context;
 		context.insideFunction = true;
 		fn.accept(this);
@@ -1085,8 +1080,9 @@ final class DefinitionFinder : ASTVisitor
 
 	override void visit(const VariableDeclaration dec)
 	{
-		foreach (d; dec.declarators)
-			definitions ~= makeDefinition(d.name.text, d.name.line, 'v', context,
+		if (shouldAddVariable)
+			foreach (d; dec.declarators)
+				definitions ~= makeDefinition(d.name.text, d.name.line, 'v', context,
 					[
 						cast(int) d.name.index,
 						cast(int) d.name.index + cast(int) d.name.text.length
@@ -1096,21 +1092,35 @@ final class DefinitionFinder : ASTVisitor
 
 	override void visit(const AutoDeclaration dec)
 	{
-		foreach (i; dec.parts.map!(a => a.identifier))
-			definitions ~= makeDefinition(i.text, i.line, 'v', context,
-					[cast(int) i.index, cast(int) i.index + cast(int) i.text.length]);
+		if (shouldAddVariable)
+			foreach (i; dec.parts.map!(a => a.identifier))
+				definitions ~= makeDefinition(i.text, i.line, 'v', context,
+						[cast(int) i.index, cast(int) i.index + cast(int) i.text.length]);
 		dec.accept(this);
 	}
 
 	override void visit(const Invariant dec)
 	{
 		if (!dec.blockStatement)
+		{
+			auto c = context;
+			context.insideFunction = true;
+			dec.accept(this);
+			context = c;
 			return;
+		}
+
 		definitions ~= makeDefinition("invariant", dec.line, 'N', context,
 				[cast(int) dec.index, cast(int) dec.blockStatement.safeEndLocation]);
 
 		if ((extraMask & ExtraMask.includeFunctionMembers) == 0)
+		{
+			auto c = context;
+			context.insideFunction = true;
+			dec.accept(this);
+			context = c;
 			return;
+		}
 
 		auto c = context;
 		context.insideFunction = true;
@@ -1234,11 +1244,18 @@ final class DefinitionFinder : ASTVisitor
 
 	override void visit(const Unittest dec)
 	{
-		if (!verbose)
-			return;
-
 		if (!dec.blockStatement)
 			return;
+
+		if (!verbose)
+		{
+			auto c = context;
+			context.insideFunction = true;
+			dec.accept(this);
+			context = c;
+			return;
+		}
+
 		string testName = text("__unittest_L", dec.line, "_C", dec.column);
 		definitions ~= makeDefinition(testName, dec.line, 'U', context,
 				[
@@ -1247,7 +1264,13 @@ final class DefinitionFinder : ASTVisitor
 				], "U");
 
 		if ((extraMask & ExtraMask.includeFunctionMembers) == 0)
+		{
+			auto c = context;
+			context.insideFunction = true;
+			dec.accept(this);
+			context = c;
 			return;
+		}
 
 		auto c = context;
 		context.insideFunction = true;
@@ -1390,6 +1413,12 @@ final class DefinitionFinder : ASTVisitor
 			process(imp);
 		if (decl.importBindings && decl.importBindings.singleImport)
 			process(decl.importBindings.singleImport);
+	}
+
+	bool shouldAddVariable() const @property
+	{
+		return !context.insideFunction
+			|| (extraMask & ExtraMask.includeVariablesInFunctions) != 0;
 	}
 
 	alias visit = ASTVisitor.visit;
