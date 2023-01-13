@@ -71,6 +71,10 @@ class ReferencesComponent : ComponentWrapper
 								identifier,
 								visited,
 								asyncFoundPart);
+							grepIncomplete(ret,
+								identifier,
+								visited,
+								asyncFoundPart);
 						}
 						future.finish(ret);
 					}
@@ -97,6 +101,25 @@ private:
 		visited[start] = true;
 
 		get!IndexComponent.iterateModuleReferences(start, (other) {
+			auto filename = get!IndexComponent.getIndexedFileName(other);
+			scope content = readText(filename);
+			auto slice = grepFileReferences(ret, content, filename, identifier);
+			asyncFoundPart(References(null, 0, slice));
+
+			grepRecursive(ret, other, identifier, visited, asyncFoundPart);
+		});
+	}
+
+	void grepIncomplete(ref References ret, string identifier,
+		ref bool[ModuleRef] visited, void delegate(References) asyncFoundPart)
+	{
+		get!IndexComponent.iterateIncompleteModules((other) {
+			if (other in visited)
+				return;
+			// ignore incomplete stdlib, hacky but improves performance for now
+			if (isStdLib(other))
+				return;
+
 			auto filename = get!IndexComponent.getIndexedFileName(other);
 			scope content = readText(filename);
 			auto slice = grepFileReferences(ret, content, filename, identifier);
