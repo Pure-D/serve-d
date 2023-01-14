@@ -205,7 +205,7 @@ bool statFile(R)(R name, uint* attributes, SysTime* writeTime, ulong* size)
 
 		auto namez = tempCStringW(name);
 		WIN32_FILE_ATTRIBUTE_DATA fad;
-		static bool trustedGetFileAttributesW(const(wchar)* namez, WIN32_FILE_ATTRIBUTE_DATA* fad) @trusted
+		static trustedGetFileAttributesW(const(wchar)* namez, WIN32_FILE_ATTRIBUTE_DATA* fad) @trusted
 		{
 			return GetFileAttributesExW(namez, GET_FILEEX_INFO_LEVELS.GetFileExInfoStandard, fad);
 		}
