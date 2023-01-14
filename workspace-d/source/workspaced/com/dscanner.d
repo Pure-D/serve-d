@@ -846,6 +846,16 @@ bool isVisibleOutside(DefinitionElement.Visibility v)
 	);
 }
 
+bool isPublicImportVisibility(DefinitionElement.Visibility v)
+{
+	return v.match!(
+		(typeof(null) _) => false,
+		(DefinitionElement.BasicVisibility v) => v != DefinitionElement.BasicVisibility.protected_
+			&& v != DefinitionElement.BasicVisibility.private_,
+		(DefinitionElement.PackageVisibility v) => true
+	);
+}
+
 private:
 
 string typeForWarning(string key)

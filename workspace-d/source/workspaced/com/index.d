@@ -562,6 +562,22 @@ class IndexComponent : ComponentWrapper
 		}
 	}
 
+	void iteratePublicImports(ModuleRef mod, scope void delegate(ModuleRef definition) cb)
+	{
+		synchronized (cachesMutex)
+		{
+			if (auto v = mod in cache)
+			{
+				if (!v.success)
+					return;
+
+				foreach (scope ref i; v._allImports)
+					if (i.visibility.isPublicImportVisibility)
+						cb(cast()i.name);
+			}
+		}
+	}
+
 	void iterateIncompleteModules(scope void delegate(ModuleRef definition) cb)
 	{
 		synchronized (cachesMutex)

@@ -8,6 +8,7 @@ import workspaced.com.index;
 import workspaced.com.moduleman;
 
 import std.file;
+import std.experimental.logger;
 
 @component("references")
 class ReferencesComponent : ComponentWrapper
@@ -102,9 +103,34 @@ private:
 
 		get!IndexComponent.iterateModuleReferences(start, (other) {
 			auto filename = get!IndexComponent.getIndexedFileName(other);
-			scope content = readText(filename);
-			auto slice = grepFileReferences(ret, content, filename, identifier);
-			asyncFoundPart(References(null, 0, slice));
+			if (filename.length)
+			{
+				scope content = readText(filename);
+				auto slice = grepFileReferences(ret, content, filename, identifier);
+				asyncFoundPart(References(null, 0, slice));
+			}
+			else
+			{
+				warningf("Failed to find source for module '%s' for find references. (from imports usage)", other);
+			}
+
+			grepRecursive(ret, other, identifier, visited, asyncFoundPart);
+		});
+		get!IndexComponent.iteratePublicImports(start, (other) {
+			if (other in visited)
+				return;
+
+			auto filename = get!IndexComponent.getIndexedFileName(other);
+			if (filename.length)
+			{
+				scope content = readText(filename);
+				auto slice = grepFileReferences(ret, content, filename, identifier);
+				asyncFoundPart(References(null, 0, slice));
+			}
+			else
+			{
+				warningf("Failed to find source for module '%s' for find references. (from public imports usage)", other);
+			}
 
 			grepRecursive(ret, other, identifier, visited, asyncFoundPart);
 		});
@@ -121,9 +147,16 @@ private:
 				return;
 
 			auto filename = get!IndexComponent.getIndexedFileName(other);
-			scope content = readText(filename);
-			auto slice = grepFileReferences(ret, content, filename, identifier);
-			asyncFoundPart(References(null, 0, slice));
+			if (filename.length)
+			{
+				scope content = readText(filename);
+				auto slice = grepFileReferences(ret, content, filename, identifier);
+				asyncFoundPart(References(null, 0, slice));
+			}
+			else
+			{
+				warningf("Failed to find source for module '%s' for find references. (from incomplete/mixin files)", other);
+			}
 
 			grepRecursive(ret, other, identifier, visited, asyncFoundPart);
 		});
