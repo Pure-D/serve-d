@@ -20,6 +20,7 @@ configuration "library" {
 
 configuration "unittest" {
 	dependency "silly" version="~>1.1.1"
+	dflags "-checkaction=context" "--allinst"
 }
 
 buildType "unittest-optimized" {
