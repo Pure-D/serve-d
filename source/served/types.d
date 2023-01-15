@@ -82,6 +82,7 @@ struct Configuration
 		bool enableDubLinting = true;
 		bool enableAutoComplete = true;
 		bool enableFormatting = true;
+		bool enableIndex = true;
 		bool enableDMDImportTiming = false;
 		bool enableCoverageDecoration = true;
 		bool enableGCProfilerDecorations = true;
@@ -484,31 +485,6 @@ bool seemsLikeDubJson(string json)
 	if (!packageJson.name.length)
 		return false;
 	return true;
-}
-
-/// Inserts a value into a sorted range. Inserts before equal elements.
-/// Returns: the index where the value has been inserted.
-size_t insertSorted(alias sort = "a<b", T)(ref T[] arr, T value)
-{
-	auto v = arr.binarySearch!sort(value);
-	if (v < 0)
-		v = ~v;
-	arr.length++;
-	for (ptrdiff_t i = cast(ptrdiff_t) arr.length - 1; i > v; i--)
-		move(arr[i - 1], arr[i]);
-	arr[v] = value;
-	return v;
-}
-
-/// Finds a value in a sorted range and returns its index.
-/// Returns: a bitwise invert of the first element bigger than value. Use `~ret` to turn it back.
-ptrdiff_t binarySearch(alias sort = "a<b", T)(T[] arr, T value)
-{
-	auto sorted = assumeSorted!sort(arr).trisect(value);
-	if (sorted[1].length)
-		return cast(ptrdiff_t) sorted[0].length;
-	else
-		return ~cast(ptrdiff_t) sorted[0].length;
 }
 
 void prettyPrintStruct(alias printFunc, T, int line = __LINE__, string file = __FILE__,

@@ -6,6 +6,7 @@ import served.types;
 
 import workspaced.api;
 import workspaced.coms;
+import workspaced.helpers;
 
 import std.algorithm : endsWith, sort, startsWith, uniq;
 import std.path : baseName, buildNormalizedPath, buildPath, isAbsolute, stripExtension;

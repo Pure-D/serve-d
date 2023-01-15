@@ -7,6 +7,7 @@ import served.utils.fibermanager;
 import workspaced.api;
 import workspaced.com.dcdext;
 import workspaced.com.importer;
+import workspaced.com.index;
 import workspaced.coms;
 
 import served.commands.format : generateDfmtArgs;
@@ -20,7 +21,7 @@ import std.conv : to;
 import std.experimental.logger;
 import std.format : format;
 import std.path : buildNormalizedPath, isAbsolute;
-import std.regex : matchFirst, regex, replaceAll;
+import std.regex : Captures, matchFirst, regex, replaceAll;
 import std.string : indexOf, indexOfAny, join, replace, strip;
 
 import fs = std.file;
@@ -51,19 +52,20 @@ CodeAction[] provideCodeActions(CodeActionParams params)
 	if (instance.has!DCDComponent)
 		instance.get!DCDComponent();
 
+	auto startBytes = document.positionToBytes(params.range.start);
+
 	CodeAction[] ret;
 	if (instance.has!DCDExtComponent) // check if extends
 	{
 		scope codeText = document.rawText.idup;
-		auto startIndex = document.positionToBytes(params.range.start);
-		ptrdiff_t idx = min(cast(ptrdiff_t) startIndex, cast(ptrdiff_t) codeText.length - 1);
+		ptrdiff_t idx = min(cast(ptrdiff_t) startBytes, cast(ptrdiff_t) codeText.length - 1);
 		while (idx > 0)
 		{
 			if (codeText[idx] == ':')
 			{
 				// probably extends
 				if (instance.get!DCDExtComponent.implementAll(codeText,
-						cast(int) startIndex).getYield.length > 0)
+						cast(int) startBytes).getYield.length > 0)
 				{
 					Command cmd = {
 						title: "Implement base classes/interfaces",
@@ -81,13 +83,11 @@ CodeAction[] provideCodeActions(CodeActionParams params)
 			idx--;
 		}
 	}
+
+	addDubDiagnostics(ret, instance, document, params, startBytes);
 	foreach (diagnostic; params.context.diagnostics)
 	{
-		if (diagnostic.source == DubDiagnosticSource)
-		{
-			addDubDiagnostics(ret, instance, document, diagnostic, params);
-		}
-		else if (diagnostic.source == DScannerDiagnosticSource)
+		if (diagnostic.source == DScannerDiagnosticSource)
 		{
 			addDScannerDiagnostics(ret, instance, document, diagnostic, params);
 		}
@@ -100,105 +100,120 @@ CodeAction[] provideCodeActions(CodeActionParams params)
 }
 
 void addDubDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
-	Document document, Diagnostic diagnostic, CodeActionParams params)
+	Document document, CodeActionParams params, size_t rangeStartBytes)
 {
-	auto match = diagnostic.message.matchFirst(importRegex);
-	if (diagnostic.message.canFind("import ") && match)
-	{
-		ret ~= CodeAction(Command("Import " ~ match[1], "code-d.addImport",
-			[
-				JsonValue(match[1]),
-				JsonValue(document.positionToOffset(params.range[0]))
-			]));
-	}
-	if (cast(bool)(match = diagnostic.message.matchFirst(undefinedIdentifier))
-			|| cast(bool)(match = diagnostic.message.matchFirst(undefinedTemplate))
-			|| cast(bool)(match = diagnostic.message.matchFirst(noProperty)))
-	{
-		string[] files;
-		string[] modules;
-		int lineNo;
-		joinAll({
-			files ~= instance.get!DscannerComponent.findSymbol(match[1])
-				.getYield.map!"a.file".array;
-		}, {
-			if (instance.has!DCDComponent)
-				files ~= instance.get!DCDComponent.searchSymbol(match[1]).getYield.map!"a.file".array;
-		} /*, {
-			struct Symbol
-			{
-				string project, package_;
-			}
+	auto diagnostics = params.context.diagnostics;
 
-			StopWatch sw;
-			bool got;
-			Symbol[] symbols;
-			sw.start();
-			info("asking the interwebs for ", match[1]);
-			new Thread({
-				import std.net.curl : get;
-				import std.uri : encodeComponent;
-
-				auto str = get(
-				"https://symbols.webfreak.org/symbols?limit=60&identifier=" ~ encodeComponent(match[1]));
-				foreach (symbol; parseJSON(str).array)
-					symbols ~= Symbol(symbol["project"].str, symbol["package"].str);
-				got = true;
-			}).start();
-			while (sw.peek < 3.seconds && !got)
-				Fiber.yield();
-			foreach (v; symbols.sort!"a.project < b.project"
-				.uniq!"a.project == b.project")
-				ret ~= Command("Import " ~ v.package_ ~ " from dub package " ~ v.project);
-		}*/
-		);
-		info("Files: ", files);
-		foreach (file; files.sort().uniq)
+	if (instance.has!IndexComponent)
+	{
+		size_t[2][] undefinedIndices;
+		string[] undefinedIdentifiers;
+		Captures!string match;
+		foreach (diagnostic; diagnostics)
 		{
-			if (!isAbsolute(file))
-				file = buildNormalizedPath(instance.cwd, file);
-			if (!fs.exists(file))
-				continue;
-			lineNo = 0;
-			foreach (line; io.File(file).byLine)
+			if (cast(bool)(match = diagnostic.message.matchFirst(undefinedIdentifier))
+					|| cast(bool)(match = diagnostic.message.matchFirst(undefinedTemplate))
+					|| cast(bool)(match = diagnostic.message.matchFirst(noProperty)))
 			{
-				if (++lineNo >= 100)
-					break;
-				auto match2 = line.matchFirst(moduleRegex);
-				if (match2)
+				undefinedIndices ~= document.textRangeToByteRange(diagnostic.range);
+				undefinedIdentifiers ~= match[1];
+				break;
+			}
+		}
+
+		if (!undefinedIdentifiers.length)
+		{
+			auto startRange = document.wordRangeAt(rangeStartBytes);
+			if (params.range.start != params.range.end)
+				startRange = document.textRangeToByteRange(params.range);
+			auto identifier = document.sliceRawText(startRange);
+
+			if (isValidDIdentifier(identifier))
+			{
+				undefinedIndices ~= startRange;
+				undefinedIdentifiers ~= identifier.idup;
+			}
+		}
+
+		// assumptions:
+		// if [1] is non-empty, then [0] is used just for sorting
+		// if [1] is empty, [0] is assumed to be the file path to read the module from
+		string[2][] importModuleSuggestsions;
+		foreach (i, identifier; undefinedIdentifiers)
+		{
+			auto range = undefinedIndices[i];
+			CompletionItem[] availableSymbols;
+			provideAutoImports(TextDocumentPositionParams.init, instance,
+				document, availableSymbols, cast(int)range[0], identifier, true);
+
+			foreach (sym; availableSymbols)
+			{
+				if (!sym.insertText.isNone)
 				{
-					modules ~= match2[1].replaceAll(whitespace, "").idup;
-					break;
+					string replacement = sym.insertText.deref;
+					TextEditCollection[DocumentUri] changes;
+					changes[document.uri] = [
+						TextEdit(document.byteRangeToTextRange(range), replacement)
+					];
+					ret ~= CodeAction("Change to `" ~ replacement ~ "`", WorkspaceEdit(changes));
+				}
+				else
+				{
+					auto data = sym.data.deref.get!(StringMap!JsonValue);
+					string[2] sortAndMod;
+					sortAndMod[0] = sym.sortText.deref;
+					sortAndMod[1] = data["moduleName"].get!string;
+					importModuleSuggestsions ~= sortAndMod;
 				}
 			}
 		}
-		foreach (mod; modules.sort().uniq)
-			ret ~= CodeAction(Command("Import " ~ mod, "code-d.addImport", [
-				JsonValue(mod),
-				JsonValue(document.positionToOffset(params.range[0]))
-			]));
+		importModuleSuggestsions.sort();
+		foreach (mod; importModuleSuggestsions.map!"a[1]".uniq)
+			if (mod.length)
+				ret ~= CodeAction(Command("Import " ~ mod, "code-d.addImport", [
+					JsonValue(mod),
+					JsonValue(document.positionToOffset(params.range[0]))
+				]));
+	}
+	else
+	{
+		foreach (diagnostic; diagnostics)
+		{
+			auto match = diagnostic.message.matchFirst(importRegex);
+			if (diagnostic.message.canFind("import ") && match)
+			{
+				ret ~= CodeAction(Command("Import " ~ match[1], "code-d.addImport",
+					[
+						JsonValue(match[1]),
+						JsonValue(document.positionToOffset(diagnostic.range.start))
+					]));
+			}
+		}
 	}
 
-	if (diagnostic.message.startsWith("use `is` instead of `==`",
-			"use `!is` instead of `!=`")
-		&& diagnostic.range.end.character - diagnostic.range.start.character == 2)
+	foreach (diagnostic; diagnostics)
 	{
-		auto b = document.positionToBytes(diagnostic.range.start);
-		auto text = document.rawText[b .. $];
-
-		string target = diagnostic.message[5] == '!' ? "!=" : "==";
-		string replacement = diagnostic.message[5] == '!' ? "!is" : "is";
-
-		if (text.startsWith(target))
+		if (diagnostic.message.startsWith("use `is` instead of `==`",
+				"use `!is` instead of `!=`")
+			&& diagnostic.range.end.character - diagnostic.range.start.character == 2)
 		{
-			string title = format!"Change '%s' to '%s'"(target, replacement);
-			TextEditCollection[DocumentUri] changes;
-			changes[document.uri] = [TextEdit(diagnostic.range, replacement)];
-			auto action = CodeAction(title, WorkspaceEdit(changes));
-			action.isPreferred = true;
-			action.diagnostics = [diagnostic];
-			action.kind = CodeActionKind.quickfix;
-			ret ~= action;
+			auto b = document.positionToBytes(diagnostic.range.start);
+			auto text = document.rawText[b .. $];
+
+			string target = diagnostic.message[5] == '!' ? "!=" : "==";
+			string replacement = diagnostic.message[5] == '!' ? "!is" : "is";
+
+			if (text.startsWith(target))
+			{
+				string title = format!"Change '%s' to '%s'"(target, replacement);
+				TextEditCollection[DocumentUri] changes;
+				changes[document.uri] = [TextEdit(diagnostic.range, replacement)];
+				auto action = CodeAction(title, WorkspaceEdit(changes));
+				action.isPreferred = true;
+				action.diagnostics = [diagnostic];
+				action.kind = CodeActionKind.quickfix;
+				ret ~= action;
+			}
 		}
 	}
 }

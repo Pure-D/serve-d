@@ -9,9 +9,11 @@ import std.conv;
 import std.experimental.logger;
 import std.file;
 import std.json;
-import std.stdio;
-import std.typecons;
 import std.meta : AliasSeq;
+import std.stdio;
+import std.sumtype;
+import std.traits;
+import std.typecons;
 
 import core.sync.mutex;
 import core.thread;
@@ -262,7 +264,7 @@ class DscannerComponent : ComponentWrapper
 			// span from start of last word
 			size_t issueStart = min(max(0, cast(ptrdiff_t)tokens.length - 1), currentToken + 1);
 			// if a non-identifier was expected, include word before
-			if (issueStart > 0 && s.length > 2 && s[1].isIdentifierSeparatingChar)
+			if (issueStart > 0 && s.length > 2 && s[1].isDIdentifierSeparatingChar)
 				issueStart--;
 			foreach_reverse (i, token; tokens[0 .. issueStart])
 			{
@@ -398,36 +400,16 @@ class DscannerComponent : ComponentWrapper
 	///
 	/// Set verbose to true if you want to receive more temporary symbols and
 	/// things that could be considered clutter as well.
-	Future!(DefinitionElement[]) listDefinitions(string file,
-		scope const(char)[] code = "", bool verbose = false)
+	Future!ModuleDefinition listDefinitions(string file,
+		scope const(char)[] code = "", bool verbose = false,
+		ExtraMask extraMask = ExtraMask.none)
 	{
 		auto ret = new typeof(return);
 		gthreads.create({
 			mixin(traceTask);
 			try
 			{
-				if (code.length && !file.length)
-					file = "stdin";
-				if (!code.length)
-					code = readText(file);
-				if (!code.length)
-				{
-					DefinitionElement[] arr;
-					ret.finish(arr);
-					return;
-				}
-
-				RollbackAllocator r;
-				LexerConfig config;
-				auto tokens = getTokensForParser(cast(ubyte[]) code, config, &workspaced.stringCache);
-
-				auto m = dparse.parser.parseModule(tokens.array, file, &r);
-
-				auto defFinder = new DefinitionFinder();
-				defFinder.verbose = verbose;
-				defFinder.visit(m);
-
-				ret.finish(defFinder.definitions);
+				ret.finish(listDefinitionsSync(file, code, verbose, extraMask));
 			}
 			catch (Throwable e)
 			{
@@ -435,6 +417,48 @@ class DscannerComponent : ComponentWrapper
 			}
 		});
 		return ret;
+	}
+
+	/// ditto
+	ModuleDefinition listDefinitionsSync(string file,
+		scope const(char)[] code = "", bool verbose = false,
+		ExtraMask extraMask = ExtraMask.none)
+	{
+		if (code.length && !file.length)
+			file = "stdin";
+		if (!code.length)
+			code = readText(file);
+		if (!code.length)
+			return ModuleDefinition.init;
+
+		LexerConfig config;
+		auto tokens = getTokensForParser(cast(ubyte[]) code, config, &workspaced.stringCache);
+
+		RollbackAllocator r;
+		uint errorCount, warningCount;
+		ParserConfig pconfig = {
+			tokens: tokens,
+			fileName: file,
+			allocator: &r,
+			errorCount: &errorCount,
+			warningCount: &warningCount,
+		};
+
+		auto m = dparse.parser.parseModule(pconfig);
+
+		bool nullOnError = (extraMask & ExtraMask.nullOnError) != 0;
+		if (nullOnError && errorCount > 0)
+			return ModuleDefinition.init;
+
+		auto defFinder = new DefinitionFinder();
+		defFinder.verbose = verbose;
+		defFinder.extraMask = extraMask;
+		defFinder.visit(m);
+
+		return ModuleDefinition(
+			defFinder.definitions,
+			defFinder.hasMixin,
+		);
 	}
 
 	/// Asynchronously finds all definitions of a symbol in the import paths.
@@ -576,9 +600,72 @@ struct FileLocation
 	int line, column;
 }
 
+/// Extra things you may want in the definitions list
+enum ExtraMask
+{
+	/// no extra definitions will be included
+	none = 0,
+	/// return null (empty array) when there is a parsing error
+	nullOnError = 1 << 0,
+	/// Will include all imports inside the definition list
+	imports = 1 << 1,
+	/// Will include definitions (except variable declarations) from inside functions and unittests as well
+	includeFunctionMembers = 1 << 2,
+	/// Include variable declarations inside functions and unittests
+	includeVariablesInFunctions = 1 << 3,
+}
+
 /// Returned by list-definitions
 struct DefinitionElement
 {
+	import msgpack;
+
+	enum BasicVisibility
+	{
+		default_,
+		export_,
+		public_,
+		protected_,
+		private_,
+	}
+
+	struct PackageVisibility
+	{
+		/// null or package name
+		string packageName;
+	}
+
+	alias Visibility = SumType!(typeof(null), BasicVisibility, PackageVisibility);
+
+	DefinitionElement dup() const
+	{
+		DefinitionElement ret;
+		foreach (i, v; this.tupleof)
+		{
+			static if (is(typeof(ret.tupleof[i]) == string[string]))
+			{
+				foreach (k, subV; v)
+					ret.tupleof[i][k] = subV;
+			}
+			else
+				ret.tupleof[i] = v;
+		}
+		return ret;
+	}
+
+	int cmpTypeAndName(ref DefinitionElement rhs)
+	{
+		if (type < rhs.type)
+			return -1;
+		if (type > rhs.type)
+			return 1;
+		if (name < rhs.name)
+			return -1;
+		if (name > rhs.name)
+			return 1;
+		return 0;
+	}
+
 	///
 	string name;
 	/// 1-based line number
@@ -592,7 +679,7 @@ struct DefinitionElement
 	/// * `g` = enum {}
 	/// * `u` = union
 	/// * `e` = enum member/definition
-	/// * `v` = variable/invariant
+	/// * `v` = variable
 	/// * `a` = alias
 	/// * `U` = unittest (only in verbose mode)
 	/// * `D` = debug specification (only in verbose mode)
@@ -602,8 +689,10 @@ struct DefinitionElement
 	/// * `Q` = static module dtor (only in verbose mode)
 	/// * `W` = shared static module dtor (only in verbose mode)
 	/// * `P` = postblit/copy ctor (only in verbose mode)
-	string type;
-	///
+	/// * `I` = import (only in verbose mode)
+	/// * `N` = invariant
+	char type;
+	/// Arbitrary per-symbol data that differs from type to type.
 	string[string] attributes;
 	///
 	int[2] range;
@@ -612,8 +701,159 @@ struct DefinitionElement
 	{
 		import std.ascii : isUpper;
 
-		return type.length == 1 && type[0] != 'T' && isUpper(type[0]);
+		return type != 'T' && isUpper(type);
 	}
+
+	/// `true` if this definition is within a method, lambda, unittest, ctor,
+	/// dtor or other callable, where you can't access the type outside the
+	/// function.
+	bool insideFunction;
+	/// `true` if this definition is within an aggregate (class, struct, etc) or
+	/// template.
+	bool insideAggregate;
+
+	@serializedAs!SumTypePackProxy
+	Visibility visibility;
+
+	struct VersionCondition
+	{
+		string identifier;
+		bool inverted;
+	}
+
+	/// List of `version (...)` identifiers that this symbol is inside.
+	const(VersionCondition)[] versioned;
+	/// List of `debug (...)` identifiers that this symbol is inside.
+	const(VersionCondition)[] debugVersioned;
+	/// True if this statement is defined within a `static if` or otherwise
+	/// somehow potentially omitted depending on compile time constructs.
+	bool hasOtherConditional;
+
+	/// `true` if this symbol may not be available, depending on compile time
+	/// conditional values or target platform. (also true for `version (all)`)
+	/// See_Also: $(LREF versioned), $(LREF debugVersioned),
+	/// $(LREF otherConditional)
+	bool isConditional() const @property
+	{
+		return versioned.length || debugVersioned.length || hasOtherConditional;
+	}
+
+	bool isImportable() const @property
+	{
+		if (insideFunction || insideAggregate)
+			return false;
+		return !!type.among!('c', 's', 'i', 'T', 'f', 'g', 'u', 'e', 'v', 'a', 'D', 'V');
+	}
+
+	enum ubyte serializeVersion = 1;
+	static assert(hashFields!(typeof(this).tupleof) == 0x29460F10C62EDA9B,
+		"Updated fields or layout, but not version and hash! Please update serializeVersion and adjust this check to 0x"
+		~ hashFields!(typeof(this).tupleof).to!string(16));
+
+	ubyte[] serialize()
+	{
+		return pack(this);
+	}
+
+	static DefinitionElement deserialize(scope const(ubyte)[] data, int targetSerializeVersion)
+	{
+		if (targetSerializeVersion != serializeVersion)
+			throw new Exception("DefinitionElement cache format has changed, can't deserialize");
+
+		static struct DefinitionElementUnqual
+		{
+			static foreach (i, t; DefinitionElement.tupleof)
+			{
+				static if (is(typeof(t) == const(VersionCondition)[]))
+					mixin("VersionCondition[] ", __traits(identifier, DefinitionElement.tupleof[i]), ";");
+				else static if (is(typeof(t) == Visibility))
+					mixin("@serializedAs!SumTypePackProxy Visibility ", __traits(identifier, DefinitionElement.tupleof[i]), ";");
+				else
+					mixin("Unqual!(typeof(t)) ", __traits(identifier, DefinitionElement.tupleof[i]), ";");
+			}
+		}
+
+		return DefinitionElement(unpack!DefinitionElementUnqual(data).tupleof);
+	}
+}
+
+struct ModuleDefinition
+{
+	DefinitionElement[] definitions;
+	bool hasMixin;
+
+	alias definitions this;
+}
+
+private static ulong hashFields(Args...)()
+{
+	import std.digest.crc : CRC64ISO;
+	import std.bitmanip;
+
+	CRC64ISO crc;
+	crc.put(Args.length.nativeToLittleEndian);
+	static foreach (Arg; Args)
+	{
+		crc.put(cast(const(ubyte)[]) __traits(identifier, Arg));
+		crc.put(cast(const(ubyte)[]) typeof(Arg).stringof);
+	}
+	return crc.finish.littleEndianToNative!ulong;
+}
+
+private static struct SumTypePackProxy
+{
+	import msgpack;
+
+	static void serialize(T)(ref Packer p, ref in T sumtype)
+	{
+		static assert(__traits(identifier, sumtype.tupleof[1]) == "tag");
+		p.pack(sumtype.tupleof[1]);
+		sumtype.match!((v) {
+			static if (!is(typeof(v) == typeof(null)))
+				p.pack(v);
+		});
+	}
+
+	static void deserialize(T)(ref Unpacker u, ref T sumtype)
+	{
+		static assert(__traits(identifier, sumtype.tupleof[1]) == "tag");
+		typeof(sumtype.tupleof[1]) tag;
+		u.unpack(tag);
+		S: switch (tag)
+		{
+			static foreach (i, U; T.Types)
+			{
+			case cast(typeof(tag))i:
+				U value;
+				static if (!is(U == typeof(null)))
+					u.unpack(value);
+				sumtype = value;
+				break S;
+			}
+		default:
+			throw new ConvException("Unsupported SumType value.");
+		}
+	}
+}
+
+bool isVisibleOutside(DefinitionElement.Visibility v)
+{
+	return v.match!(
+		(typeof(null) _) => true,
+		(DefinitionElement.BasicVisibility v) => v != DefinitionElement.BasicVisibility.protected_
+			&& v != DefinitionElement.BasicVisibility.private_,
+		(DefinitionElement.PackageVisibility v) => false
+	);
+}
+
+bool isPublicImportVisibility(DefinitionElement.Visibility v)
+{
+	return v.match!(
+		(typeof(null) _) => false,
+		(DefinitionElement.BasicVisibility v) => v != DefinitionElement.BasicVisibility.protected_
+			&& v != DefinitionElement.BasicVisibility.private_,
+		(DefinitionElement.PackageVisibility v) => false // TODO: properly resolve this using the calling module
+	);
 }
 
 private:
@@ -687,13 +927,14 @@ final class DefinitionFinder : ASTVisitor
 	{
 		if (!dec.structBody)
 			return;
-		definitions ~= makeDefinition(dec.name.text, dec.name.line, "c", context,
-				[
-					cast(int) dec.structBody.safeStartLocation,
-					cast(int) dec.structBody.safeEndLocation
-				]);
+		definitions ~= makeDefinition(dec.name.text, dec.name.line, 'c', context,
+			[
+				cast(int) dec.structBody.safeStartLocation,
+				cast(int) dec.structBody.safeEndLocation
+			]);
 		auto c = context;
-		context = ContextType(["class": dec.name.text], null, "public");
+		context = ContextType(["class": dec.name.text], null, c, DefinitionElement.BasicVisibility.default_);
+		context.insideAggregate = true;
 		dec.accept(this);
 		context = c;
 	}
@@ -707,13 +948,14 @@ final class DefinitionFinder : ASTVisitor
 			dec.accept(this);
 			return;
 		}
-		definitions ~= makeDefinition(dec.name.text, dec.name.line, "s", context,
-				[
-					cast(int) dec.structBody.safeStartLocation,
-					cast(int) dec.structBody.safeEndLocation
-				]);
+		definitions ~= makeDefinition(dec.name.text, dec.name.line, 's', context,
+			[
+				cast(int) dec.structBody.safeStartLocation,
+				cast(int) dec.structBody.safeEndLocation
+			]);
 		auto c = context;
-		context = ContextType(["struct": dec.name.text], null, "public");
+		context = ContextType(["struct": dec.name.text], null, c, DefinitionElement.BasicVisibility.default_);
+		context.insideAggregate = true;
 		dec.accept(this);
 		context = c;
 	}
@@ -722,82 +964,87 @@ final class DefinitionFinder : ASTVisitor
 	{
 		if (!dec.structBody)
 			return;
-		definitions ~= makeDefinition(dec.name.text, dec.name.line, "i", context,
-				[
-					cast(int) dec.structBody.safeStartLocation,
-					cast(int) dec.structBody.safeEndLocation
-				]);
+		definitions ~= makeDefinition(dec.name.text, dec.name.line, 'i', context,
+			[
+				cast(int) dec.structBody.safeStartLocation,
+				cast(int) dec.structBody.safeEndLocation
+			]);
 		auto c = context;
-		context = ContextType(["interface:": dec.name.text], null, context.access);
+		context = ContextType(["interface:": dec.name.text], null, context);
+		context.insideAggregate = true;
 		dec.accept(this);
 		context = c;
 	}
 
 	override void visit(const TemplateDeclaration dec)
 	{
-		auto def = makeDefinition(dec.name.text, dec.name.line, "T", context,
-				[cast(int) dec.safeStartLocation, cast(int) dec.safeEndLocation]);
+		auto def = makeDefinition(dec.name.text, dec.name.line, 'T', context,
+			[cast(int) dec.safeStartLocation, cast(int) dec.safeEndLocation]);
 		def.attributes["signature"] = paramsToString(dec);
 		definitions ~= def;
 		auto c = context;
-		context = ContextType(["template": dec.name.text], null, context.access);
+		context = ContextType(["template": dec.name.text], null, context);
+		context.insideAggregate = true;
 		dec.accept(this);
 		context = c;
 	}
 
 	override void visit(const FunctionDeclaration dec)
 	{
-		auto def = makeDefinition(dec.name.text, dec.name.line, "f", context,
-				[
-					cast(int) dec.functionBody.safeStartLocation,
-					cast(int) dec.functionBody.safeEndLocation
-				]);
+		auto def = makeDefinition(dec.name.text, dec.name.line, 'f', context,
+			[
+				cast(int) dec.functionBody.safeStartLocation,
+				cast(int) dec.functionBody.safeEndLocation
+			]);
 		def.attributes["signature"] = paramsToString(dec);
 		if (dec.returnType !is null)
 			def.attributes["return"] = astToString(dec.returnType);
 		definitions ~= def;
+		dec.accept(this);
 	}
 
 	override void visit(const Constructor dec)
 	{
-		auto def = makeDefinition("this", dec.line, "f", context,
-				[
-					cast(int) dec.functionBody.safeStartLocation,
-					cast(int) dec.functionBody.safeEndLocation
-				]);
+		auto def = makeDefinition("this", dec.line, 'f', context,
+			[
+				cast(int) dec.functionBody.safeStartLocation,
+				cast(int) dec.functionBody.safeEndLocation
+			]);
 		def.attributes["signature"] = paramsToString(dec);
 		definitions ~= def;
+		dec.accept(this);
 	}
 
 	override void visit(const Destructor dec)
 	{
-		definitions ~= makeDefinition("~this", dec.line, "f", context,
-				[
-					cast(int) dec.functionBody.safeStartLocation,
-					cast(int) dec.functionBody.safeEndLocation
-				]);
+		definitions ~= makeDefinition("~this", dec.line, 'f', context,
+			[
+				cast(int) dec.functionBody.safeStartLocation,
+				cast(int) dec.functionBody.safeEndLocation
+			]);
+		dec.accept(this);
 	}
 
 	override void visit(const Postblit dec)
 	{
-		if (!verbose)
-			return;
-
-		definitions ~= makeDefinition("this(this)", dec.line, "f", context,
+		if (verbose)
+			definitions ~= makeDefinition("this(this)", dec.line, 'f', context,
 				[
 					cast(int) dec.functionBody.safeStartLocation,
 					cast(int) dec.functionBody.safeEndLocation
 				]);
+		dec.accept(this);
 	}
 
 	override void visit(const EnumDeclaration dec)
 	{
 		if (!dec.enumBody)
 			return;
-		definitions ~= makeDefinition(dec.name.text, dec.name.line, "g", context,
+		definitions ~= makeDefinition(dec.name.text, dec.name.line, 'g', context,
 				[cast(int) dec.enumBody.safeStartLocation, cast(int) dec.enumBody.safeEndLocation]);
 		auto c = context;
-		context = ContextType(["enum": dec.name.text], null, context.access);
+		context = ContextType(["enum": dec.name.text], null, context);
+		context.insideAggregate = true;
 		dec.accept(this);
 		context = c;
 	}
@@ -811,39 +1058,51 @@ final class DefinitionFinder : ASTVisitor
 			dec.accept(this);
 			return;
 		}
-		definitions ~= makeDefinition(dec.name.text, dec.name.line, "u", context,
+		definitions ~= makeDefinition(dec.name.text, dec.name.line, 'u', context,
 				[
 					cast(int) dec.structBody.safeStartLocation,
 					cast(int) dec.structBody.safeEndLocation
 				]);
 		auto c = context;
-		context = ContextType(["union": dec.name.text], null, context.access);
+		context = ContextType(["union": dec.name.text], null, context);
+		context.insideAggregate = true;
 		dec.accept(this);
+		context = c;
+	}
+
+	override void visit(const FunctionBody fn)
+	{
+		auto c = context;
+		context.insideFunction = true;
+		fn.accept(this);
 		context = c;
 	}
 
 	override void visit(const AnonymousEnumMember mem)
 	{
-		definitions ~= makeDefinition(mem.name.text, mem.name.line, "e", context,
+		definitions ~= makeDefinition(mem.name.text, mem.name.line, 'e', context,
 				[
 					cast(int) mem.name.index,
 					cast(int) mem.name.index + cast(int) mem.name.text.length
 				]);
+		mem.accept(this);
 	}
 
 	override void visit(const EnumMember mem)
 	{
-		definitions ~= makeDefinition(mem.name.text, mem.name.line, "e", context,
+		definitions ~= makeDefinition(mem.name.text, mem.name.line, 'e', context,
 				[
 					cast(int) mem.name.index,
 					cast(int) mem.name.index + cast(int) mem.name.text.length
 				]);
+		mem.accept(this);
 	}
 
 	override void visit(const VariableDeclaration dec)
 	{
-		foreach (d; dec.declarators)
-			definitions ~= makeDefinition(d.name.text, d.name.line, "v", context,
+		if (shouldAddVariable)
+			foreach (d; dec.declarators)
+				definitions ~= makeDefinition(d.name.text, d.name.line, 'v', context,
 					[
 						cast(int) d.name.index,
 						cast(int) d.name.index + cast(int) d.name.text.length
@@ -853,23 +1112,45 @@ final class DefinitionFinder : ASTVisitor
 
 	override void visit(const AutoDeclaration dec)
 	{
-		foreach (i; dec.parts.map!(a => a.identifier))
-			definitions ~= makeDefinition(i.text, i.line, "v", context,
-					[cast(int) i.index, cast(int) i.index + cast(int) i.text.length]);
+		if (shouldAddVariable)
+			foreach (i; dec.parts.map!(a => a.identifier))
+				definitions ~= makeDefinition(i.text, i.line, 'v', context,
+						[cast(int) i.index, cast(int) i.index + cast(int) i.text.length]);
 		dec.accept(this);
 	}
 
 	override void visit(const Invariant dec)
 	{
 		if (!dec.blockStatement)
+		{
+			auto c = context;
+			context.insideFunction = true;
+			dec.accept(this);
+			context = c;
 			return;
-		definitions ~= makeDefinition("invariant", dec.line, "v", context,
+		}
+
+		definitions ~= makeDefinition("invariant", dec.line, 'N', context,
 				[cast(int) dec.index, cast(int) dec.blockStatement.safeEndLocation]);
+
+		if ((extraMask & ExtraMask.includeFunctionMembers) == 0)
+		{
+			auto c = context;
+			context.insideFunction = true;
+			dec.accept(this);
+			context = c;
+			return;
+		}
+
+		auto c = context;
+		context.insideFunction = true;
+		dec.accept(this);
+		context = c;
 	}
 
 	override void visit(const ModuleDeclaration dec)
 	{
-		context = ContextType(null, null, "public");
+		context = ContextType(null, null, context, DefinitionElement.BasicVisibility.default_);
 		dec.accept(this);
 	}
 
@@ -880,19 +1161,23 @@ final class DefinitionFinder : ASTVisitor
 			switch (attribute.attribute.type)
 			{
 			case tok!"export":
-				context.access = "public";
+				context.visibility = DefinitionElement.BasicVisibility.export_;
 				break;
 			case tok!"public":
-				context.access = "public";
+				context.visibility = DefinitionElement.BasicVisibility.public_;
 				break;
 			case tok!"package":
-				context.access = "protected";
+				context.visibility = DefinitionElement.PackageVisibility(
+					attribute.identifierChain
+						? attribute.identifierChain.identifiers.map!"a.text".join(".")
+						: null
+				);
 				break;
 			case tok!"protected":
-				context.access = "protected";
+				context.visibility = DefinitionElement.BasicVisibility.protected_;
 				break;
 			case tok!"private":
-				context.access = "private";
+				context.visibility = DefinitionElement.BasicVisibility.private_;
 				break;
 			default:
 			}
@@ -951,7 +1236,7 @@ final class DefinitionFinder : ASTVisitor
 			return;
 
 		auto tok = dec.identifierOrInteger;
-		auto def = makeDefinition(tok.tokenText, tok.line, "D", context,
+		auto def = makeDefinition(tok.tokenText, tok.line, 'D', context,
 				[
 					cast(int) tok.index,
 					cast(int) tok.index + cast(int) tok.text.length
@@ -967,7 +1252,7 @@ final class DefinitionFinder : ASTVisitor
 			return;
 
 		auto tok = dec.token;
-		auto def = makeDefinition(tok.tokenText, tok.line, "V", context,
+		auto def = makeDefinition(tok.tokenText, tok.line, 'V', context,
 				[
 					cast(int) tok.index,
 					cast(int) tok.index + cast(int) tok.text.length
@@ -979,23 +1264,41 @@ final class DefinitionFinder : ASTVisitor
 
 	override void visit(const Unittest dec)
 	{
-		if (!verbose)
-			return;
-
 		if (!dec.blockStatement)
 			return;
+
+		if (!verbose)
+		{
+			auto c = context;
+			context.insideFunction = true;
+			dec.accept(this);
+			context = c;
+			return;
+		}
+
 		string testName = text("__unittest_L", dec.line, "_C", dec.column);
-		definitions ~= makeDefinition(testName, dec.line, "U", context,
+		definitions ~= makeDefinition(testName, dec.line, 'U', context,
 				[
 					cast(int) dec.tokens[0].index,
 					cast(int) dec.blockStatement.safeEndLocation
 				], "U");
 
-		// TODO: decide if we want to include types nested in unittests
-		// dec.accept(this);
+		if ((extraMask & ExtraMask.includeFunctionMembers) == 0)
+		{
+			auto c = context;
+			context.insideFunction = true;
+			dec.accept(this);
+			context = c;
+			return;
+		}
+
+		auto c = context;
+		context.insideFunction = true;
+		dec.accept(this);
+		context = c;
 	}
 
-	private static immutable CtorTypes = ["C", "S", "Q", "W"];
+	private static immutable CtorTypes = ['C', 'S', 'Q', 'W'];
 	private static immutable CtorNames = [
 		"static this()", "shared static this()",
 		"static ~this()", "shared static ~this()"
@@ -1006,13 +1309,18 @@ final class DefinitionFinder : ASTVisitor
 		override void visit(const T dec)
 		{
 			if (!verbose)
+			{
+				dec.accept(this);
 				return;
+			}
 
 			definitions ~= makeDefinition(CtorNames[i], dec.line, CtorTypes[i], context,
 				[
 					cast(int) dec.functionBody.safeStartLocation,
 					cast(int) dec.functionBody.safeEndLocation
 				]);
+
+			dec.accept(this);
 		}
 	}
 
@@ -1021,14 +1329,14 @@ final class DefinitionFinder : ASTVisitor
 		// Old style alias
 		if (dec.declaratorIdentifierList)
 			foreach (i; dec.declaratorIdentifierList.identifiers)
-				definitions ~= makeDefinition(i.text, i.line, "a", context,
+				definitions ~= makeDefinition(i.text, i.line, 'a', context,
 						[cast(int) i.index, cast(int) i.index + cast(int) i.text.length]);
 		dec.accept(this);
 	}
 
 	override void visit(const AliasInitializer dec)
 	{
-		definitions ~= makeDefinition(dec.name.text, dec.name.line, "a", context,
+		definitions ~= makeDefinition(dec.name.text, dec.name.line, 'a', context,
 				[
 					cast(int) dec.name.index,
 					cast(int) dec.name.index + cast(int) dec.name.text.length
@@ -1040,10 +1348,109 @@ final class DefinitionFinder : ASTVisitor
 	override void visit(const AliasThisDeclaration dec)
 	{
 		auto name = dec.identifier;
-		definitions ~= makeDefinition(name.text, name.line, "a", context,
+		definitions ~= makeDefinition(name.text, name.line, 'a', context,
 				[cast(int) name.index, cast(int) name.index + cast(int) name.text.length]);
 
 		dec.accept(this);
+	}
+
+	override void visit(const ConditionalStatement conditional)
+	{
+		if (!conditional.compileCondition)
+			return super.visit(conditional);
+
+		if (conditional.trueStatement)
+		{
+			scope c = context;
+			context = makeConditionalContext(conditional.compileCondition, false);
+			conditional.trueStatement.accept(this);
+			context = c;
+		}
+		if (conditional.falseStatement)
+		{
+			scope c = context;
+			context = makeConditionalContext(conditional.compileCondition, true);
+			conditional.falseStatement.accept(this);
+			context = c;
+		}
+	}
+
+	override void visit(const ConditionalDeclaration conditional)
+	{
+		if (!conditional.compileCondition)
+			return super.visit(conditional);
+
+		if (conditional.trueDeclarations.length)
+		{
+			scope c = context;
+			context = makeConditionalContext(conditional.compileCondition, false);
+			foreach (d; conditional.trueDeclarations)
+				d.accept(this);
+			context = c;
+		}
+		if (conditional.falseDeclarations.length)
+		{
+			scope c = context;
+			context = makeConditionalContext(conditional.compileCondition, true);
+			foreach (d; conditional.falseDeclarations)
+				d.accept(this);
+			context = c;
+		}
+	}
+
+	private ContextType makeConditionalContext(const CompileCondition cond, bool invert)
+	{
+		ContextType ret = context;
+		if (cond.versionCondition)
+			ret.versions ~= DefinitionElement.VersionCondition(cond.versionCondition.token.text, invert);
+		if (cond.debugCondition)
+			ret.versions ~= DefinitionElement.VersionCondition(cond.debugCondition.identifierOrInteger.text, invert);
+		if (cond.staticIfCondition)
+			ret.hasOtherConditional = true;
+		return ret;
+	}
+
+	override void visit(const ImportDeclaration decl)
+	{
+		if ((extraMask & ExtraMask.imports) == 0)
+			return;
+
+		void process(const SingleImport imp)
+		{
+			if (!imp.identifierChain)
+				return;
+			auto ids = imp.identifierChain.identifiers;
+			if (ids.length)
+			{
+				auto start = cast(int)ids[0].index;
+				auto end = cast(int)(ids[$ - 1].index + ids[$ - 1].tokenText.length);
+				definitions ~= makeDefinition(
+					ids.map!"a.text".join("."), ids[0].line, 'I', context, [start, end]);
+			}
+		}
+
+		foreach (imp; decl.singleImports)
+			process(imp);
+		if (decl.importBindings && decl.importBindings.singleImport)
+			process(decl.importBindings.singleImport);
+	}
+
+	override void visit(const MixinDeclaration decl)
+	{
+		hasMixin = true;
+		decl.accept(this);
+	}
+
+	override void visit(const MixinExpression expr)
+	{
+		hasMixin = true;
+		expr.accept(this);
+	}
+
+	bool shouldAddVariable() const @property
+	{
+		return !context.insideFunction
+			|| (extraMask & ExtraMask.includeVariablesInFunctions) != 0;
 	}
 
 	alias visit = ASTVisitor.visit;
@@ -1051,22 +1458,31 @@ final class DefinitionFinder : ASTVisitor
 	ContextType context;
 	AccessState accessSt;
 	DefinitionElement[] definitions;
+	bool hasMixin;
 	bool verbose;
+	ExtraMask extraMask;
 }
 
-DefinitionElement makeDefinition(string name, size_t line, string type,
+DefinitionElement makeDefinition(string name, size_t line, char type,
 		ContextType context, int[2] range, string forType = null)
 {
-	string[string] attr = context.attr.dup;
-	if (context.access.length)
-		attr["access"] = context.access;
+	auto ret = DefinitionElement(name, cast(int) line, type, context.attr.dup, range);
+	auto access = context.visibility.toLegacyAccess;
+	if (access.length)
+		ret.attributes["access"] = access;
+	ret.visibility = context.visibility;
+	ret.versioned = context.versions;
+	ret.debugVersioned = context.debugVersions;
+	ret.hasOtherConditional = context.hasOtherConditional;
+	ret.insideFunction = context.insideFunction;
+	ret.insideAggregate = context.insideAggregate;
 
 	if (forType == "U")
 	{
 		if (auto utName = "utName" in context.privateAttr)
-			attr["name"] = *utName;
+			ret.attributes["name"] = *utName;
 	}
-	return DefinitionElement(name, cast(int) line, type, attr, range);
+	return ret;
 }
 
 enum AccessState
@@ -1079,7 +1495,50 @@ struct ContextType
 {
 	string[string] attr;
 	string[string] privateAttr;
-	string access;
+	DefinitionElement.Visibility visibility;
+	DefinitionElement.VersionCondition[] versions, debugVersions;
+	bool hasOtherConditional;
+	bool insideFunction;
+	bool insideAggregate;
+
+	this(string[string] attr, string[string] privateAttr, ContextType inherit)
+	{
+		this.attr = attr;
+		this.privateAttr = privateAttr;
+		this.visibility = inherit.visibility;
+		this.versions = inherit.versions;
+		this.debugVersions = inherit.debugVersions;
+		this.hasOtherConditional = inherit.hasOtherConditional;
+		this.insideFunction = inherit.insideFunction;
+		this.insideAggregate = inherit.insideAggregate;
+	}
+
+	this(T)(string[string] attr, string[string] privateAttr, ContextType inherit, T visibility)
+	{
+		this(attr, privateAttr, inherit);
+		this.visibility = visibility;
+	}
+}
+
+string toLegacyAccess(DefinitionElement.Visibility v)
+{
+	return v.match!(
+		(typeof(null) _) => null,
+		(DefinitionElement.PackageVisibility v) => "protected",
+		(other) {
+			final switch (other) with (DefinitionElement.BasicVisibility)
+			{
+			case default_:
+			case export_:
+			case public_:
+				return "public";
+			case protected_:
+				return "protected";
+			case private_:
+				return "private";
+			}
+		}
+	);
 }
 
 unittest
@@ -1115,33 +1574,57 @@ unittest
 		},
 		(code, parts, line) {
 			assert(parts.length == 6, "malformed definition test line: " ~ line);
+			assert(parts[2].length == 1, "malformed type in test line: " ~ line);
 
-			string[string] dict;
-			foreach (k, v; parseJSON(parts[3]).object)
-				dict[k] = v.str;
-
-			expectedDefinitions ~= DefinitionElement(
+			auto expected = DefinitionElement(
 				parts[0],
 				parts[1].to!int,
-				parts[2],
-				dict,
+				parts[2][0],
+				null,
 				[parts[4].to!int, parts[5].to!int]
 			);
+			foreach (k, v; parseJSON(parts[3]).object)
+				expected.attributes[k] = v.str;
+
+			expectedDefinitions ~= expected;
 		},
 		(code) {
-			auto defs = dscanner.listDefinitions("stdin", code, verbose).getBlocking();
-			assert(defs == expectedDefinitions, highlightDiff(defs, expectedDefinitions));
+			auto defs = dscanner.listDefinitions("stdin", code, verbose).getBlocking()
+				.definitions;
+			highlightDiff(defs, expectedDefinitions);
 		});
 }
 
-version (unittest) private string highlightDiff(T)(T[] a, T[] b)
+version (unittest) private void highlightDiff(DefinitionElement[] a, DefinitionElement[] b)
 {
+	bool equals(DefinitionElement lhs, DefinitionElement rhs)
+	{
+		return lhs.name == rhs.name
+			&& lhs.line == rhs.line
+			&& lhs.type == rhs.type
+			&& lhs.attributes == rhs.attributes
+			&& lhs.range == rhs.range;
+	}
+
+	string str(DefinitionElement e)
+	{
+		return text(e.name, "\t", e.line, "\t", e.type, "\t", e.attributes, "\t", e.range[0], "\t", e.range[1]);
+	}
+
+	bool valid = a.length == b.length;
 	string ret;
 	if (a.length != b.length)
 		ret ~= text("length mismatch: ", a.length, " != ", b.length, "\n");
 	foreach (i; 0 .. min(a.length, b.length))
 	{
-		ret ~= text(a[i] == b[i] ? "\x1B[0m   " : "\x1B[33m ! ", a[i], a[i] == b[i] ? " == " : " != ", b[i], "\x1B[0m\n");
+		bool same = equals(a[i], b[i]);
+		if (!same)
+			valid = false;
+
+		if (same)
+			ret ~= text("\x1B[0m   ", str(a[i]), "\n");
+		else
+			ret ~= text("\x1B[33m ! ", str(a[i]), "\n!= ", str(b[i]), "\x1B[0m\n");
 	}
 	if (a.length < b.length)
 	{
@@ -1153,7 +1636,8 @@ version (unittest) private string highlightDiff(T)(T[] a, T[] b)
 		foreach (i; b.length .. a.length)
 			ret ~= text("\x1B[31m - ", a[i], "\x1B[0m\n");
 	}
-	return ret;
+	if (!valid)
+		assert(false, ret);
 }
 
 size_t safeStartLocation(T)(const T b)

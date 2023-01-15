@@ -7,9 +7,11 @@ import mir.serde;
 
 import workspaced.api;
 import workspaced.coms;
+import workspaced.com.dscanner : DefinitionElement;
+import workspaced.com.index;
 
-import std.algorithm : canFind, filter, map, startsWith;
-import std.array : array, appender;
+import std.algorithm : among, canFind, filter, map;
+import std.array : appender, array, join;
 import std.path : extension, isAbsolute;
 import std.string : toLower;
 
@@ -19,43 +21,53 @@ import io = std.stdio;
 @protocolMethod("workspace/symbol")
 SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 {
-	SymbolInformation[] infos;
+	auto infos = appender!(SymbolInformation[]);
 	foreach (workspace; workspaces)
 	{
-		string workspaceRoot = workspace.folder.uri.uriToFile;
-		foreach (file; fs.dirEntries(workspaceRoot, fs.SpanMode.depth, false))
+		auto folderPath = workspace.folder.uri.uriToFile;
+		if (workspace.config.d.enableIndex && backend.has!IndexComponent(folderPath))
 		{
-			if (!file.isFile || file.extension != ".d")
-				continue;
-			auto defs = provideDocumentSymbolsOld(
-					DocumentSymbolParamsEx(TextDocumentIdentifier(file.uriFromFile), false));
-			foreach (def; defs)
-				if (def.name.toLower.startsWith(params.query.toLower))
-					infos ~= def.downcast;
-		}
-		if (backend.has!DCDComponent(workspace.folder.uri.uriToFile))
-		{
-			auto exact = backend.get!DCDComponent(workspace.folder.uri.uriToFile)
-				.searchSymbol(params.query).getYield;
-			foreach (symbol; exact)
-			{
-				if (!symbol.file.isAbsolute)
-					continue;
-				string uri = symbol.file.uriFromFile;
-				if (infos.canFind!(a => a.location.uri == uri))
-					continue;
-				SymbolInformation info;
-				info.name = params.query;
-				info.location.uri = uri;
-				auto doc = documents.tryGet(uri);
-				if (doc != Document.init)
-					info.location.range = TextRange(doc.bytesToPosition(symbol.position));
-				info.kind = symbol.type.convertFromDCDSearchType;
-				infos ~= info;
-			}
+			auto indexer = backend.get!IndexComponent(folderPath);
+			indexer.iterateAll(delegate(ModuleRef mod, string fileName, scope const ref DefinitionElement def) {
+				if (def.isImportable
+					&& !mod.isStdLib
+					&& def.name.roughlyContains(params.query))
+				{
+					Position p;
+					p.line = def.line - 1;
+					auto info = makeSymbolInfoEx(def, fileName.uriFromFile, p, p).downcast;
+					if (info.containerName.isNone)
+						info.containerName = mod;
+					infos ~= info;
+				}
+			});
 		}
 	}
-	return infos;
+	return infos.data;
+}
+
+/// Checks if doesThis contains matchThis in a way that a fuzzy search would
+/// find it.
+private bool roughlyContains(string doesThis, string matchThis)
+{
+	import std.utf : byUTF, decode;
+	import std.uni : toUpper;
+
+	if (!matchThis.length)
+		return true;
+
+	size_t i = 0;
+	dchar next = matchThis.decode(i).toUpper;
+	foreach (c; doesThis.byUTF!dchar)
+	{
+		if (toUpper(c) == next)
+		{
+			if (i >= matchThis.length)
+				return true;
+			next = matchThis.decode(i).toUpper;
+		}
+	}
+	return false;
 }
 
 @protocolMethod("textDocument/documentSymbol")
@@ -90,7 +102,8 @@ SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParamsEx params)
 		return null;
 
 	auto result = backend.best!DscannerComponent(params.textDocument.uri.uriToFile)
-		.listDefinitions(uriToFile(params.textDocument.uri), document.rawText, true).getYield;
+		.listDefinitions(uriToFile(params.textDocument.uri), document.rawText, true).getYield
+		.definitions;
 	auto ret = appender!(SymbolInformationEx[]);
 	auto retVerbose = appender!(SymbolInformationEx[]);
 
@@ -99,30 +112,12 @@ SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParamsEx params)
 
 	foreach (def; result)
 	{
-		SymbolInformationEx info;
-		info.name = def.name;
-		info.location.uri = params.textDocument.uri;
-
 		auto startPosition = document.movePositionBytes(cachePosition, cacheByte, def.range[0]);
 		auto endPosition = document.movePositionBytes(startPosition, def.range[0], def.range[1]);
 		cacheByte = def.range[1];
 		cachePosition = endPosition;
 
-		info.location.range = TextRange(startPosition, endPosition);
-		info.kind = convertFromDscannerType(def.type, def.name);
-		info.extendedType = convertExtendedFromDscannerType(def.type);
-		if (def.type == "f" && def.name == "this")
-			info.kind = SymbolKind.constructor;
-		string* ptr;
-		auto attribs = def.attributes;
-		if ((ptr = "struct" in attribs) !is null || (ptr = "class" in attribs) !is null
-				|| (ptr = "enum" in attribs) !is null || (ptr = "union" in attribs) !is null)
-			info.containerName = *ptr;
-		if ("deprecation" in attribs)
-			info.deprecated_ = true;
-		if (auto name = "name" in attribs)
-			info.detail = *name;
-
+		auto info = makeSymbolInfoEx(def, params.textDocument.uri, startPosition, endPosition);
 		if (!def.isVerboseType)
 			ret.put(info);
 		retVerbose.put(info);
@@ -130,6 +125,26 @@ SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParamsEx params)
 	documentSymbolsCacheOld.store(document, OldSymbolsCache(ret.data, retVerbose.data));
 
 	return params.verbose ? retVerbose.data : ret.data;
+}
+
+SymbolInformationEx makeSymbolInfoEx(scope const ref DefinitionElement def, string uri, Position startPosition, Position endPosition)
+{
+	SymbolInformationEx info;
+	info.name = def.name;
+	info.location.uri = uri;
+	info.location.range = TextRange(startPosition, endPosition);
+	info.kind = convertFromDscannerType(def.type, def.name);
+	info.extendedType = convertExtendedFromDscannerType(def.type);
+	const(string)* ptr;
+	auto attribs = def.attributes;
+	if ((ptr = "struct" in attribs) !is null || (ptr = "class" in attribs) !is null
+			|| (ptr = "enum" in attribs) !is null || (ptr = "union" in attribs) !is null)
+		info.containerName = *ptr;
+	if ("deprecation" in attribs)
+		info.deprecated_ = true;
+	if (auto name = "name" in attribs)
+		info.detail = *name;
+	return info;
 }
 
 @serdeProxy!DocumentSymbol

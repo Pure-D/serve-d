@@ -1,5 +1,6 @@
 module served.commands.dub;
 
+import served.commands.index;
 import served.extension;
 import served.lsp.protoext;
 import served.types;
@@ -225,6 +226,7 @@ bool updateImports(UpdateImportsParams params)
 	reportProgress(params.reportProgress, ProgressType.importReload, 4, 5, instance.cwd.uriFromFile);
 	if (instance.has!DCDComponent)
 		instance.get!DCDComponent.refreshImports();
+	backgroundIndex();
 	reportProgress(params.reportProgress, ProgressType.importReload, 5, 5, instance.cwd.uriFromFile);
 	return success;
 }

@@ -33,7 +33,7 @@ struct protocolNotification
 
 struct EventProcessorConfig
 {
-	string[] allowedDuplicateMethods = ["object", "served", "std", "io", "workspaced", "fs"];
+	string[] allowedDuplicateMethods = ["object", "served", "std", "core", "etc", "io", "workspaced", "fs"];
 }
 
 /// Hooks into initialization, possibly manipulating the InitializeResponse.

@@ -12,7 +12,9 @@ import workspaced.com.dcd;
 import workspaced.com.dcdext;
 import workspaced.com.snippets;
 import workspaced.com.importer;
+import workspaced.com.index;
 import workspaced.coms;
+import workspaced.helpers : isValidDIdentifier, isDIdentifierSeparatingChar;
 
 import std.algorithm : among, any, canFind, chunkBy, endsWith, filter, findSplit,
 	map, min, reverse, sort, startsWith, uniq;
@@ -33,6 +35,8 @@ static immutable sortPrefixDoc = "0_";
 static immutable sortPrefixSnippets = "2_5_";
 // dcd additionally sorts inside with sortFromDCDType return value (appends to this)
 static immutable sortPrefixDCD = "2_";
+// additional sorting inside with already imported values = 0_, std.* = 1_, core.* & etc.* = 2_
+static immutable sortPrefixAutoImport = "3_";
 
 CompletionItemKind convertFromDCDType(string type)
 {
@@ -151,11 +155,9 @@ SymbolKind convertFromDCDSearchType(string type)
 	}
 }
 
-SymbolKind convertFromDscannerType(string type, string name = null)
+SymbolKind convertFromDscannerType(char type, string name = null)
 {
-	if (type.length != 1)
-		return cast(SymbolKind) 0;
-	switch (type[0])
+	switch (type)
 	{
 	case 'c':
 		return SymbolKind.class_;
@@ -170,6 +172,7 @@ SymbolKind convertFromDscannerType(string type, string name = null)
 	case 'Q':
 	case 'W':
 	case 'P':
+	case 'N':
 		if (name == "this")
 			return SymbolKind.constructor;
 		else
@@ -194,11 +197,9 @@ SymbolKind convertFromDscannerType(string type, string name = null)
 	}
 }
 
-SymbolKindEx convertExtendedFromDscannerType(string type)
+SymbolKindEx convertExtendedFromDscannerType(char type)
 {
-	if (type.length != 1)
-		return cast(SymbolKindEx) 0;
-	switch (type[0])
+	switch (type)
 	{
 	case 'U':
 		return SymbolKindEx.test;
@@ -218,6 +219,45 @@ SymbolKindEx convertExtendedFromDscannerType(string type)
 		return SymbolKindEx.postblit;
 	default:
 		return cast(SymbolKindEx) 0;
+	}
+}
+
+CompletionItemKind convertCompletionFromDScannerType(char type)
+{
+	switch (type)
+	{
+	case 'c':
+		return CompletionItemKind.class_;
+	case 's':
+		return CompletionItemKind.struct_;
+	case 'i':
+		return CompletionItemKind.interface_;
+	case 'T':
+		return CompletionItemKind.property;
+	case 'f':
+	case 'U':
+	case 'Q':
+	case 'W':
+	case 'P':
+	case 'N':
+		return CompletionItemKind.function_;
+	case 'C':
+	case 'S':
+		return CompletionItemKind.constructor;
+	case 'g':
+		return CompletionItemKind.enum_;
+	case 'u':
+		return CompletionItemKind.struct_;
+	case 'D':
+	case 'V':
+	case 'e':
+		return CompletionItemKind.constant;
+	case 'v':
+		return CompletionItemKind.variable;
+	case 'a':
+		return CompletionItemKind.field;
+	default:
+		return cast(CompletionItemKind) 0;
 	}
 }
 
@@ -624,7 +664,15 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 	auto dcdext = instance.has!DCDExtComponent ? instance.get!DCDExtComponent : null;
 
 	string line = document.rawText[lineRange[0] .. lineRange[1]].idup;
+	// TODO: do UTF-16 counting instead of just relying on byte offset
 	string prefix = line[0 .. min($, params.position.character)].strip;
+	
+	size_t idStart = prefix.length;
+	while (idStart > 0 && !prefix[idStart - 1].isDIdentifierSeparatingChar)
+		idStart--;
+	// just the identifier before the cursor
+	auto prefixIdentifier = prefix[idStart .. $];
+
 	CompletionItem[] completion;
 	Token commentToken;
 	if (document.rawText.isInComment(byteOff, backend, &commentToken))
@@ -664,6 +712,7 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 	bool completeDCD = instance.has!DCDComponent;
 	bool completeDoc = instance.has!DscannerComponent;
 	bool completeSnippets = doCompleteSnippets && instance.has!SnippetsComponent;
+	bool completeIndex = instance.has!IndexComponent && instance.has!ImporterComponent;
 
 	tracef("Performing regular D comment completion (DCD=%s, Documentation=%s, Snippets=%s)",
 			completeDCD, completeDoc, completeSnippets);
@@ -681,6 +730,9 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 			snippetInfo = provideSnippetComplete(params, instance, document, config, completion, byteOff);
 		else
 			snippetInfo = getSnippetInfo(instance, document, byteOff);
+	}, {
+		if (completeIndex && config.d.enableIndex && prefixIdentifier.length)
+			provideAutoImports(params, instance, document, completion, byteOff, prefixIdentifier);
 	});
 
 	if (completeDCD && result != DCDCompletions.init)
@@ -705,7 +757,8 @@ private void provideDocComplete(TextDocumentPositionParams params, WorkspaceD.In
 	if (lineStripped.among!("", "/", "/*", "/+", "//", "///", "/**", "/++"))
 	{
 		auto defs = instance.get!DscannerComponent.listDefinitions(uriToFile(
-				params.textDocument.uri), document.rawText[lineRange[1] .. $]).getYield;
+				params.textDocument.uri), document.rawText[lineRange[1] .. $]).getYield
+				.definitions;
 		ptrdiff_t di = -1;
 		FuncFinder: foreach (i, def; defs)
 		{
@@ -786,6 +839,112 @@ private void provideDocComplete(TextDocumentPositionParams params, WorkspaceD.In
 		completion.addDocComplete(doc2, lineStripped);
 		completion.addDocComplete(doc3, lineStripped);
 	}
+}
+
+void provideAutoImports(TextDocumentPositionParams params, WorkspaceD.Instance instance,
+		ref Document document, ref CompletionItem[] completion, int byteOff, string prefixIdentifier,
+		bool exactMatch = false)
+{
+	IndexComponent idx = instance.get!IndexComponent;
+	const availableImports = instance.get!ImporterComponent.get(document.rawText, byteOff);
+	scope size_t[string] modLookup;
+	foreach (n, imp; availableImports)
+		modLookup[imp.name.join('.')] = n;
+	auto thisModule = availableImports.definitonModule.join(".");
+
+	scope bool[string] viaPublicImports;
+	foreach (n, imp; availableImports)
+	{
+		idx.iteratePublicImportsRecursive(imp.name.join('.'), (parent, mod) {
+			if (mod !in modLookup)
+				viaPublicImports[mod] = true;
+		});
+	}
+	tracef("via direct imports: %s depends on %s", thisModule, modLookup.byKey);
+	tracef("via public imports: %s depends on %s", thisModule, viaPublicImports.byKey);
+
+	// TODO: use previously indexed symbols from unused dependencies to
+	// support adding DUB packages from imports (at least popular ones)
+
+	idx.iterateSymbolsStartingWith(prefixIdentifier,
+		(string symbol, char type, scope const ModuleRef mod) {
+			if (mod == "object" || mod == thisModule || !symbol.length)
+				return;
+			if (exactMatch && symbol != prefixIdentifier)
+				return;
+			if (mod in viaPublicImports)
+				return;
+
+			string subSorter = mod.getModuleSortKey;
+
+			if (auto hasImport = mod in modLookup)
+			{
+				const ImportInfo impInfo = availableImports[*hasImport];
+				string prefix;
+				if (impInfo.isStatic || impInfo.rename.length)
+					prefix = impInfo.effectiveName;
+
+				if (impInfo.selectives.length)
+				{
+					// TODO: add selective non-imported to list
+				}
+				else if (prefix.length)
+				{
+					CompletionItemLabelDetails labelDetails = {
+						detail: prefix == mod
+							? " (" ~ mod ~ ")"
+							: " (" ~ prefix ~ " = " ~ mod ~ ")"
+					};
+
+					CompletionItem item = {
+						label: symbol,
+						labelDetails: labelDetails,
+						detail: "use renamed import " ~ prefix,
+						sortText: sortPrefixAutoImport ~ "0_" ~ subSorter ~ symbol,
+						insertText: prefix ~ "." ~ symbol,
+						data: JsonValue([
+							"uri": JsonValue(params.textDocument.uri),
+							"line": JsonValue(params.position.line),
+							"column": JsonValue(params.position.character),
+							"imports": JsonValue([
+								JsonValue(mod)
+							]),
+							// moduleName is used in other contexts that depend
+							// on this list. (e.g. code_actions.d)
+							"moduleName": JsonValue(mod),
+						]),
+						kind: convertCompletionFromDScannerType(type)
+					};
+					completion ~= item;
+				}
+			}
+			else
+			{
+				CompletionItemLabelDetails labelDetails = {
+					detail: " (import " ~ mod ~ ")"
+				};
+
+				CompletionItem item = {
+					label: symbol,
+					labelDetails: labelDetails,
+					detail: "auto-import from " ~ mod,
+					sortText: sortPrefixAutoImport ~ subSorter ~ symbol,
+					data: JsonValue([
+						"uri": JsonValue(params.textDocument.uri),
+						"line": JsonValue(params.position.line),
+						"column": JsonValue(params.position.character),
+						"imports": JsonValue([
+							JsonValue(mod)
+						]),
+						// moduleName is used in other contexts that depend
+						// on this list. (e.g. code_actions.d)
+						"moduleName": JsonValue(mod),
+					]),
+					kind: convertCompletionFromDScannerType(type)
+				};
+				completion ~= item;
+			}
+		});
 }
 
 private SnippetInfo provideSnippetComplete(TextDocumentPositionParams params, WorkspaceD.Instance instance,
