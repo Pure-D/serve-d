@@ -346,6 +346,21 @@ class DCDExtComponent : ComponentWrapper
 				tokens.tokenIndex(callStart), inTemplate, activeParameter);
 	}
 
+	/// Finds the token range of the declaration at the given position.
+	/// You can optionally decide if you want to include the function body in
+	/// this range or not.
+	size_t[2] getDeclarationRange(scope const(char)[] code, size_t position,
+		bool includeDefinition)
+	{
+		RollbackAllocator rba;
+		auto tokens = getTokensForParser(cast(ubyte[]) code, config, &workspaced.stringCache);
+		auto parsed = parseModule(tokens, "getCodeBlockRange_input.d", &rba);
+		auto reader = new DeclarationFinder(position, includeDefinition);
+		reader.visit(parsed);
+		reader.finish(code);
+		return reader.range;
+	}
+
 	/// Finds the immediate surrounding code block at a position or returns CodeBlockInfo.init for none/module block.
 	/// See_Also: CodeBlockInfo
 	CodeBlockInfo getCodeBlockRange(scope const(char)[] code, int position)
@@ -2701,4 +2716,153 @@ unittest
 	Related(Related.Type.controlFlow, [31, 37]),
 	Related(Related.Type.controlFlow, [79, 85]),
 ]);
+}
+
+
+final class DeclarationFinder : ASTVisitor
+{
+	this(size_t targetPosition, bool includeDefinition)
+	{
+		this.targetPosition = targetPosition;
+		this.includeDefinition = includeDefinition;
+	}
+
+	static foreach (DeclLike; AliasSeq!(Declaration, Parameter))
+		override void visit(const DeclLike dec)
+		{
+			if (dec.tokens.length
+				&& dec.tokens[0].index <= targetPosition
+				&& dec.tokens[$ - 1].tokenEnd >= targetPosition)
+			{
+				deepest = cast()dec;
+				static if (is(DeclLike == Parameter))
+					definition = cast()dec.default_;
+				else
+					definition = null;
+				dec.accept(this);
+			}
+		}
+
+	override void visit(const Parameters p)
+	{
+		auto b = inParameter;
+		inParameter = true;
+		p.accept(this);
+		inParameter = b;
+	}
+
+	static foreach (DefinitionOutsideParameter; AliasSeq!(FunctionBody, StructBody))
+		override void visit(const DefinitionOutsideParameter defPart)
+		{
+			if (deepest !is null
+				&& definition is null
+				&& !inParameter
+				&& defPart.tokens[0].index >= deepest.tokens[0].index
+				&& defPart.tokens[0].index <= deepest.tokens[$ - 1].tokenEnd)
+			{
+				definition = cast()defPart;
+			}
+			auto b = inParameter;
+			inParameter = false;
+			defPart.accept(this);
+			inParameter = b;
+		}
+
+	override void visit(const Initializer init)
+	{
+		if (deepest !is null
+			&& definition is null
+			&& init.tokens[0].index >= deepest.tokens[0].index
+			&& init.tokens[0].index <= deepest.tokens[$ - 1].tokenEnd)
+		{
+			definition = cast()init;
+		}
+		init.accept(this);
+	}
+
+	alias visit = ASTVisitor.visit;
+
+	void finish(scope const(char)[] code)
+	{
+		if (deepest is null)
+			return;
+
+		range = [
+			deepest.tokens[0].index,
+			deepest.tokens[$ - 1].tokenEnd
+		];
+
+		if (!includeDefinition && definition !is null)
+		{
+			range[1] = definition.tokens[0].index;
+		}
+
+		if (range[1] > code.length)
+			range[1] = code.length;
+		if (range[0] > range[1])
+			range[0] = range[1];
+
+		auto slice = code[range[0] .. range[1]];
+		while (slice.length)
+		{
+			slice = slice.stripRight;
+			if (slice.endsWith(";", "=", ","))
+				slice = slice[0 .. $ - 1];
+			else
+				break;
+		}
+		range[1] = range[0] + slice.length;
+	}
+
+	BaseNode deepest;
+	BaseNode definition;
+	bool inParameter;
+	size_t[2] range;
+	size_t targetPosition;
+	bool includeDefinition;
+}
+
+unittest
+{
+	scope backend = new WorkspaceD();
+	auto workspace = makeTemporaryTestingWorkspace;
+	auto instance = backend.addInstance(workspace.directory);
+	backend.register!DCDExtComponent;
+	DCDExtComponent dcdext = instance.get!DCDExtComponent;
+
+	static immutable code = `void foo()
+{
+	foreach (a; b)
+		return;
+
+	void bar()
+	{
+		return;
+	}
+
+	auto foo = bar();
+
+	int x = 1;
+
+	@attr
+	struct Foo
+	{
+		int field;
+	}
+
+	return;
+}`.normLF;
+
+	assert(dcdext.getDeclarationRange(code, 5, false) == [0, 10]);
+	assert(dcdext.getDeclarationRange(code, 5, true) == [0, code.length]);
+	assert(dcdext.getDeclarationRange(code, 46, false) == [41, 51]);
+	assert(dcdext.getDeclarationRange(code, 46, true) == [41, 67]);
+	assert(dcdext.getDeclarationRange(code, 75, false) == [70, 78]);
+	assert(dcdext.getDeclarationRange(code, 75, true) == [70, 86]);
+	assert(dcdext.getDeclarationRange(code, 94, false) == [90, 95]);
+	assert(dcdext.getDeclarationRange(code, 94, true) == [90, 99]);
+	assert(dcdext.getDeclarationRange(code, 117, false) == [103, 120]);
+	assert(dcdext.getDeclarationRange(code, 117, true) == [103, 139]);
+	assert(dcdext.getDeclarationRange(code, 130, false) == [126, 135]);
+	assert(dcdext.getDeclarationRange(code, 130, true) == [126, 135]);
 }
