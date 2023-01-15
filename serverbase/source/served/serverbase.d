@@ -276,21 +276,21 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 
 			if (!partialResultToken.length)
 			{
-				size_t reservedLength = 1 + partialResults.length;
+				size_t reservedLength = 2;
+				size_t i = 0;
 				foreach (partial; partialResults)
 				{
-					if (partial == "[]")
+					if (partial != "[]")
 					{
-						reservedLength--;
-					}
-					else
-					{
+						if (i != 0)
+							reservedLength++; // ','
+						i++;
 						assert(partial.looksLikeJsonArray);
-						reservedLength += partial.length - 2;
+						reservedLength += partial.length - 2; // remove braces
 					}
 				}
 				char[] resJson = new char[reservedLength];
-				size_t i = 0;
+				i = 0;
 				resJson.ptr[i++] = '[';
 				foreach (partial; partialResults)
 				{
@@ -298,11 +298,12 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 						continue;
 
 					assert(i + partial.length - 2 < resJson.length);
+					if (i != 1)
+						resJson.ptr[i++] = ',';
 					resJson.ptr[i .. i += (partial.length - 2)] = partial[1 .. $ - 1];
-					resJson.ptr[i++] = ',';
 				}
-				assert(i == resJson.length);
-				resJson.ptr[reservedLength - 1] = ']';
+				assert(i == reservedLength - 1);
+				resJson.ptr[i++] = ']';
 				res.resultJson = cast(string)resJson;
 			}
 			else
