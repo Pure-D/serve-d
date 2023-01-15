@@ -852,7 +852,7 @@ bool isPublicImportVisibility(DefinitionElement.Visibility v)
 		(typeof(null) _) => false,
 		(DefinitionElement.BasicVisibility v) => v != DefinitionElement.BasicVisibility.protected_
 			&& v != DefinitionElement.BasicVisibility.private_,
-		(DefinitionElement.PackageVisibility v) => true
+		(DefinitionElement.PackageVisibility v) => false // TODO: properly resolve this using the calling module
 	);
 }
 

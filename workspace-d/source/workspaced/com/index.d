@@ -572,8 +572,39 @@ class IndexComponent : ComponentWrapper
 					return;
 
 				foreach (scope ref i; v._allImports)
-					if (i.visibility.isPublicImportVisibility)
+					if (!i.insideAggregate && !i.insideFunction && i.visibility.isPublicImportVisibility)
 						cb(cast()i.name);
+			}
+		}
+	}
+
+	void iteratePublicImportsRecursive(ModuleRef startMod, scope void delegate(ModuleRef parent, ModuleRef definition) cb)
+	{
+		synchronized (cachesMutex)
+		{
+			bool[ModuleRef] visited;
+			ModuleRef[] stack = [startMod];
+			while (stack.length)
+			{
+				auto mod = stack[$ - 1];
+				stack.length--;
+				if (mod in visited)
+					continue;
+				visited[mod] = true;
+				if (auto v = mod in cache)
+				{
+					if (!v.success)
+						return;
+
+					foreach (scope ref i; v._allImports)
+					{
+						if (!i.insideAggregate && !i.insideFunction && i.visibility.isPublicImportVisibility)
+						{
+							cb(mod, cast()i.name);
+							stack.assumeSafeAppend ~= cast()i.name;
+						}
+					}
+				}
 			}
 		}
 	}

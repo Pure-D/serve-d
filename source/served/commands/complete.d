@@ -850,15 +850,29 @@ void provideAutoImports(TextDocumentPositionParams params, WorkspaceD.Instance i
 	scope size_t[string] modLookup;
 	foreach (n, imp; availableImports)
 		modLookup[imp.name.join('.')] = n;
+	auto thisModule = availableImports.definitonModule.join(".");
+
+	scope bool[string] viaPublicImports;
+	foreach (n, imp; availableImports)
+	{
+		idx.iteratePublicImportsRecursive(imp.name.join('.'), (parent, mod) {
+			if (mod !in modLookup)
+				viaPublicImports[mod] = true;
+		});
+	}
+	tracef("via direct imports: %s depends on %s", thisModule, modLookup.byKey);
+	tracef("via public imports: %s depends on %s", thisModule, viaPublicImports.byKey);
 
 	// TODO: use previously indexed symbols from unused dependencies to
 	// support adding DUB packages from imports (at least popular ones)
 
 	idx.iterateSymbolsStartingWith(prefixIdentifier,
 		(string symbol, char type, scope const ModuleRef mod) {
-			if (mod == "object" || !symbol.length)
+			if (mod == "object" || mod == thisModule || !symbol.length)
 				return;
 			if (exactMatch && symbol != prefixIdentifier)
+				return;
+			if (mod in viaPublicImports)
 				return;
 
 			string subSorter = mod.getModuleSortKey;
