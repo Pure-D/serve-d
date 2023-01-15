@@ -745,7 +745,7 @@ struct DefinitionElement
 		return !!type.among!('c', 's', 'i', 'T', 'f', 'g', 'u', 'e', 'v', 'a', 'D', 'V');
 	}
 
-	enum ubyte serializeVersion = 1;
+	enum ubyte serializeVersion = 2;
 	static assert(hashFields!(typeof(this).tupleof) == 0x29460F10C62EDA9B,
 		"Updated fields or layout, but not version and hash! Please update serializeVersion and adjust this check to 0x"
 		~ hashFields!(typeof(this).tupleof).to!string(16));
@@ -928,10 +928,7 @@ final class DefinitionFinder : ASTVisitor
 		if (!dec.structBody)
 			return;
 		definitions ~= makeDefinition(dec.name.text, dec.name.line, 'c', context,
-			[
-				cast(int) dec.structBody.safeStartLocation,
-				cast(int) dec.structBody.safeEndLocation
-			]);
+			dec.safeRange);
 		auto c = context;
 		context = ContextType(["class": dec.name.text], null, c, DefinitionElement.BasicVisibility.default_);
 		context.insideAggregate = true;
@@ -949,10 +946,7 @@ final class DefinitionFinder : ASTVisitor
 			return;
 		}
 		definitions ~= makeDefinition(dec.name.text, dec.name.line, 's', context,
-			[
-				cast(int) dec.structBody.safeStartLocation,
-				cast(int) dec.structBody.safeEndLocation
-			]);
+			dec.safeRange);
 		auto c = context;
 		context = ContextType(["struct": dec.name.text], null, c, DefinitionElement.BasicVisibility.default_);
 		context.insideAggregate = true;
@@ -965,10 +959,7 @@ final class DefinitionFinder : ASTVisitor
 		if (!dec.structBody)
 			return;
 		definitions ~= makeDefinition(dec.name.text, dec.name.line, 'i', context,
-			[
-				cast(int) dec.structBody.safeStartLocation,
-				cast(int) dec.structBody.safeEndLocation
-			]);
+			dec.safeRange);
 		auto c = context;
 		context = ContextType(["interface:": dec.name.text], null, context);
 		context.insideAggregate = true;
@@ -979,7 +970,7 @@ final class DefinitionFinder : ASTVisitor
 	override void visit(const TemplateDeclaration dec)
 	{
 		auto def = makeDefinition(dec.name.text, dec.name.line, 'T', context,
-			[cast(int) dec.safeStartLocation, cast(int) dec.safeEndLocation]);
+			dec.safeRange);
 		def.attributes["signature"] = paramsToString(dec);
 		definitions ~= def;
 		auto c = context;
@@ -992,10 +983,7 @@ final class DefinitionFinder : ASTVisitor
 	override void visit(const FunctionDeclaration dec)
 	{
 		auto def = makeDefinition(dec.name.text, dec.name.line, 'f', context,
-			[
-				cast(int) dec.functionBody.safeStartLocation,
-				cast(int) dec.functionBody.safeEndLocation
-			]);
+			dec.safeRange);
 		def.attributes["signature"] = paramsToString(dec);
 		if (dec.returnType !is null)
 			def.attributes["return"] = astToString(dec.returnType);
@@ -1006,10 +994,7 @@ final class DefinitionFinder : ASTVisitor
 	override void visit(const Constructor dec)
 	{
 		auto def = makeDefinition("this", dec.line, 'f', context,
-			[
-				cast(int) dec.functionBody.safeStartLocation,
-				cast(int) dec.functionBody.safeEndLocation
-			]);
+			dec.safeRange);
 		def.attributes["signature"] = paramsToString(dec);
 		definitions ~= def;
 		dec.accept(this);
@@ -1018,10 +1003,7 @@ final class DefinitionFinder : ASTVisitor
 	override void visit(const Destructor dec)
 	{
 		definitions ~= makeDefinition("~this", dec.line, 'f', context,
-			[
-				cast(int) dec.functionBody.safeStartLocation,
-				cast(int) dec.functionBody.safeEndLocation
-			]);
+			dec.safeRange);
 		dec.accept(this);
 	}
 
@@ -1029,10 +1011,7 @@ final class DefinitionFinder : ASTVisitor
 	{
 		if (verbose)
 			definitions ~= makeDefinition("this(this)", dec.line, 'f', context,
-				[
-					cast(int) dec.functionBody.safeStartLocation,
-					cast(int) dec.functionBody.safeEndLocation
-				]);
+				dec.safeRange);
 		dec.accept(this);
 	}
 
@@ -1041,7 +1020,7 @@ final class DefinitionFinder : ASTVisitor
 		if (!dec.enumBody)
 			return;
 		definitions ~= makeDefinition(dec.name.text, dec.name.line, 'g', context,
-				[cast(int) dec.enumBody.safeStartLocation, cast(int) dec.enumBody.safeEndLocation]);
+				dec.safeRange);
 		auto c = context;
 		context = ContextType(["enum": dec.name.text], null, context);
 		context.insideAggregate = true;
@@ -1059,10 +1038,7 @@ final class DefinitionFinder : ASTVisitor
 			return;
 		}
 		definitions ~= makeDefinition(dec.name.text, dec.name.line, 'u', context,
-				[
-					cast(int) dec.structBody.safeStartLocation,
-					cast(int) dec.structBody.safeEndLocation
-				]);
+				dec.safeRange);
 		auto c = context;
 		context = ContextType(["union": dec.name.text], null, context);
 		context.insideAggregate = true;
@@ -1081,31 +1057,32 @@ final class DefinitionFinder : ASTVisitor
 	override void visit(const AnonymousEnumMember mem)
 	{
 		definitions ~= makeDefinition(mem.name.text, mem.name.line, 'e', context,
-				[
-					cast(int) mem.name.index,
-					cast(int) mem.name.index + cast(int) mem.name.text.length
-				]);
+				mem.safeRange);
 		mem.accept(this);
 	}
 
 	override void visit(const EnumMember mem)
 	{
 		definitions ~= makeDefinition(mem.name.text, mem.name.line, 'e', context,
-				[
-					cast(int) mem.name.index,
-					cast(int) mem.name.index + cast(int) mem.name.text.length
-				]);
+				mem.safeRange);
 		mem.accept(this);
 	}
 
 	override void visit(const VariableDeclaration dec)
 	{
 		if (shouldAddVariable)
-			foreach (d; dec.declarators)
+			foreach (i, d; dec.declarators)
 				definitions ~= makeDefinition(d.name.text, d.name.line, 'v', context,
 					[
-						cast(int) d.name.index,
-						cast(int) d.name.index + cast(int) d.name.text.length
+						i == 0
+							? cast(int) min(
+								dec.type ? dec.type.safeStartLocation : size_t.max,
+								dec.safeStartLocation
+							)
+							: cast(int) d.safeStartLocation,
+						i == dec.declarators.length - 1
+							? cast(int) dec.safeEndLocation
+							: cast(int) d.safeEndLocation
 					]);
 		dec.accept(this);
 	}
@@ -1113,9 +1090,16 @@ final class DefinitionFinder : ASTVisitor
 	override void visit(const AutoDeclaration dec)
 	{
 		if (shouldAddVariable)
-			foreach (i; dec.parts.map!(a => a.identifier))
-				definitions ~= makeDefinition(i.text, i.line, 'v', context,
-						[cast(int) i.index, cast(int) i.index + cast(int) i.text.length]);
+			foreach (i, d; dec.parts)
+				definitions ~= makeDefinition(d.identifier.text, d.identifier.line, 'v', context,
+					[
+						i == 0
+							? cast(int) dec.safeStartLocation
+							: cast(int) d.safeStartLocation,
+						i == dec.parts.length - 1
+							? cast(int) dec.safeEndLocation
+							: cast(int) d.safeEndLocation
+					]);
 		dec.accept(this);
 	}
 
@@ -1131,7 +1115,7 @@ final class DefinitionFinder : ASTVisitor
 		}
 
 		definitions ~= makeDefinition("invariant", dec.line, 'N', context,
-				[cast(int) dec.index, cast(int) dec.blockStatement.safeEndLocation]);
+				dec.safeRange);
 
 		if ((extraMask & ExtraMask.includeFunctionMembers) == 0)
 		{
@@ -1237,10 +1221,7 @@ final class DefinitionFinder : ASTVisitor
 
 		auto tok = dec.identifierOrInteger;
 		auto def = makeDefinition(tok.tokenText, tok.line, 'D', context,
-				[
-					cast(int) tok.index,
-					cast(int) tok.index + cast(int) tok.text.length
-				]);
+				dec.safeRange);
 
 		definitions ~= def;
 		dec.accept(this);
@@ -1253,10 +1234,7 @@ final class DefinitionFinder : ASTVisitor
 
 		auto tok = dec.token;
 		auto def = makeDefinition(tok.tokenText, tok.line, 'V', context,
-				[
-					cast(int) tok.index,
-					cast(int) tok.index + cast(int) tok.text.length
-				]);
+				dec.safeRange);
 
 		definitions ~= def;
 		dec.accept(this);
@@ -1278,10 +1256,7 @@ final class DefinitionFinder : ASTVisitor
 
 		string testName = text("__unittest_L", dec.line, "_C", dec.column);
 		definitions ~= makeDefinition(testName, dec.line, 'U', context,
-				[
-					cast(int) dec.tokens[0].index,
-					cast(int) dec.blockStatement.safeEndLocation
-				], "U");
+				dec.safeRange, "U");
 
 		if ((extraMask & ExtraMask.includeFunctionMembers) == 0)
 		{
@@ -1315,10 +1290,7 @@ final class DefinitionFinder : ASTVisitor
 			}
 
 			definitions ~= makeDefinition(CtorNames[i], dec.line, CtorTypes[i], context,
-				[
-					cast(int) dec.functionBody.safeStartLocation,
-					cast(int) dec.functionBody.safeEndLocation
-				]);
+				dec.safeRange);
 
 			dec.accept(this);
 		}
@@ -1330,17 +1302,14 @@ final class DefinitionFinder : ASTVisitor
 		if (dec.declaratorIdentifierList)
 			foreach (i; dec.declaratorIdentifierList.identifiers)
 				definitions ~= makeDefinition(i.text, i.line, 'a', context,
-						[cast(int) i.index, cast(int) i.index + cast(int) i.text.length]);
+						i.safeRange);
 		dec.accept(this);
 	}
 
 	override void visit(const AliasInitializer dec)
 	{
 		definitions ~= makeDefinition(dec.name.text, dec.name.line, 'a', context,
-				[
-					cast(int) dec.name.index,
-					cast(int) dec.name.index + cast(int) dec.name.text.length
-				]);
+				dec.safeRange);
 
 		dec.accept(this);
 	}
@@ -1349,7 +1318,7 @@ final class DefinitionFinder : ASTVisitor
 	{
 		auto name = dec.identifier;
 		definitions ~= makeDefinition(name.text, name.line, 'a', context,
-				[cast(int) name.index, cast(int) name.index + cast(int) name.text.length]);
+				dec.safeRange);
 
 		dec.accept(this);
 	}
@@ -1422,10 +1391,8 @@ final class DefinitionFinder : ASTVisitor
 			auto ids = imp.identifierChain.identifiers;
 			if (ids.length)
 			{
-				auto start = cast(int)ids[0].index;
-				auto end = cast(int)(ids[$ - 1].index + ids[$ - 1].tokenText.length);
 				definitions ~= makeDefinition(
-					ids.map!"a.text".join("."), ids[0].line, 'I', context, [start, end]);
+					ids.map!"a.text".join("."), ids[0].line, 'I', context, imp.safeRange);
 			}
 		}
 
@@ -1640,12 +1607,39 @@ version (unittest) private void highlightDiff(DefinitionElement[] a, DefinitionE
 		assert(false, ret);
 }
 
-size_t safeStartLocation(T)(const T b)
+size_t safeStartLocation(const BaseNode b)
 {
 	return (b !is null && b.tokens.length > 0) ? b.tokens[0].index : 0;
 }
 
-size_t safeEndLocation(T)(const T b)
+size_t safeEndLocation(const BaseNode b)
 {
 	return (b !is null && b.tokens.length > 0) ? (b.tokens[$ - 1].index + b.tokens[$ - 1].tokenText.length) : 0;
+}
+
+int[2] safeRange(const BaseNode dec)
+{
+	return [
+		cast(int) dec.safeStartLocation,
+		cast(int) dec.safeEndLocation
+	];
+}
+
+int[2] safeRange(const FunctionDeclaration dec)
+{
+	return [
+		cast(int) min(
+			dec.safeStartLocation,
+			dec.returnType ? dec.returnType.safeStartLocation : size_t.max
+		),
+		cast(int) dec.safeEndLocation
+	];
+}
+
+int[2] safeRange(const Token ast)
+{
+	return [
+		cast(int) ast.index,
+		cast(int)(ast.index + ast.tokenText.length)
+	];
 }
