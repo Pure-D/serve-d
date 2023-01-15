@@ -882,6 +882,29 @@ static immutable PlainSnippet[] plainSnippets = [
 			~ "it a name\n\n"
 			~ "Reference: [https://dlang.org/spec/statement.html#with-statement]"
 	),
+	PlainSnippet(
+		[SnippetLevel.method],
+		"try",
+		"try-catch",
+		"try {\n\t$0\n}\ncatch (${1:Exception} ${2:e}) {\n}",
+		"Exception handling using a try-catch statement. If an exception occurs "
+			~ "in the `try` block, execution will abort there and continue in "
+			~ "the `catch` block, with an Exception containing the stacktrace."
+			~ "Can be used in a nothrow method to wrap and call throwing methods.\n\n"
+			~ "Reference: [https://dlang.org/spec/statement.html#try-statement]"
+	),
+	PlainSnippet(
+		[SnippetLevel.method],
+		"tryf",
+		"try-catch-finally",
+		"try {\n\t$0\n}\ncatch (${1:Exception} ${2:e}) {\n}\nfinally {\n}",
+		"Exception handling using a try-catch statement, running the finally "
+			~ "block in any case afterwards, even if execution would otherwise "
+			~ "exit early because of a throw or return statement.\n\n"
+			~ "If you only want a finally block, you might want to use "
+			~ "`scope (exit)` (scope guards) instead.\n\n"
+			~ "Reference: [https://dlang.org/spec/statement.html#try-statement]"
+	),
 ];
 //dfmt on
 
