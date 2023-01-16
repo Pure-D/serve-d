@@ -104,7 +104,7 @@ private:
 			auto item = stack[$ - 1];
 			stack.length--;
 			if (item in visited)
-				return;
+				continue;
 			visited[item] = true;
 
 			get!IndexComponent.iterateModuleReferences(item, (other) {
