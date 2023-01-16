@@ -141,7 +141,7 @@ SymbolInformationEx makeSymbolInfoEx(scope const ref DefinitionElement def, stri
 			|| (ptr = "enum" in attribs) !is null || (ptr = "union" in attribs) !is null)
 		info.containerName = *ptr;
 	if ("deprecation" in attribs)
-		info.deprecated_ = true;
+		info.tags = [SymbolTag.deprecated_];
 	if (auto name = "name" in attribs)
 		info.detail = *name;
 	return info;

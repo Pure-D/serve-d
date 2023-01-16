@@ -193,9 +193,9 @@ struct SymbolInformationEx
 {
 	string name;
 	SymbolKind kind;
+	@serdeOptional Optional!(SymbolTag[]) tags;
 	Location location;
 	string containerName;
-	@serdeKeys("deprecated") bool deprecated_;
 	TextRange range;
 	TextRange selectionRange;
 	SymbolKindEx extendedType;
