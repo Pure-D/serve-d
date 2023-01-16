@@ -133,7 +133,7 @@ version (unittest)
 		import std.stdio;
 
 		int noTested = 0;
-		foreach (testFile; dirEntries(dir, SpanMode.shallow))
+		foreach (testFile; dirEntries(dir, SpanMode.shallow).array.sort!"a<b")
 		{
 			int lineNo = 0;
 			try
