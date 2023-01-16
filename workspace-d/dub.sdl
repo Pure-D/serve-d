@@ -10,7 +10,7 @@ dependency "serve-d:dcd" path=".."
 dependency "dub" version="1.29.2"
 dependency "emsi_containers" version="0.9.0"
 dependency "dscanner" version="0.13.0"
-dependency "libdparse" version="0.21.1"
+dependency "libdparse" version="~>0.21.2"
 dependency "standardpaths" version="0.8.2"
 dependency "mir-algorithm" version="~>3.16"
 

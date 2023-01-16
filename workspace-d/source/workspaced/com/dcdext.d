@@ -1005,9 +1005,10 @@ class DCDExtComponent : ComponentWrapper
 			return ret.data;
 
 		RollbackAllocator rba;
-		scope parsed = parseModule(tokens.data, "getFoldingRanges_input.d", &rba);
+		auto tokensSlice = tokens.data;
+		scope parsed = parseModule(tokensSlice, "getFoldingRanges_input.d", &rba);
 
-		scope visitor = new FoldingRangeGenerator();
+		scope visitor = new FoldingRangeGenerator(tokensSlice);
 		visitor.visit(parsed);
 		foreach (found; visitor.ranges.data)
 			if (found.start != -1 && found.end != -1)
@@ -2964,9 +2965,11 @@ class FoldingRangeGenerator : ASTVisitor
 	bool suppressThisBlock;
 	bool suppressThisArgumentList;
 	size_t lastCase = -1;
+	const(Token)[] allTokens;
 
-	this()
+	this(const(Token)[] allTokens)
 	{
+		this.allTokens = allTokens;
 		ranges = appender!(FoldingRange[]);
 	}
 
@@ -2976,17 +2979,17 @@ class FoldingRangeGenerator : ASTVisitor
 	{
 		mixin(supressBlockMixin);
 
-		if (stmt.thenStatement && stmt.expression)
+		if (stmt.thenStatement && stmt.condition)
 			ranges.put(FoldingRange(
 				// go 1 token over length because that's our `)` token (which should exist because stmt.thenStatement is defined)
-				stmt.expression.tokens.ptr[stmt.expression.tokens.length].tokenEnd,
+				stmt.condition.tokens.via(allTokens, stmt.condition.tokens.length).tokenEnd,
 				stmt.thenStatement.tokens.tokenEnd,
 				FoldingRangeType.region));
 
 		if (stmt.thenStatement && stmt.elseStatement)
 			ranges.put(FoldingRange(
 				// go 1 token over length because that's our `else` token (which should exist because stmt.elseStatement is defined)
-				stmt.thenStatement.tokens.ptr[stmt.thenStatement.tokens.length].tokenEnd,
+				stmt.thenStatement.tokens.via(allTokens, stmt.thenStatement.tokens.length).tokenEnd,
 				stmt.elseStatement.tokens.tokenEnd,
 				FoldingRangeType.region));
 
@@ -3006,7 +3009,7 @@ class FoldingRangeGenerator : ASTVisitor
 		if (stmt.trueStatement && stmt.falseStatement)
 			ranges.put(FoldingRange(
 				// go 1 token over length because that's our `else` token (which should exist because stmt.falseStatement is defined)
-				stmt.trueStatement.tokens.ptr[stmt.trueStatement.tokens.length].tokenEnd,
+				stmt.trueStatement.tokens.via(allTokens, stmt.trueStatement.tokens.length).tokenEnd,
 				stmt.falseStatement.tokens.tokenEnd,
 				FoldingRangeType.region));
 
@@ -3061,7 +3064,7 @@ class FoldingRangeGenerator : ASTVisitor
 		if (stmt.expression && stmt.statement)
 			ranges.put(FoldingRange(
 				// go 1 token over length because that's our `)` token (which should exist because stmt.statement is defined)
-				stmt.expression.tokens.ptr[stmt.expression.tokens.length].tokenEnd,
+				stmt.expression.tokens.via(allTokens, stmt.expression.tokens.length).tokenEnd,
 				stmt.tokens.tokenEnd,
 				FoldingRangeType.region
 			));
@@ -3077,7 +3080,7 @@ class FoldingRangeGenerator : ASTVisitor
 				if (lastCase != -1 && ranges.data[lastCase].end == stmt.tokens.tokenEnd)
 				{
 					// fallthrough from previous case, adjust range of it
-					ranges.data[lastCase].end = stmt.tokens.ptr[-1].tokenEnd;
+					ranges.data[lastCase].end = stmt.tokens.via(allTokens, -1).tokenEnd;
 				}
 				lastCase = ranges.data.length;
 				ranges.put(FoldingRange(
@@ -3138,7 +3141,7 @@ class FoldingRangeGenerator : ASTVisitor
 
 		if (stmt.functionBody && stmt.functionBody.tokens.length)
 			ranges.put(FoldingRange(
-				stmt.functionBody.tokens.ptr[-1].tokenEnd,
+				stmt.functionBody.tokens.via(allTokens, -1).tokenEnd,
 				stmt.functionBody.tokens[$ - 1].tokenEnd,
 				FoldingRangeType.region
 			));
@@ -3203,7 +3206,7 @@ class FoldingRangeGenerator : ASTVisitor
 	override void visit(const EnumBody stmt)
 	{
 		ranges.put(FoldingRange(
-			stmt.tokens.ptr[-1].tokenEnd,
+			stmt.tokens.via(allTokens, -1).tokenEnd,
 			stmt.tokens[$ - 1].tokenEnd,
 			FoldingRangeType.region
 		));
@@ -3241,7 +3244,7 @@ class FoldingRangeGenerator : ASTVisitor
 
 			if (stmt.declarationOrStatement)
 				ranges.put(FoldingRange(
-					stmt.declarationOrStatement.tokens.ptr[-1].tokenEnd,
+					stmt.declarationOrStatement.tokens.via(allTokens, -1).tokenEnd,
 					stmt.tokens.tokenEnd,
 					FoldingRangeType.region
 				));
@@ -3255,8 +3258,8 @@ class FoldingRangeGenerator : ASTVisitor
 
 		if (stmt.statementNoCaseNoDefault && stmt.expression)
 			ranges.put(FoldingRange(
-				stmt.statementNoCaseNoDefault.tokens.ptr[-1].tokenEnd,
-				stmt.expression.tokens.ptr[-2].index,
+				stmt.statementNoCaseNoDefault.tokens.via(allTokens, -1).tokenEnd,
+				stmt.expression.tokens.via(allTokens, -2).index,
 				FoldingRangeType.region
 			));
 
@@ -3325,7 +3328,7 @@ class FoldingRangeGenerator : ASTVisitor
 			// add this after other ranges (so they are prioritized)
 			if (!localSuppress && stmt.tokens.length && stmt.tokens[0].line != stmt.tokens[$ - 1].line)
 				ranges.put(FoldingRange(
-					stmt.tokens.ptr[-1].tokenEnd,
+					stmt.tokens.via(allTokens, -1).tokenEnd,
 					stmt.tokens[$ - 1].tokenEnd,
 					FoldingRangeType.region
 				));
@@ -3559,4 +3562,22 @@ void foo()
 	FoldingRange(20, 41),
 ], "multi-line call not folding properly");
 
+}
+
+private const(T) via(T)(scope const(T)[] slice, scope const(T)[] srcArray, long at)
+{
+	assert(srcArray.length);
+	if (at >= 0 && at < slice.length)
+		return slice[at];
+	if (&slice[0] >= &srcArray[0] && &slice[0] < &srcArray.ptr[srcArray.length])
+	{
+		int i = cast(int)(&slice[0] - &srcArray[0]);
+		i += cast(int)at;
+		if (i < 0)
+			i = 0;
+		else if (i > srcArray.length)
+			i = cast(int)(srcArray.length - 1);
+		return srcArray[i];
+	}
+	assert(false, "used `via` on slice that is not part of source array!");
 }
