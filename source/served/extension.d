@@ -40,6 +40,7 @@ public import served.commands.dcd_update;
 public import served.commands.definition;
 public import served.commands.dub;
 public import served.commands.file_search;
+public import served.commands.folding;
 public import served.commands.format;
 public import served.commands.highlight;
 public import served.commands.index;
@@ -282,6 +283,7 @@ InitializeResult initialize(InitializeParams params)
 	RenameOptions renameProvider = {
 		prepareProvider: true
 	};
+	FoldingRangeOptions foldingRangeProvider;
 	ServerCapabilities serverCapabilities = {
 		textDocumentSync: documents.syncKind,
 		// only provide fixes when doCompleteSnippets is requested
@@ -298,6 +300,7 @@ InitializeResult initialize(InitializeParams params)
 		documentRangeFormattingProvider: true,
 		colorProvider: DocumentColorOptions.init,
 		documentHighlightProvider: true,
+		foldingRangeProvider: foldingRangeProvider,
 		renameProvider: renameProvider,
 		workspace: workspaceCapabilities
 	};
@@ -1104,6 +1107,7 @@ alias members = AliasSeq!(
 	__traits(derivedMembers, served.commands.definition),
 	__traits(derivedMembers, served.commands.dub),
 	__traits(derivedMembers, served.commands.file_search),
+	__traits(derivedMembers, served.commands.folding),
 	__traits(derivedMembers, served.commands.format),
 	__traits(derivedMembers, served.commands.highlight),
 	__traits(derivedMembers, served.commands.index),

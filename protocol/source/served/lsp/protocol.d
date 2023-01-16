@@ -3652,7 +3652,23 @@ struct FoldingRange
 	uint endLine;
 	@serdeOptional Optional!uint startCharacter;
 	@serdeOptional Optional!uint endCharacter;
-	@serdeOptional Optional!string kind;
+	@serdeOptional Optional!FoldingRangeKind kind;
+}
+
+unittest
+{
+	FoldingRange r;
+	r.startLine = 1;
+	r.endLine = 10;
+	r.startCharacter = 4;
+	r.endCharacter = 2;
+	r.kind = FoldingRangeKind.imports;
+
+	assert(serializeJson([r]) == `[{"startLine":1,"endLine":10,"startCharacter":4,"endCharacter":2,"kind":"imports"}]`);
+
+	r.kind = cast(FoldingRangeKind)"custom";
+
+	assert(serializeJson([r]) == `[{"startLine":1,"endLine":10,"startCharacter":4,"endCharacter":2,"kind":"custom"}]`);
 }
 
 @serdeFallbackStruct
@@ -3811,7 +3827,7 @@ enum TokenFormat : string
 struct SemanticTokensLegend
 {
 	string[] tokenTypes;
-	string[] tokenmodifiers;
+	string[] tokenModifiers;
 }
 
 @serdeFallbackStruct

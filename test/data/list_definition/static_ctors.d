@@ -9,6 +9,6 @@ public class Foo : Bar {
 }
 __EOF__
 :verbose=true
-Foo	1	c	{"access":"public"}	23	111
-static this()	2	C	{"access": "public", "class": "Foo"}	40	93
-arr	8	v	{"access":"public","class":"Foo"}	105	108
+Foo	1	c	{"access":"public"}	7	111
+static this()	2	C	{"access": "public", "class": "Foo"}	26	93
+arr	8	v	{"access":"public","class":"Foo"}	96	109
