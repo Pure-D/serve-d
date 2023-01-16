@@ -8,6 +8,7 @@ import workspaced.api;
 import workspaced.com.dcd;
 import workspaced.coms;
 
+import std.experimental.logger;
 import std.path : buildPath, isAbsolute;
 import std.string;
 
@@ -88,7 +89,7 @@ DeclarationInfo findDeclarationImpl(WorkspaceD.Instance instance, scope ref Docu
 TextRange getDeclarationRange(DCDExtComponent dcdext, ref Document doc, size_t byteOffset, bool includeDefinition)
 {
 	auto range = dcdext.getDeclarationRange(doc.rawText, byteOffset, includeDefinition);
-	if (range is typeof(range).init)
+	if (range == typeof(range).init)
 		return TextRange.init;
 	return doc.byteRangeToTextRange(range);
 }

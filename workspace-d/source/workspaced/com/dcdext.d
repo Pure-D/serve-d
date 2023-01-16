@@ -2727,7 +2727,7 @@ final class DeclarationFinder : ASTVisitor
 		this.includeDefinition = includeDefinition;
 	}
 
-	static foreach (DeclLike; AliasSeq!(Declaration, Parameter))
+	static foreach (DeclLike; AliasSeq!(Declaration, Parameter, TemplateDeclaration))
 		override void visit(const DeclLike dec)
 		{
 			if (dec.tokens.length
@@ -2737,6 +2737,8 @@ final class DeclarationFinder : ASTVisitor
 				deepest = cast()dec;
 				static if (is(DeclLike == Parameter))
 					definition = cast()dec.default_;
+				else static if (is(DeclLike == TemplateDeclaration))
+					definition = dec.declarations.length ? cast()dec.declarations[0] : null;
 				else
 					definition = null;
 				dec.accept(this);
@@ -2806,7 +2808,7 @@ final class DeclarationFinder : ASTVisitor
 		while (slice.length)
 		{
 			slice = slice.stripRight;
-			if (slice.endsWith(";", "=", ","))
+			if (slice.endsWith(";", "=", ",", "{"))
 				slice = slice[0 .. $ - 1];
 			else
 				break;
@@ -2865,4 +2867,14 @@ unittest
 	assert(dcdext.getDeclarationRange(code, 117, true) == [103, 139]);
 	assert(dcdext.getDeclarationRange(code, 130, false) == [126, 135]);
 	assert(dcdext.getDeclarationRange(code, 130, true) == [126, 135]);
+
+	static immutable tplCode = `template foo()
+{
+	static if (x)
+	{
+		alias foo = bar;
+	}
+}`.normLF;
+	assert(dcdext.getDeclarationRange(tplCode, 9, false) == [0, 14]);
+	assert(dcdext.getDeclarationRange(tplCode, 9, true) == [0, tplCode.length]);
 }
