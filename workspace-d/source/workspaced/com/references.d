@@ -97,43 +97,50 @@ private:
 	void grepRecursive(ref References ret, ModuleRef start, string identifier,
 		ref bool[ModuleRef] visited, void delegate(References) asyncFoundPart)
 	{
-		if (start in visited)
-			return;
-		visited[start] = true;
-
-		get!IndexComponent.iterateModuleReferences(start, (other) {
-			auto filename = get!IndexComponent.getIndexedFileName(other);
-			if (filename.length)
-			{
-				scope content = readText(filename);
-				auto slice = grepFileReferences(ret, content, filename, identifier);
-				asyncFoundPart(References(null, 0, slice));
-			}
-			else
-			{
-				warningf("Failed to find source for module '%s' for find references. (from imports usage)", other);
-			}
-
-			grepRecursive(ret, other, identifier, visited, asyncFoundPart);
-		});
-		get!IndexComponent.iteratePublicImports(start, (other) {
-			if (other in visited)
+		ModuleRef[] stack = [start];
+		stack.reserve(32);
+		while (stack.length)
+		{
+			auto item = stack[$ - 1];
+			stack.length--;
+			if (item in visited)
 				return;
+			visited[item] = true;
 
-			auto filename = get!IndexComponent.getIndexedFileName(other);
-			if (filename.length)
-			{
-				scope content = readText(filename);
-				auto slice = grepFileReferences(ret, content, filename, identifier);
-				asyncFoundPart(References(null, 0, slice));
-			}
-			else
-			{
-				warningf("Failed to find source for module '%s' for find references. (from public imports usage)", other);
-			}
+			get!IndexComponent.iterateModuleReferences(item, (other) {
+				auto filename = get!IndexComponent.getIndexedFileName(other);
+				if (filename.length)
+				{
+					scope content = readText(filename);
+					auto slice = grepFileReferences(ret, content, filename, identifier);
+					asyncFoundPart(References(null, 0, slice));
+				}
+				else
+				{
+					warningf("Failed to find source for module '%s' for find references. (from imports usage)", other);
+				}
 
-			grepRecursive(ret, other, identifier, visited, asyncFoundPart);
-		});
+				stack.assumeSafeAppend ~= other;
+			});
+			get!IndexComponent.iteratePublicImports(item, (other) {
+				if (other in visited)
+					return;
+
+				auto filename = get!IndexComponent.getIndexedFileName(other);
+				if (filename.length)
+				{
+					scope content = readText(filename);
+					auto slice = grepFileReferences(ret, content, filename, identifier);
+					asyncFoundPart(References(null, 0, slice));
+				}
+				else
+				{
+					warningf("Failed to find source for module '%s' for find references. (from public imports usage)", other);
+				}
+
+				stack.assumeSafeAppend ~= other;
+			});
+		}
 	}
 
 	void grepIncomplete(ref References ret, string identifier,
