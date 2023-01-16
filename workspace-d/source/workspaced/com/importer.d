@@ -90,90 +90,20 @@ class ImporterComponent : ComponentWrapper
 	/// Returns `ImportBlock.init` if no changes would be done.
 	ImportBlock sortImports(scope const(char)[] code, int pos)
 	{
-		bool startBlock = true;
-		string indentation;
-		size_t start, end;
-		// find block of code separated by empty lines
-		foreach (line; code.lineSplitter!(KeepTerminator.yes))
-		{
-			if (startBlock)
-				start = end;
-			startBlock = line.strip.length == 0;
-			if (startBlock && end >= pos)
+		auto blocks = findImportCodeSlices(code);
+		ImportCodeSlice target;
+		foreach (block; blocks)
+			if (block.contains(pos))
+			{
+				target = block;
 				break;
-			end += line.length;
-		}
-		if (start >= end || end > code.length)
-			return ImportBlock.init;
-		auto part = code[start .. end];
-
-		// then filter out the proper indentation
-		bool inCorrectIndentationBlock;
-		size_t acc;
-		bool midImport;
-		foreach (line; part.lineSplitter!(KeepTerminator.yes))
-		{
-			const indent = line.determineIndentation;
-			bool marksNewRegion;
-			bool leavingMidImport;
-
-			auto importStart = line.indexOfKeyword("import");
-			const importEnd = line.indexOf(';');
-			if (importStart != -1)
-			{
-				while (true)
-				{
-					auto rest = line[0 .. importStart].stripRight;
-					if (!rest.endsWithKeyword("public") && !rest.endsWithKeyword("static"))
-						break;
-
-					// both public and static end with c, so search for c
-					// do this to remove whitespaces
-					importStart = line[0 .. importStart].lastIndexOf('c');
-					// both public and static have same length so subtract by "publi".length (without c)
-					importStart -= 5;
-				}
-
-				acc += importStart;
-				line = line[importStart .. $];
-
-				if (importEnd == -1)
-					midImport = true;
-				else
-					midImport = importEnd < importStart;
 			}
-			else if (importEnd != -1 && midImport)
-				leavingMidImport = true;
-			else if (!midImport)
-			{
-				// got no "import" and wasn't in an import here
-				marksNewRegion = true;
-			}
-
-			if ((marksNewRegion || indent != indentation) && !midImport)
-			{
-				if (inCorrectIndentationBlock)
-				{
-					end = start + acc - line.stripLineEndingLength;
-					break;
-				}
-				start += acc;
-				acc = 0;
-				indentation = indent;
-			}
-
-			if (leavingMidImport)
-				midImport = false;
-
-			if (start + acc <= pos && start + acc + line.length - 1 >= pos)
-				inCorrectIndentationBlock = true;
-			acc += line.length;
-		}
 
 		// go back to start of line
-		start = code[0 .. start].lastIndexOf('\n', start) + 1;
+		target.start = cast(int)(code[0 .. target.start].lastIndexOf('\n', target.start) + 1);
 
-		part = code[start .. end];
+		auto part = code[target.start .. target.end];
+		auto indentation = part.getLineStartIndent.idup;
 
 		RollbackAllocator rba;
 		auto tokens = getTokensForParser(cast(ubyte[]) part, config, &workspaced.stringCache);
@@ -186,10 +116,10 @@ class ImporterComponent : ComponentWrapper
 			return ImportBlock.init;
 
 		foreach (ref imp; imports)
-			imp.start += start;
+			imp.start += target.start;
 
-		start = imports.front.start;
-		end = code.indexOf(';', imports.back.start) + 1;
+		target.start = cast(int)imports.front.start;
+		target.end = cast(int)code.indexOf(';', imports.back.start) + 1;
 
 		auto sorted = imports.map!(a => ImportInfo(a.name, a.rename,
 				a.selectives.dup.sort!((c, d) => sicmp(c.effectiveName,
@@ -197,7 +127,125 @@ class ImporterComponent : ComponentWrapper
 		sorted.sort!((a, b) => ImportInfo.cmp(a, b) < 0);
 		if (sorted == imports)
 			return ImportBlock.init;
-		return ImportBlock(cast(int) start, cast(int) end, sorted, indentation);
+		return ImportBlock(target.start, target.end, sorted, indentation.idup);
+	}
+
+	ImportCodeSlice[] findImportCodeSlices(scope const(char)[] code)
+	{
+		auto ret = appender!(ImportCodeSlice[]);
+
+		LexerConfig config;
+		config.stringBehavior = StringBehavior.source;
+		config.whitespaceBehavior = WhitespaceBehavior.skip;
+		config.commentBehavior = CommentBehavior.noIntern;
+
+		bool inImport;
+
+		int expectedLine;
+		size_t protectionIndex = -1;
+		size_t protectionIndent = -1;
+
+		ImportCodeSlice current;
+		bool changeLast;
+
+		void submitBlock()
+		{
+			if (current != ImportCodeSlice.init)
+			{
+				if (changeLast)
+					ret.data[$ - 1] = current;
+				else
+					ret ~= current;
+			}
+			changeLast = false;
+			current = ImportCodeSlice.init;
+		}
+
+		void resumeBlock()
+		{
+			current = ret.data[$ - 1];
+			changeLast = true;
+		}
+
+		auto lexer = DLexer(code, config, &workspaced.stringCache);
+		Token lastToken;
+		loop: foreach (token; lexer)
+		{
+			scope (exit)
+				lastToken = token;
+			switch (token.type)
+			{
+			case tok!"whitespace":
+			case tok!"specialTokenSequence":
+			case tok!"comment":
+				break;
+			case tok!"__EOF__":
+				break loop;
+			case tok!"import":
+				int indent;
+				if (protectionIndent != -1)
+					indent = cast(int)protectionIndent - 1;
+				else
+					indent = cast(int)token.column - 1;
+				if (cast(int)token.line <= expectedLine
+					&& ret.data.length
+					&& ret.data[$ - 1].column == indent)
+				{
+					resumeBlock();
+				}
+				else
+				{
+					current.column = indent;
+					current.start = cast(int)token.index;
+					if (protectionIndent != -1) // use indent also to check if index is set
+						current.start = cast(int)protectionIndex;
+				}
+				inImport = true;
+				expectedLine = cast(int)token.line + 1;
+				break;
+			case tok!"public":
+			case tok!"package":
+			case tok!"private":
+				protectionIndex = token.index;
+				protectionIndent = token.column;
+				break;
+			case tok!")":
+			case tok!".":
+			case tok!",":
+			case tok!":":
+			case tok!"=":
+				break;
+			case tok!"identifier":
+				if (lastToken == tok!"identifier")
+					goto invalidImport;
+				break;
+			case tok!"(":
+				// ok for `package(foo)`
+				// not ok for `import("foo")`
+				if (inImport)
+					goto invalidImport;
+				break;
+			case tok!";":
+				if (inImport)
+				{
+					current.end = cast(int)token.index + 1;
+					inImport = false;
+					protectionIndent = -1;
+					submitBlock();
+				}
+				break;
+			default:
+			invalidImport:
+				expectedLine = -1;
+				protectionIndent = -1;
+				inImport = false;
+				submitBlock();
+				break;
+			}
+		}
+		submitBlock();
+
+		return ret.data;
 	}
 
 private:
@@ -217,6 +265,7 @@ unittest
 	auto workspace = makeTemporaryTestingWorkspace;
 	auto instance = backend.addInstance(workspace.directory);
 	backend.register!ImporterComponent;
+	auto importer = instance.get!ImporterComponent;
 
 	string code = `import std.stdio;
 import std.algorithm;
@@ -277,8 +326,24 @@ import std.traits;
 import std.algorithm;
 `.normLF;
 
+	assert(backend.get!ImporterComponent.findImportCodeSlices(code) == [
+		ImportCodeSlice(0, 164),
+		ImportCodeSlice(166, 209),
+		ImportCodeSlice(211, 457),
+		ImportCodeSlice(459, 489),
+		ImportCodeSlice(491, 546),
+		ImportCodeSlice(567, 585, 1),
+		ImportCodeSlice(586, 625),
+		ImportCodeSlice(642, 682, 1),
+		ImportCodeSlice(719, 759, 1),
+		ImportCodeSlice(778, 818, 1),
+		ImportCodeSlice(839, 876, 1),
+		ImportCodeSlice(880, 991),
+		ImportCodeSlice(993, 1084),
+	]);
+
 	//dfmt off
-	assertEqual(backend.get!ImporterComponent(workspace.directory).sortImports(code, 0), ImportBlock(0, 164, [
+	assertEqual(importer.sortImports(code, 0), ImportBlock(0, 164, [
 		ImportInfo(["std", "algorithm"]),
 		ImportInfo(["std", "array"]),
 		ImportInfo(["std", "experimental", "logger"]),
@@ -289,12 +354,12 @@ import std.algorithm;
 		ImportInfo(["std", "stdio"])
 	]));
 
-	assertEqual(backend.get!ImporterComponent(workspace.directory).sortImports(code, 192), ImportBlock(166, 209, [
+	assertEqual(importer.sortImports(code, 192), ImportBlock(166, 209, [
 		ImportInfo(["core", "sync", "mutex"]),
 		ImportInfo(["core", "thread"])
 	]));
 
-	assertEqual(backend.get!ImporterComponent(workspace.directory).sortImports(code, 238), ImportBlock(211, 457, [
+	assertEqual(importer.sortImports(code, 238), ImportBlock(211, 457, [
 		ImportInfo(["gdk", "Event"]),
 		ImportInfo(["gdk", "Screen"]),
 		ImportInfo(["gtk", "Button"]),
@@ -315,9 +380,9 @@ import std.algorithm;
 		ImportInfo(["gtkc", "gtk"])
 	]));
 
-	assertEqual(backend.get!ImporterComponent(workspace.directory).sortImports(code, 467), ImportBlock.init);
+	assertEqual(importer.sortImports(code, 467), ImportBlock.init);
 
-	assertEqual(backend.get!ImporterComponent(workspace.directory).sortImports(code, 546), ImportBlock(491, 546, [
+	assertEqual(importer.sortImports(code, 546), ImportBlock(491, 546, [
 		ImportInfo(["std", "stdio"], "", [
 			SelectiveImport("stderr", "err"),
 			SelectiveImport("File"),
@@ -326,27 +391,27 @@ import std.algorithm;
 		])
 	]));
 
-	assertEqual(backend.get!ImporterComponent(workspace.directory).sortImports(code, 593), ImportBlock(586, 625, [
+	assertEqual(importer.sortImports(code, 593), ImportBlock(586, 625, [
 		ImportInfo(["std", "algorithm"]),
 		ImportInfo(["std", "stdio"])
 	]));
 
-	assertEqual(backend.get!ImporterComponent(workspace.directory).sortImports(code, 650), ImportBlock(642, 682, [
+	assertEqual(importer.sortImports(code, 650), ImportBlock(642, 682, [
 		ImportInfo(["std", "algorithm"]),
 		ImportInfo(["std", "stdio"])
 	], "\t"));
 
-	assertEqual(backend.get!ImporterComponent(workspace.directory).sortImports(code, 730), ImportBlock(719, 759, [
+	assertEqual(importer.sortImports(code, 730), ImportBlock(719, 759, [
 		ImportInfo(["std", "algorithm"]),
 		ImportInfo(["std", "stdio"])
 	], "\t"));
 
-	assertEqual(backend.get!ImporterComponent(workspace.directory).sortImports(code, 850), ImportBlock(839, 876, [
+	assertEqual(importer.sortImports(code, 850), ImportBlock(839, 876, [
 		ImportInfo(["std", "array"]),
 		ImportInfo(["std", "string"])
 	], "\t"));
 
-	assertEqual(backend.get!ImporterComponent(workspace.directory).sortImports(code, 897), ImportBlock(880, 991, [
+	assertEqual(importer.sortImports(code, 897), ImportBlock(880, 991, [
 		ImportInfo(["workspaced", "api"]),
 		ImportInfo(["workspaced", "helpers"], "", [
 			SelectiveImport("determineIndentation"),
@@ -355,7 +420,7 @@ import std.algorithm;
 		])
 	]));
 
-	assertEqual(backend.get!ImporterComponent(workspace.directory).sortImports(code, 1010), ImportBlock(993, 1084, [
+	assertEqual(importer.sortImports(code, 1010), ImportBlock(993, 1084, [
 		ImportInfo(["std", "stdio"], null, null, true),
 		ImportInfo(["std", "string"], null, null, true),
 		ImportInfo(["std", "algorithm"]),
@@ -372,7 +437,7 @@ import std.algorithm;
 	import std.file;
 }`.normLF;
 
-	assertEqual(backend.get!ImporterComponent(workspace.directory).sortImports(code, 70), ImportBlock(62, 96, [
+	assertEqual(importer.sortImports(code, 70), ImportBlock(62, 96, [
 		ImportInfo(["std", "file"]),
 		ImportInfo(["std", "path"])
 	], "\t"));
@@ -386,7 +451,7 @@ import std.algorithm;
 	import std.file;
 }`.normLF;
 
-	assertEqual(backend.get!ImporterComponent(workspace.directory).sortImports(code, 75), ImportBlock(63, 97, [
+	assertEqual(importer.sortImports(code, 75), ImportBlock(63, 97, [
 		ImportInfo(["std", "file"]),
 		ImportInfo(["std", "path"])
 	], "\t"));
@@ -517,11 +582,32 @@ struct ImportBlock
 	}
 }
 
+/// An import slice that groups together (visually) related imports
+struct ImportCodeSlice
+{
+	/// Start & end byte index
+	int start, end;
+	/// Columnt (indentation) of this import block
+	int column;
+
+	/// Returns true if `index` is within this code slice.
+	bool contains(int index)
+	{
+		return index >= start && index <= end;
+	}
+}
+
 private:
 
-string getIndentation(ubyte[] code, size_t index)
+auto getLineStartIndent(scope const(char)[] line)
+{
+	return line[0 .. $ - line.stripLeft.length];
+}
+
+string getIndentation(scope const(ubyte)[] code, size_t index)
 {
 	import std.ascii : isWhite;
+	import std.conv : text;
 
 	bool atLineEnd = false;
 	if (index < code.length && code[index] == '\n')
@@ -544,10 +630,10 @@ string getIndentation(ubyte[] code, size_t index)
 			break;
 		end++;
 	}
-	auto indent = cast(string) code[index .. end];
+	auto indent = cast(const(char)[])code[index .. end];
 	if (!indent.length && index == 0 && !atLineEnd)
 		return " ";
-	return "\n" ~ indent.stripLeft('\n');
+	return text("\n", indent.stripLeft('\n'));
 }
 
 unittest
