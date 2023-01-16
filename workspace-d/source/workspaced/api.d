@@ -270,10 +270,13 @@ class DefaultComponentFactory(T : ComponentWrapper) : ComponentFactory
 		}
 		catch (Exception e)
 		{
+			import std.algorithm : canFind;
+
 			error = e;
 			try
 			{
-				trace("Failed to create " ~ T.stringof ~ " on instance ", instance, ": ", e);
+				if (!e.msg.canFind("requires to be instanced"))
+					trace("Failed to create " ~ T.stringof ~ " on instance ", instance, ": ", e);
 			}
 			catch (Exception)
 			{
