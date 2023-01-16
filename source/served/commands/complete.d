@@ -585,9 +585,10 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 				}
 			}
 
-			// make the comment one "line" so provide doc complete shows complete
-			// after a /** */ comment block if you are on the first line.
-			lineRange[1] = commentToken.index + commentToken.text.length;
+			// make the comment line include the new line to properly auto-complete everything
+			if (document.rawText[lineRange[1] .. $].startsWith("\r", "\n"))
+				lineRange[1]++;
+
 			provideDocComplete(params, instance, document, completion, line, lineRange);
 
 			return CompletionList(false, completion);
