@@ -68,6 +68,16 @@ class DCDExtComponent : ComponentWrapper
 		auto tokens = getTokensForParser(cast(ubyte[]) code, config, &workspaced.stringCache);
 		if (!tokens.length)
 			return CalltipsSupport.init;
+
+		if (tokens[0].type == tok!"(")
+		{
+			// add dummy name if we start with '('
+			if (definition)
+				tokens = [Token(tok!"void"), Token(tok!"identifier")] ~ tokens;
+			else
+				tokens = [Token(tok!"identifier")] ~ tokens;
+		}
+
 		// TODO: can probably use tokenIndexAtByteIndex here
 		auto queuedToken = tokens.countUntil!(a => a.index >= position) - 1;
 		if (queuedToken == -2)
@@ -93,7 +103,6 @@ class DCDExtComponent : ComponentWrapper
 
 		/// describes if the target position is inside template arguments rather than function arguments (only works for calls and not for definition)
 		bool inTemplate;
-		int activeParameter; // counted commas
 		int depth, subDepth;
 		/// contains opening parentheses location for arguments or exclamation point for templates.
 		auto startParen = queuedToken;
@@ -144,10 +153,6 @@ class DCDExtComponent : ComponentWrapper
 				}
 				else
 					depth--;
-			}
-			else if (depth == 0 && subDepth == 0 && c.type == tok!",")
-			{
-				activeParameter++;
 			}
 			startParen--;
 		}
@@ -331,11 +336,23 @@ class DCDExtComponent : ComponentWrapper
 
 		CalltipsSupport.Argument[] templateArgs;
 		if (templateOpen)
-			templateArgs = splitArgs(tokens[templateOpen + 1 .. templateClose]);
+			templateArgs = splitArgs(tokens[templateOpen + 1 .. templateClose], true);
 
 		CalltipsSupport.Argument[] functionArgs;
 		if (functionOpen)
-			functionArgs = splitArgs(tokens[functionOpen + 1 .. functionClose]);
+			functionArgs = splitArgs(tokens[functionOpen + 1 .. functionClose], false);
+
+		int activeParameter = -1;
+		foreach (i, arg; functionArgs)
+		{
+			if (arg.contentRange[0] <= position && arg.contentRange[1] >= position)
+			{
+				activeParameter = cast(int)i;
+				break;
+			}
+			if (arg.contentRange[1] != 0 && arg.contentRange[1] < position)
+				activeParameter = cast(int)i + 1;
+		}
 
 		return CalltipsSupport([
 				tokens.tokenIndex(templateOpen),
@@ -1421,7 +1438,7 @@ in(tokens[open].type == tok!"(",
 	{
 		const c = tokens[open];
 
-		if (c == tok!"(")
+		if (c == tok!"(" || c == tok!"[")
 			depth++;
 		else if (c == tok!"{")
 			subDepth++;
@@ -1436,7 +1453,7 @@ in(tokens[open].type == tok!"(",
 			if (c == tok!";" && subDepth == 0)
 				break;
 
-			if (c == tok!")")
+			if (c == tok!")" || c == tok!"]")
 				depth--;
 
 			if (depth == 0)
@@ -1448,7 +1465,7 @@ in(tokens[open].type == tok!"(",
 	return open;
 }
 
-CalltipsSupport.Argument[] splitArgs(const(Token)[] tokens)
+CalltipsSupport.Argument[] splitArgs(const(Token)[] tokens, bool templateArgs)
 {
 	auto ret = appender!(CalltipsSupport.Argument[]);
 	size_t start = 0;
@@ -1467,55 +1484,31 @@ CalltipsSupport.Argument[] splitArgs(const(Token)[] tokens)
 
 		auto typename = tokens[start .. end];
 		arg.contentRange = [cast(int) typename[0].index, typename[$ - 1].tokenEnd];
-		if (typename.length == 1)
+
+		if (gotValue && valueStart > start && valueStart <= end)
 		{
-			auto t = typename[0];
-			if (t.type == tok!"identifier" || t.type.isBasicType)
-				arg = CalltipsSupport.Argument.templateType(t.tokenRange);
-			else if (t.type == tok!"...")
-				arg = CalltipsSupport.Argument.anyVariadic(t.tokenRange);
-			else
-				arg = CalltipsSupport.Argument.templateValue(t.tokenRange);
+			typename = tokens[start .. valueStart - 1];
+			auto val = tokens[valueStart .. end];
+			if (val.length)
+				arg.valueRange = [cast(int) val[0].index, val[$ - 1].tokenEnd];
 		}
-		else
+
+		if (typename.length && typename[$ - 1].type == tok!"...")
 		{
-			if (gotValue && valueStart > start && valueStart <= end)
-			{
-				typename = tokens[start .. valueStart];
-				auto val = tokens[valueStart .. end];
-				if (val.length)
-					arg.valueRange = [cast(int) val[0].index, val[$ - 1].tokenEnd];
-			}
+			arg.variadic = true;
+			typename = typename[0 .. $ - 1];
+		}
 
-			else if (typename.length == 1)
+		if (typename.length)
+		{
+			if (typename.length >= 2 && typename[$ - 1].type == tok!"identifier")
 			{
-				auto t = typename[0];
-				if (t.type == tok!"identifier" || t.type.isBasicType)
-					arg.typeRange = arg.nameRange = t.tokenRange;
-				else
-					arg.typeRange = t.tokenRange;
+				arg.typeRange = [cast(int) typename[0].index, typename[$ - 2].tokenEnd];
+				arg.nameRange = typename[$ - 1].tokenRange;
 			}
-			else if (typename.length)
+			else
 			{
-				if (typename[$ - 1].type == tok!"identifier")
-				{
-					arg.nameRange = typename[$ - 1].tokenRange;
-					typename = typename[0 .. $ - 1];
-				}
-				else if (typename[$ - 1].type == tok!"...")
-				{
-					arg.variadic = true;
-					if (typename.length > 1 && typename[$ - 2].type == tok!"identifier")
-					{
-						arg.nameRange = typename[$ - 2].tokenRange;
-						typename = typename[0 .. $ - 2];
-					}
-					else
-						typename = typename[0 .. 0];
-				}
-
-				if (typename.length)
-					arg.typeRange = [cast(int) typename[0].index, typename[$ - 1].tokenEnd];
+				arg.typeRange = arg.nameRange = [cast(int) typename[0].index, typename[$ - 1].tokenEnd];
 			}
 		}
 
@@ -1582,6 +1575,27 @@ bool fieldNameMatches(string field, in char[] expected)
 		field = field[1 .. $];
 
 	return field.sicmp(expected) == 0;
+}
+
+auto sliceIdentifierChain(scope return inout(Token)[] tokens)
+{
+	size_t start = 0;
+	if (tokens.length && tokens[0].type == tok!".")
+		start = 1;
+	if (start >= tokens.length || tokens[start].type != tok!"identifier")
+		return false;
+	start++;
+	auto expectDot = true;
+	foreach (t; tokens[start .. $])
+	{
+		if (expectDot && t != tok!".")
+			return start;
+		if (!expectDot && t != tok!"identifier")
+			return start;
+		expectDot = !expectDot;
+		start++;
+	}
+	return start;
 }
 
 final class CodeBlockInfoFinder : ASTVisitor
@@ -1848,6 +1862,30 @@ unittest
 	extract = dcdext.extractCallParameters(`void log(T t = T.x, A...)(A a) { call(Foo(["bar":"hello"])); } bool x() const @property { return false; } /// This is not code, but rather documentation`,
 			127);
 	assert(extract == CalltipsSupport.init);
+
+	extract = dcdext.extractCallParameters(`(io.File output = io.stdout)`,
+			27, true);
+	assert(extract != CalltipsSupport.init);
+	assert(!extract.hasTemplate);
+	assert(extract.functionStart == 0);
+	assert(extract.parentStart == 0);
+	assert(extract.functionArgs.length == 1);
+	assert(extract.functionArgs[0].contentRange == [1, 27]);
+	assert(extract.functionArgs[0].typeRange == [1, 8]);
+	assert(extract.functionArgs[0].nameRange == [9, 15]);
+	assert(extract.functionArgs[0].valueRange == [18, 27]);
+
+	extract = dcdext.extractCallParameters(`(string[] args)`,
+			14, true);
+	assert(extract != CalltipsSupport.init);
+	assert(!extract.hasTemplate);
+	assert(extract.functionStart == 0);
+	assert(extract.parentStart == 0);
+	assert(extract.functionArgs.length == 1);
+	assert(extract.functionArgs[0].contentRange == [1, 14]);
+	assert(extract.functionArgs[0].typeRange == [1, 9]);
+	assert(extract.functionArgs[0].nameRange == [10, 14]);
+	assert(extract.functionArgs[0].valueRange == [0, 0]);
 }
 
 unittest

@@ -280,128 +280,13 @@ C[] substr(C, T)(C[] s, T start, T end)
 /// Params:
 ///   sig = the function signature such as `string[] example(string sig, bool exact = false)`
 ///   exact = set to true to make the returned values include the closing paren at the end (if exists)
-const(char)[][] extractFunctionParameters(scope const(char)[] sig, bool exact = false)
+CalltipsSupport extractFunctionParameters(scope return const(char)[] sig, bool isDefinition, DCDExtComponent dcdext)
 {
 	if (!sig.length)
-		return [];
-	auto params = appender!(const(char)[][]);
-	ptrdiff_t i = sig.length - 1;
-
-	if (sig[i] == ')' && !exact)
-		i--;
-
-	ptrdiff_t paramEnd = i + 1;
-
-	void skipStr()
-	{
-		i--;
-		if (sig[i + 1] == '\'')
-			for (; i >= 0; i--)
-				if (sig[i] == '\'')
-					return;
-		bool escapeNext = false;
-		while (i >= 0)
-		{
-			if (sig[i] == '\\')
-				escapeNext = false;
-			if (escapeNext)
-				break;
-			if (sig[i] == '"')
-				escapeNext = true;
-			i--;
-		}
-	}
-
-	void skip(char open, char close)
-	{
-		i--;
-		int depth = 1;
-		while (i >= 0 && depth > 0)
-		{
-			if (sig[i] == '"' || sig[i] == '\'')
-				skipStr();
-			else
-			{
-				if (sig[i] == close)
-					depth++;
-				else if (sig[i] == open)
-					depth--;
-				i--;
-			}
-		}
-	}
-
-	while (i >= 0)
-	{
-		switch (sig[i])
-		{
-		case ',':
-			params.put(sig.substr(i + 1, paramEnd).strip);
-			paramEnd = i;
-			i--;
-			break;
-		case ';':
-		case '(':
-			auto param = sig.substr(i + 1, paramEnd).strip;
-			if (param.length)
-				params.put(param);
-			auto ret = params.data;
-			reverse(ret);
-			return ret;
-		case ')':
-			skip('(', ')');
-			break;
-		case '}':
-			skip('{', '}');
-			break;
-		case ']':
-			skip('[', ']');
-			break;
-		case '"':
-		case '\'':
-			skipStr();
-			break;
-		default:
-			i--;
-			break;
-		}
-	}
-	auto ret = params.data;
-	reverse(ret);
+		return CalltipsSupport.init;
+	auto pos = isDefinition ? sig.length - 1 : sig.length;
+	auto ret = dcdext.extractCallParameters(sig, cast(int)pos, isDefinition);
 	return ret;
-}
-
-unittest
-{
-	void assertEqual(A, B)(A a, B b)
-	{
-		import std.conv : to;
-
-		assert(a == b, a.to!string ~ " is not equal to " ~ b.to!string);
-	}
-
-	assertEqual(extractFunctionParameters("void foo()"), cast(string[])[]);
-	assertEqual(extractFunctionParameters(`auto bar(int foo, Button, my.Callback cb)`),
-			["int foo", "Button", "my.Callback cb"]);
-	assertEqual(extractFunctionParameters(`SomeType!(int, "int_") foo(T, Args...)(T a, T b, string[string] map, Other!"(" stuff1, SomeType!(double, ")double") myType, Other!"(" stuff, Other!")")`),
-			[
-				"T a", "T b", "string[string] map", `Other!"(" stuff1`,
-				`SomeType!(double, ")double") myType`, `Other!"(" stuff`, `Other!")"`
-			]);
-	assertEqual(extractFunctionParameters(`SomeType!(int,"int_")foo(T,Args...)(T a,T b,string[string] map,Other!"(" stuff1,SomeType!(double,")double")myType,Other!"(" stuff,Other!")")`),
-			[
-				"T a", "T b", "string[string] map", `Other!"(" stuff1`,
-				`SomeType!(double,")double")myType`, `Other!"(" stuff`, `Other!")"`
-			]);
-	assertEqual(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4`,
-			true), [`4`]);
-	assertEqual(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4, f(4)`,
-			true), [`4`, `f(4)`]);
-	assertEqual(extractFunctionParameters(`some_garbage(code); before(this); funcCall(4, ["a"], JSONValue(["b": JSONValue("c")]), recursive(func, call!s()), "texts )\"(too"`,
-			true), [
-			`4`, `["a"]`, `JSONValue(["b": JSONValue("c")])`,
-			`recursive(func, call!s())`, `"texts )\"(too"`
-			]);
 }
 
 /// Provide snippets in auto-completion
@@ -791,20 +676,18 @@ private void provideDocComplete(TextDocumentPositionParams params, WorkspaceD.In
 			completion.addDocComplete(doc3, lineStripped);
 			return;
 		}
-		auto funcArgs = extractFunctionParameters(*sig);
+		auto sigSlice = *sig;
+		auto calltips = extractFunctionParameters(sigSlice, true, instance.get!DCDExtComponent);
 		string[] docs = ["$0"];
 		int argNo = 1;
-		foreach (arg; funcArgs)
+		foreach (arg; calltips.templateArgs ~ calltips.functionArgs)
 		{
-			auto space = arg.stripRight.lastIndexOf(' ');
-			if (space == -1)
-				continue;
-			auto identifier = arg[space + 1 .. $];
-			if (!identifier.isValidDIdentifier)
+			auto name = sigSlice[arg.nameRange[0] .. arg.nameRange[1]];
+			if (!name.isValidDIdentifier)
 				continue;
 			if (argNo == 1)
 				docs ~= "Params:";
-			docs ~= text("  ", identifier, " = $", argNo.to!string);
+			docs ~= text("  ", name, " = $", argNo.to!string);
 			argNo++;
 		}
 		auto retAttr = "return" in def.attributes;
@@ -1337,29 +1220,17 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 			{
 				item.insertTextFormat = InsertTextFormat.snippet;
 				string args;
-				auto parts = identifier.definition.extractFunctionParameters;
-				if (parts.length)
+				auto parts = identifier.definition.extractFunctionParameters(true, dcdext);
+				trace("snippet method complete: ", identifier.definition, " -> ", parts);
+				foreach (i, part; parts.functionArgs)
 				{
-					int numRequired;
-					foreach (i, part; parts)
-					{
-						ptrdiff_t equals = part.indexOf('=');
-						if (equals != -1)
-						{
-							part = part[0 .. equals].stripRight;
-							// remove default value from autocomplete
-						}
-						auto space = part.lastIndexOf(' ');
-						if (space != -1)
-							part = part[space + 1 .. $];
+					auto name = identifier.definition[part.nameRange[0] .. part.nameRange[1]];
 
-						if (args.length)
-							args ~= ", ";
-						args ~= "${" ~ (i + 1).to!string ~ ":" ~ part ~ "}";
-						numRequired++;
-					}
-					item.insertText = identifier.identifier ~ "(${0:" ~ args ~ "})";
+					if (args.length)
+						args ~= ", ";
+					args ~= "${" ~ (i + 1).to!string ~ ":" ~ name ~ "}";
 				}
+				item.insertText = identifier.identifier ~ "(${0:" ~ args ~ "})";
 			}
 		}
 
