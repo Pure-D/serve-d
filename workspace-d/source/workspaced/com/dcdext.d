@@ -21,6 +21,7 @@ import std.string;
 import workspaced.api;
 import workspaced.com.dcd;
 import workspaced.com.dfmt;
+import workspaced.com.importer;
 import workspaced.dparseext;
 
 import workspaced.visitors.classifier;
@@ -1014,6 +1015,10 @@ class DCDExtComponent : ComponentWrapper
 			if (found.start != -1 && found.end != -1)
 				ret ~= found;
 
+		if (has!ImporterComponent)
+			foreach (importBlock; get!ImporterComponent.findImportCodeSlices(code))
+				ret ~= FoldingRange(importBlock.start, importBlock.end, FoldingRangeType.imports);
+
 		return ret.data;
 	}
 
@@ -1345,7 +1350,7 @@ enum FoldingRangeType
 	region,
 	/// Emitted on comments that are larger than one line
 	comment,
-	/// TODO: Not emitted yet, going to be emitted on blocks of imports
+	/// Emitted on blocks of imports
 	imports,
 }
 
