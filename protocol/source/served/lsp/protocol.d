@@ -1681,7 +1681,7 @@ unittest
 struct InitializeParamsClientInfo
 {
 	string name;
-	@serdeKeys("version") Optional!string version_;
+	@serdeKeys("version") @serdeOptional Optional!string version_;
 }
 
 @serdeFallbackStruct
