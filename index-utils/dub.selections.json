@@ -1,0 +1,9 @@
+{
+	"fileVersion": 1,
+	"versions": {
+		"isfreedesktop": "0.1.1",
+		"msgpack-d": "1.0.4",
+		"standardpaths": "0.8.2",
+		"xdgpaths": "0.2.5"
+	}
+}

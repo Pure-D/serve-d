@@ -1,0 +1,16 @@
+.dub
+docs.json
+__dummy.html
+docs/
+/index-utils
+index-utils.so
+index-utils.dylib
+index-utils.dll
+index-utils.a
+index-utils.lib
+index-utils-test-*
+*.exe
+*.pdb
+*.o
+*.obj
+*.lst
