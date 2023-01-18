@@ -441,7 +441,10 @@ class IndexComponent : ComponentWrapper
 			entry.success = false;
 			entry.fileName = file;
 
-			cache.require(mod, ImportCacheEntry(true, file)).replaceFrom(mod, entry, this);
+			synchronized (cachesMutex)
+			{
+				cache.require(mod, ImportCacheEntry(true, file)).replaceFrom(mod, entry, this);
+			}
 			return typeof(return).fromResult(mod);
 		}
 		else
@@ -455,9 +458,12 @@ class IndexComponent : ComponentWrapper
 					if (entry == ImportCacheEntry.init && !force)
 						return ret.finish(null);
 
-					cache
-						.require(mod, ImportCacheEntry(true, file, lastWrite, fileSize))
-						.replaceFrom(mod, entry, this);
+					synchronized (cachesMutex)
+					{
+						cache
+							.require(mod, ImportCacheEntry(true, file, lastWrite, fileSize))
+							.replaceFrom(mod, entry, this);
+					}
 
 					ret.finish(mod);
 				}
