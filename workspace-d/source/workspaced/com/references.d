@@ -67,6 +67,7 @@ class ReferencesComponent : ComponentWrapper
 						if (identifier.length)
 						{
 							bool[ModuleRef] visited;
+							visited[startModule] = true;
 							grepRecursive(ret,
 								startModule,
 								identifier,
@@ -103,11 +104,12 @@ private:
 		{
 			auto item = stack[$ - 1];
 			stack.length--;
-			if (item in visited)
-				continue;
-			visited[item] = true;
 
 			get!IndexComponent.iterateModuleReferences(item, (other) {
+				if (other in visited)
+					return;
+				visited[other] = true;
+
 				auto filename = get!IndexComponent.getIndexedFileName(other);
 				if (filename.length)
 				{
@@ -125,6 +127,7 @@ private:
 			get!IndexComponent.iteratePublicImports(item, (other) {
 				if (other in visited)
 					return;
+				visited[other] = true;
 
 				auto filename = get!IndexComponent.getIndexedFileName(other);
 				if (filename.length)
@@ -149,6 +152,7 @@ private:
 		get!IndexComponent.iterateIncompleteModules((other) {
 			if (other in visited)
 				return;
+			visited[other] = true;
 			// ignore incomplete stdlib, hacky but improves performance for now
 			if (isStdLib(other))
 				return;

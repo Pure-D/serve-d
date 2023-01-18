@@ -36,13 +36,12 @@ AsyncReceiver!Location findReferences(ReferenceParams params)
 				.findReferences(file, codeText, offset,
 				(refs) {
 					Location[] ret;
-					if (includeDecl && refs.definitionFile.length)
-					{
-						includeDecl = false;
-						resolveLocation(ret, refs.definitionFile, refs.definitionLocation);
-					}
 					foreach (r; refs.references)
+					{
+						if (!includeDecl && refs.definitionFile == r.file && refs.definitionLocation == r.location)
+							continue;
 						resolveLocation(ret, r.file, r.location);
+					}
 					receiver.put(ret);
 				})
 				.getYield();
