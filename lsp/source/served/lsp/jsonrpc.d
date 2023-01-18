@@ -224,16 +224,33 @@ class RPCProcessor : Fiber
 
 	void registerCapability(T)(scope const(char)[] id, scope const(char)[] method, T options)
 	{
-		const(char)[][7] parts = [
-			`{"jsonrpc":"2.0","method":"client/registerCapability","registrations":[{"id":"`,
-			id.escapeJsonStringContent,
-			`","method":"`,
-			method.escapeJsonStringContent,
-			`","registerOptions":`,
-			options.serializeJson,
-			`]}`
+		import mir.serde;
+
+		@serdeFallbackStruct
+		struct RegistrationT
+		{
+			const(char)[] id;
+			const(char)[] method;
+			T registerOptions;
+		}
+
+		@serdeFallbackStruct
+		struct RegistrationParamsT
+		{
+			RegistrationT[] registrations;
+		}
+
+		static assert(RegistrationParamsT.tupleof.stringof == RegistrationParams.tupleof.stringof,
+			"Fields of templated `RegistrationParams` differ from regular struct, please verify correct field names in LSP spec!");
+		static assert(RegistrationT.tupleof.stringof == Registration.tupleof.stringof,
+			"Fields of templated `Registration` differ from regular struct, please verify correct field names in LSP spec!");
+
+		scope RegistrationParamsT params;
+		params.registrations = [
+			RegistrationT(id, method, options)
 		];
-		sendRawPacket(parts[]);
+
+		sendMethod("client/registerCapability", params);
 	}
 
 	/// Sends a request with the given `method` name to the other RPC side without any parameters.
