@@ -1007,6 +1007,28 @@ ServedInfoResponse getServedInfo(ServedInfoParams params)
 		response.currentConfiguration = config(uri, false);
 	}
 
+	if (params.includeIndex)
+	{
+		string[][string] index;
+		bool found;
+
+		foreach (i, ref w; workspaces)
+			if (w.selected)
+			{
+				auto inst = backend.getInstance(w.folder.uri.uriToFile);
+				if (!inst)
+					break;
+				found = true;
+				if (inst.has!IndexComponent)
+				{
+					index = inst.get!IndexComponent.dumpReverseImports();
+				}
+			}
+
+		if (found)
+			response.moduleIndex = index;
+	}
+
 	response.globalWorkspace = fallbackWorkspace.describeState;
 	response.workspaces = workspaces.map!"a.describeState".array;
 

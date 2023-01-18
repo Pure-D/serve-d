@@ -346,6 +346,7 @@ struct ServedInfoParams
 {
 @serdeOptional:
 	bool includeConfig;
+	bool includeIndex;
 }
 
 ///
@@ -357,8 +358,13 @@ struct ServedInfoResponse
 	/// Same as in the initialized response.
 	ServerInfo serverInfo;
 
-	/// Only included if `ServedInfoParams.includeConfig` is true
+	/// Only included if `ServedInfoParams.includeConfig` is true.
 	@serdeOptional Optional!Configuration currentConfiguration;
+
+	/// Only included if `ServedInfoParams.includeIndex` is true.
+	/// Key: module, Value: modules that depend on the (key) module.
+	/// This is only the module index for the active workspace.
+	@serdeOptional Optional!(string[][string]) moduleIndex;
 
 	/// Describes the global workspace.
 	typeof(Workspace.init.describeState()) globalWorkspace;

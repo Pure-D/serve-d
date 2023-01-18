@@ -635,6 +635,7 @@ Returns all profilegc.log entries parsed and combined.
 interface ServedInfoParams
 {
 	includeConfig?: boolean;
+	includeIndex?: boolean;
 }
 
 interface ServedInfoResponse
@@ -648,6 +649,13 @@ interface ServedInfoResponse
 	 * Contains the entire config object, e.g. `{"d":{...}, ...}`
 	 */
 	currentConfiguration?: Configuration;
+
+	/**
+	 * Only included if `ServedInfoParams.includeIndex` is true.
+	 * Key: module, Value: modules that depend on the (key) module.
+	 * This is only the module index for the active workspace.
+	 */
+	{ [module: string]: string[] }?: moduleIndex;
 
 	/**
 	 * Describes the global workspace, same type as in

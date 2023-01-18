@@ -378,6 +378,17 @@ class IndexComponent : ComponentWrapper
 		return ret;
 	}
 
+	string[][string] dumpReverseImports()
+	{
+		synchronized (cachesMutex)
+		{
+			string[][string] ret;
+			foreach (key, value; reverseImports)
+				ret[key] = value.array;
+			return ret;
+		}
+	}
+
 private:
 	__gshared LexerConfig config;
 
