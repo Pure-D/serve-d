@@ -492,9 +492,9 @@ struct DefinitionElement
 	}
 
 	enum ubyte serializeVersion = 2;
-	static assert(hashFields!(typeof(this).tupleof) == 0x29460F10C62EDA9B,
+	static assert(hashFields!(typeof(this).tupleof) == 0x2C31CF10C11B7E9B,
 		"Updated fields or layout, but not version and hash! Please update serializeVersion and adjust this check to 0x"
-		~ hashFields!(typeof(this).tupleof).to!string(16));
+		~ hashFields!(typeof(this).tupleof).to!string(16) ~ "\n\nFields layout: " ~ describeFields!(typeof(this).tupleof));
 
 	ubyte[] serialize()
 	{
@@ -539,13 +539,25 @@ private static ulong hashFields(Args...)()
 	import std.bitmanip;
 
 	CRC64ISO crc;
-	crc.put(Args.length.nativeToLittleEndian);
+	crc.put((cast(uint) Args.length).nativeToLittleEndian);
 	static foreach (Arg; Args)
 	{
 		crc.put(cast(const(ubyte)[]) __traits(identifier, Arg));
 		crc.put(cast(const(ubyte)[]) typeof(Arg).stringof);
 	}
 	return crc.finish.littleEndianToNative!ulong;
+}
+
+private static string describeFields(Args...)()
+{
+	import std.conv;
+
+	string ret = "Total fields: " ~ Args.length.to!string;
+	static foreach (Arg; Args)
+	{
+		ret ~= "\n- " ~ typeof(Arg).stringof ~ " " ~ __traits(identifier, Arg);
+	}
+	return ret;
 }
 
 private static struct SumTypePackProxy
