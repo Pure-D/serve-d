@@ -225,13 +225,13 @@ class RPCProcessor : Fiber
 	void registerCapability(T)(scope const(char)[] id, scope const(char)[] method, T options)
 	{
 		const(char)[][7] parts = [
-			`{"jsonrpc":"2.0","method":"client/registerCapability","registrations":[{"id":"`,
+			`{"jsonrpc":"2.0","method":"client/registerCapability","params":{"registrations":[{"id":"`,
 			id.escapeJsonStringContent,
 			`","method":"`,
 			method.escapeJsonStringContent,
 			`","registerOptions":`,
 			options.serializeJson,
-			`]}`
+			`}]}}`
 		];
 		sendRawPacket(parts[]);
 	}
