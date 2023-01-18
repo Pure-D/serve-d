@@ -912,7 +912,7 @@ struct ResponseMessageRaw
 	/// empty string/null if not set, otherwise JSON string of result
 	string resultJson;
 	///
-	Optional!ResponseError error;
+	@serdeOptional Optional!ResponseError error;
 
 	/// Formats this request message into `ResponseMessage({id}: {json/error})`
 	string toString() const @safe
@@ -1939,7 +1939,7 @@ unittest
 struct ServerInfo
 {
 	string name;
-	@serdeKeys("version") Optional!string version_;
+	@serdeKeys("version") @serdeOptional Optional!string version_;
 }
 
 @serdeFallbackStruct
@@ -2424,7 +2424,7 @@ struct PublishDiagnosticsParams
 {
 	DocumentUri uri;
 	Diagnostic[] diagnostics;
-	@serdeKeys("version") Optional!int version_;
+	@serdeKeys("version") @serdeOptional Optional!int version_;
 }
 
 @serdeFallbackStruct
@@ -2811,7 +2811,7 @@ struct MarkupContent
 struct MarkdownClientCapabilities
 {
 	string parser;
-	@serdeKeys("version") Optional!string version_;
+	@serdeKeys("version") @serdeOptional Optional!string version_;
 }
 
 @serdeFallbackStruct
@@ -4093,7 +4093,7 @@ unittest
 		return ret;
 	}
 
-	void LintVariantArgs(string member, Args...)()
+	void LintVariantArgs(alias T, string member, string memberDisplay, Args...)()
 	{
 		static if (hasSerdeEnumProxy!Args)
 		{
@@ -4101,8 +4101,13 @@ unittest
 				|| !(is(Args[0] == void) || is(Args[0] == typeof(null))))
 			{
 				// https://github.com/libmir/mir-ion/issues/36
-				pragma(msg, "WARNING: known-broken deserialization on Variant!", Args.stringof, "\n\ton field ", member);
+				pragma(msg, "WARNING: known-broken deserialization on Variant!", Args.stringof, "\n\ton field ", memberDisplay);
 			}
+		}
+
+		static if (is(Args[0] == void) && !hasUDA!(__traits(getMember, T, member), serdeOptional))
+		{
+			pragma(msg, "WARNING: Optional doesn't have @serdeOptional annotation!\n\ton field ", memberDisplay);
 		}
 	}
 
@@ -4119,7 +4124,7 @@ unittest
 				static if (is(typeof(__traits(getMember, T, member))
 					: Algebraic!Args, Args...))
 				{
-					LintVariantArgs!(T.stringof ~ "." ~ member, Args);
+					LintVariantArgs!(T, member, T.stringof ~ "." ~ member, Args);
 				}
 			}
 		}}
