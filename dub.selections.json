@@ -4,7 +4,7 @@
 		"automem": "0.6.8",
 		"botan": "1.12.19",
 		"botan-math": "1.0.3",
-		"cachetools": "0.4.0",
+		"cachetools": "0.4.1",
 		"dcd": "0.15.0",
 		"dfmt": "0.15.0-beta.1",
 		"diet-complete": "0.0.3",
