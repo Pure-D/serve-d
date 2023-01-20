@@ -3611,7 +3611,7 @@ private const(T) via(T)(scope const(T)[] slice, scope const(T)[] srcArray, long 
 {
 	assert(srcArray.length);
 	if (at >= 0 && at < slice.length)
-		return slice[at];
+		return slice[cast(size_t)at];
 	if (&slice[0] >= &srcArray[0] && &slice[0] < &srcArray.ptr[srcArray.length])
 	{
 		int i = cast(int)(&slice[0] - &srcArray[0]);
