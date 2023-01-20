@@ -19,6 +19,7 @@ jobs:
           - os: macOS-latest
             arch: arm64-apple-macos
             arch_short: arm64
+            cross: "1"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
@@ -70,6 +71,7 @@ jobs:
           ARCH: ${{ matrix.arch }}
           ARCH_SHORT: ${{ steps.vars.outputs.arch_short }}
           BUILD: release-debug
+          CROSS: ${{ matrix.cross }}
 
       - name: Deploy OSX release
         if: matrix.os == 'macOS-latest'
@@ -91,6 +93,7 @@ jobs:
           BUILD: release-debug
           ARCH: ${{ matrix.arch }}
           ARCH_SHORT: ${{ steps.vars.outputs.arch_short }}
+          CROSS: ${{ matrix.cross }}
 
       - name: Deploy Windows release
         if: matrix.os == 'windows-latest'
