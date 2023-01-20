@@ -24,6 +24,7 @@ jobs:
       - uses: actions/checkout@v2
 
       - id: vars
+        shell: bash
         run: |
           if [ -z "${{matrix.arch_short}}" ]; then
             echo "arch_short=${{matrix.arch}}" >> $GITHUB_OUTPUT
