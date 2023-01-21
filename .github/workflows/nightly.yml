@@ -19,6 +19,7 @@ jobs:
           - os: macOS-latest
             arch: arm64-apple-macos
             arch_short: arm64
+            build: release
             cross: "1"
     runs-on: ${{ matrix.os }}
     steps:
@@ -31,6 +32,11 @@ jobs:
             echo "arch_short=${{matrix.arch}}" >> $GITHUB_OUTPUT
           else
             echo "arch_short=${{matrix.arch_short}}" >> $GITHUB_OUTPUT
+          fi
+          if [ -z "${{matrix.build}}" ]; then
+            echo "build=release-debug" >> $GITHUB_OUTPUT
+          else
+            echo "build=${{matrix.build}}" >> $GITHUB_OUTPUT
           fi
 
       - name: Install D compiler
@@ -48,7 +54,7 @@ jobs:
         env:
           ARCH: ${{ matrix.arch }}
           ARCH_SHORT: ${{ steps.vars.outputs.arch_short }}
-          BUILD: release-debug
+          BUILD: ${{ steps.vars.outputs.build }}
 
       - name: Deploy Linux release
         if: matrix.os == 'ubuntu-latest'
@@ -70,7 +76,7 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
           ARCH: ${{ matrix.arch }}
           ARCH_SHORT: ${{ steps.vars.outputs.arch_short }}
-          BUILD: release-debug
+          BUILD: ${{ steps.vars.outputs.build }}
           CROSS: ${{ matrix.cross }}
 
       - name: Deploy OSX release
@@ -90,7 +96,7 @@ jobs:
         run: .\ci\build.bat
         if: matrix.os == 'windows-latest'
         env:
-          BUILD: release-debug
+          BUILD: ${{ steps.vars.outputs.build }}
           ARCH: ${{ matrix.arch }}
           ARCH_SHORT: ${{ steps.vars.outputs.arch_short }}
           CROSS: ${{ matrix.cross }}
