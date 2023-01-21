@@ -15,6 +15,12 @@ void main()
 	else
 		string served = "./serve-d";
 
+	if (environment.get("CROSS").length)
+	{
+		writeln("Not checking if serve-d version is up-to-date because it's cross-compiled!");
+		return;
+	}
+
 	auto res = execute([served, "--version"]);
 	enforce(res.status == 0, "serve-d --version didn't return status 0");
 
