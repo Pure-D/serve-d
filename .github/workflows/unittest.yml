@@ -11,7 +11,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+        # ubuntu / linux must run on kinda old linux for glibc compatibility!
+        os: [ubuntu-20.04, windows-latest, macos-latest]
         dc: [dmd-latest, ldc-latest]
         exclude:
         - os: windows-latest
