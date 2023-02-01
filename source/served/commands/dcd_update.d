@@ -13,6 +13,7 @@ import rm.rf;
 import std.algorithm : endsWith;
 import std.format : format;
 import std.path : baseName, buildPath, chainPath, isAbsolute;
+import std.process : execute;
 
 import fs = std.file;
 import io = std.stdio;
@@ -245,14 +246,36 @@ void updateDCD()
 		rpc.notifyMethod("coded/logInstall", "Download base location: " ~ outputFolder);
 		rpc.notifyMethod("coded/logInstall", "");
 		rpc.notifyMethod("coded/logInstall", format("Tried %(%s, %)", triedPaths));
-
-		finalDestinationClient = "dcd-client";
-		finalDestinationServer = "dcd-server";
+		success = false;
 	}
 
 	if (success)
 	{
-		dcdUpdating = false;
+		auto resServer = execute([finalDestinationServer, "--version"]);
+		if (resServer.status != 0)
+		{
+			rpc.notifyMethod("coded/logInstall",
+					"Successfully downloaded DCD, but trying to run `"
+					~ finalDestinationServer ~ " --version` failed:");
+			rpc.notifyMethod("coded/logInstall", resServer.output);
+			success = false;
+		}
+	}
+
+	if (!success)
+	{
+		finalDestinationClient = "dcd-client";
+		finalDestinationServer = "dcd-server";
+	}
+
+	rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("dcdClientPath",
+			JsonValue(finalDestinationClient), true));
+	rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("dcdServerPath",
+			JsonValue(finalDestinationServer), true));
+
+	if (success)
+	{
+		rpc.notifyMethod("coded/logInstall", "Successfully installed DCD");
 
 		backend.globalConfiguration.set("dcd", "clientPath", finalDestinationClient);
 		backend.globalConfiguration.set("dcd", "serverPath", finalDestinationServer);
@@ -262,11 +285,6 @@ void updateDCD()
 			workspace.config.d.dcdClientPath = finalDestinationClient;
 			workspace.config.d.dcdServerPath = finalDestinationServer;
 		}
-		rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("dcdClientPath",
-				JsonValue(finalDestinationClient), true));
-		rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("dcdServerPath",
-				JsonValue(finalDestinationServer), true));
-		rpc.notifyMethod("coded/logInstall", "Successfully installed DCD");
 
 		foreach (ref workspace; workspaces)
 		{
@@ -282,5 +300,9 @@ void updateDCD()
 				lazyStartDCDServer(instance, workspace.folder.uri);
 			}
 		}
+	}
+	else
+	{
+		rpc.notifyMethod("coded/logInstall", "DCD install failed");
 	}
 }
