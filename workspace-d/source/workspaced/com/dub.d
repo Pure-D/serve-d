@@ -9,6 +9,7 @@ import std.array : appender;
 import std.conv;
 import std.exception;
 import std.parallelism;
+import std.range;
 import std.regex;
 import std.stdio;
 import std.string;
@@ -25,6 +26,7 @@ import dub.compilers.compiler;
 import dub.dependency;
 import dub.generators.build;
 import dub.generators.generator;
+import dub.generators.targetdescription;
 
 import dub.internal.vibecompat.inet.url;
 
@@ -216,15 +218,49 @@ class DubComponent : ComponentWrapper
 
 		try
 		{
-			auto paths = _dub.project.listBuildSettings(settings, [
-					"import-paths", "string-import-paths", "source-files", "versions", "debug-versions"
-					], ListBuildSettingsFormat.listNul);
-			_importPaths = paths[0].split('\0');
-			_stringImportPaths = paths[1].split('\0');
-			_importFiles = paths[2].split('\0');
-			_versions = paths[3].split('\0');
-			_debugVersions = paths[4].split('\0');
-			return _importPaths.length > 0 || _importFiles.length > 0;
+			string[] failedPackages = null;
+			scope (exit)
+				_failedPackages = failedPackages;
+			string[string] configs = _dub.project.getPackageConfigs(settings.platform, settings.config);
+			foreach (pack; _dub.project.getTopologicalPackageList(true, null, configs))
+				failedPackages ~= pack.name;
+			failedPackages.sort!"a<b";
+
+			auto gen = new TargetDescriptionGenerator(_dub.project);
+			gen.generate(settings);
+
+			auto importPaths = appender!(string[]);
+			auto stringImportPaths = appender!(string[]);
+			auto sourceFiles = appender!(string[]);
+			auto versions = appender!(string[]);
+			auto debugVersions = appender!(string[]);
+
+			foreach (target; gen.targetDescriptions)
+			{
+				// remove resolved dependencies from failedPackages
+				assert(target.packages.canFind(target.rootPackage));
+				foreach (name; target.packages)
+				{
+					auto match = failedPackages.assumeSorted!"a<b".trisect(target.rootPackage);
+					foreach (i; 0 .. match[1].length)
+						failedPackages = failedPackages.remove(match[0].length);
+				}
+
+				importPaths ~= target.buildSettings.importPaths;
+				stringImportPaths ~= target.buildSettings.stringImportPaths;
+				sourceFiles ~= target.buildSettings.sourceFiles;
+				sourceFiles ~= target.buildSettings.importFiles; // what are these exactly?
+				versions ~= target.buildSettings.versions;
+				debugVersions ~= target.buildSettings.debugVersions;
+			}
+
+			_importPaths = importPaths.data;
+			_stringImportPaths = stringImportPaths.data;
+			_importFiles = sourceFiles.data;
+			_versions = versions.data;
+			_debugVersions = debugVersions.data;
+
+			return failedPackages.length == 0;
 		}
 		catch (Exception e)
 		{
@@ -733,6 +769,7 @@ private:
 	BuildSettings _settings;
 	BuildPlatform _platform;
 	string[] _importPaths, _stringImportPaths, _importFiles, _versions, _debugVersions;
+	string[] _failedPackages;
 }
 
 ///
