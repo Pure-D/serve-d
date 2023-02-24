@@ -725,13 +725,17 @@ class MessageHandler : IMessageHandler
 	void warn(WorkspaceD.Instance instance, string component,
 		int id, string message, string details = null)
 	{
-		
+		warningf("[%s] com=%s: %s: %s %s",
+			instance ? instance.cwd : "global",
+			component, id, message, details);
 	}
 
 	void error(WorkspaceD.Instance instance, string component,
 		int id, string message, string details = null)
 	{
-		
+		errorf("[%s] com=%s: %s: %s %s",
+			instance ? instance.cwd : "global",
+			component, id, message, details);
 	}
 
 	void handleCrash(WorkspaceD.Instance instance, string component,
