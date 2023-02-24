@@ -93,13 +93,19 @@ int currentBuildToken;
 
 void lint(Document document)
 {
+	void noErrors()
+	{
+		diagnostics[DiagnosticSlot] = null;
+		updateDiagnostics();
+	}
+
 	auto instance = activeInstance = backend.getBestInstance!DubComponent(document.uri.uriToFile);
 	if (!instance)
-		return;
+		return noErrors();
 
 	auto fileConfig = config(document.uri);
 	if (!fileConfig.d.enableLinting || !fileConfig.d.enableDubLinting)
-		return;
+		return noErrors();
 
 	if (dubLintRunning)
 	{
@@ -114,6 +120,13 @@ void lint(Document document)
 	do
 	{
 		retryDubAtEnd = false;
+
+		if (!instance.get!DubComponent.isValidBuildConfiguration)
+		{
+			trace("Not running dub build lint in '", instance.cwd,
+				"', because it's not a buildable package");
+			return noErrors();
+		}
 
 		trace("Running dub build in ", instance.cwd);
 		currentBuildToken++;

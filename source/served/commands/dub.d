@@ -272,7 +272,7 @@ void onDidSaveDubRecipe(DidSaveTextDocumentParams params)
 			}
 
 			rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
-					.upgrade(), MessageType.warning, translate!"d.ext.dubUpgradeFail");
+					.selectAndDownloadMissing(), MessageType.warning, translate!"d.ext.dubUpgradeFail");
 		}
 		else
 		{
@@ -405,6 +405,12 @@ Task[] provideBuildTasks()
 		auto dub = instance.get!DubComponent;
 		auto workspace = .workspace(instance.cwd.uriFromFile, false);
 		info("Found dub package to build at ", dub.recipePath);
+
+		if (!dub.isValidBuildConfiguration)
+		{
+			info("\t=> not a buildable project, skipping");
+			continue;
+		}
 
 		JsonValue dollarMagicValue;
 		if (useBuildTaskDollarCurrent)
@@ -580,7 +586,7 @@ void installDependency(InstallRequest req)
 	reportProgress(ProgressType.importUpgrades, 0, 10, uri);
 	injectDependency(instance, req);
 	if (instance.has!DubComponent)
-		instance.get!DubComponent.upgrade();
+		instance.get!DubComponent.selectAndDownloadMissing();
 	reportProgress(ProgressType.dubReload, 7, 10, uri);
 	updateImports(UpdateImportsParams(false));
 	reportProgress(ProgressType.dubReload, 10, 10, uri);
@@ -589,13 +595,15 @@ void installDependency(InstallRequest req)
 @protocolNotification("served/updateDependency")
 void updateDependency(UpdateRequest req)
 {
+	// TODO: update in dub.selections.json
+
 	auto instance = activeInstance;
 	auto uri = instance.cwd.uriFromFile;
 	reportProgress(ProgressType.importUpgrades, 0, 10, uri);
 	if (changeDependency(instance, req))
 	{
 		if (instance.has!DubComponent)
-			instance.get!DubComponent.upgrade();
+			instance.get!DubComponent.selectAndDownloadMissing();
 		reportProgress(ProgressType.dubReload, 7, 10, uri);
 		updateImports(UpdateImportsParams(false));
 	}
@@ -605,13 +613,15 @@ void updateDependency(UpdateRequest req)
 @protocolNotification("served/uninstallDependency")
 void uninstallDependency(UninstallRequest req)
 {
+	// TODO: remove from dub.selections.json
+
 	auto instance = activeInstance;
 	auto uri = instance.cwd.uriFromFile;
 	reportProgress(ProgressType.importUpgrades, 0, 10, uri);
 	// TODO: add workspace argument
 	removeDependency(instance, req.name);
 	if (instance.has!DubComponent)
-		instance.get!DubComponent.upgrade();
+		instance.get!DubComponent.selectAndDownloadMissing();
 	reportProgress(ProgressType.dubReload, 7, 10, uri);
 	updateImports(UpdateImportsParams(false));
 	reportProgress(ProgressType.dubReload, 10, 10, uri);

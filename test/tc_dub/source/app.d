@@ -16,7 +16,7 @@ void main()
 
 	auto dub = backend.get!DubComponent(dir);
 
-	dub.upgrade();
+	dub.upgradeAndSelectAll();
 	assert(dub.dependencies.length > 2);
 	assert(dub.rootDependencies == ["serve-d:workspace-d"]);
 	// this can be

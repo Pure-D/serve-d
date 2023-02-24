@@ -80,7 +80,9 @@ class DubComponent : ComponentWrapper
 					"Dub Error: No configuration available");
 			}
 			else
+			{
 				updateImportPaths(false);
+			}
 		}
 		catch (Exception e)
 		{
@@ -103,11 +105,14 @@ class DubComponent : ComponentWrapper
 
 	private void start()
 	{
+		trace("Starting dub on instance ", refInstance ? refInstance.cwd : "(global)");
 		_dubRunning = false;
 		_dub = new Dub(instance.cwd, null, SkipPackageSuppliers.none);
 		_dub.packageManager.getOrLoadPackage(NativePath(instance.cwd));
 		_dub.loadPackage();
 		_dub.project.validate();
+
+		selectAndDownloadMissing();
 
 		// mark all packages as optional so we don't crash
 		int missingPackages;
@@ -131,12 +136,6 @@ class DubComponent : ComponentWrapper
 		setCompiler(_compilerBinaryName);
 
 		_settingsTemplate = cast() _dub.project.rootPackage.getBuildSettings();
-
-		if (missingPackages > 0)
-		{
-			upgrade(false);
-			optionalifyPackages();
-		}
 
 		_dubRunning = true;
 	}
@@ -240,30 +239,64 @@ class DubComponent : ComponentWrapper
 	}
 
 	/// Calls `dub upgrade`
+	deprecated("Call upgrade(UpgradeOptions), upgradeAndSelectAll or selectAndDownloadMissing")
 	void upgrade(bool save = true)
 	{
 		if (save)
-			_dub.upgrade(UpgradeOptions.select | UpgradeOptions.upgrade);
+			upgradeAndSelectAll();
 		else
-			_dub.upgrade(UpgradeOptions.noSaveSelections);
+			selectAndDownloadMissing();
 	}
 
-	/// Throws if configuration is invalid, otherwise does nothing.
+	/// ditto
+	void upgrade(UpgradeOptions options)
+	{
+		_dub.upgrade(options);
+	}
+
+	/// Equivalent of `upgrade(select | noSaveSelection)`
+	/// Updates internal dub.selections.json, does not save what has been changed.
+	/// Keeps existing selections, selects missing dependencies.
+	void selectAndDownloadMissing()
+	{
+		upgrade(UpgradeOptions.select | UpgradeOptions.noSaveSelections);
+	}
+
+	/// Equivalent of `upgrade(select | upgrade)`
+	/// Updates internal dub.selections.json, does not save what has been changed.
+	/// Keeps existing selections, selects missing dependencies.
+	void upgradeAndSelectAll()
+	{
+		upgrade(UpgradeOptions.select | UpgradeOptions.upgrade);
+	}
+
+	/// Checks if the currently selected build settings are valid for
+	/// introspection. (checks for DUB settings validity)
+	bool isValidConfiguration() const
+	{
+		return _dub.project.configurations.canFind(_configuration);
+	}
+
+	/// Checks if the currently selected build settings are valid for building.
+	/// (checks `isValidConfiguration` + is buildable target type)
+	bool isValidBuildConfiguration() const
+	{
+		return isValidConfiguration
+			&& !_settings.targetType.among!(TargetType.none, TargetType.sourceLibrary);
+	}
+
+	/// Throws `Exception` if `!isValidConfiguration()`, otherwise does nothing.
 	void validateConfiguration() const
 	{
-		if (!_dub.project.configurations.canFind(_configuration))
+		if (!isValidConfiguration)
 			throw new Exception("Cannot use dub with invalid configuration");
 	}
 
-	/// Throws if configuration is invalid or targetType is none or source library, otherwise does nothing.
+	/// Throws `Exception` if `!isValidBuildConfiguration()`, otherwise does nothing.
 	void validateBuildConfiguration()
 	{
-		validateConfiguration();
-
-		if (_settings.targetType == TargetType.none)
-			throw new Exception("Cannot build with dub with targetType == none");
-		if (_settings.targetType == TargetType.sourceLibrary)
-			throw new Exception("Cannot build with dub with targetType == sourceLibrary");
+		if (!isValidBuildConfiguration)
+			throw new Exception("Cannot use dub with invalid configuration");
 	}
 
 	/// Lists all dependencies. This will go through all dependencies and contain the dependencies of dependencies. You need to create a tree structure from this yourself.
