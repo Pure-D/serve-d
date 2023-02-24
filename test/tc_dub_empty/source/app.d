@@ -11,7 +11,7 @@ import workspaced.coms;
 
 WorkspaceD backend;
 
-void main()
+void main(string[] args)
 {
 	import std.experimental.logger;
 
@@ -28,27 +28,41 @@ void main()
 	scope (exit)
 		backend.shutdown();
 
-	assert(tryDub("valid"));
-	assert(!tryDub("empty1"));
-	assert(!tryDub("empty2"));
-	assert(tryDub("empty3"));
-	assert(!tryDub("invalid"));
-	assert(tryDub("sourcelib"));
-	version (Windows)
-		assert(tryDub("empty_windows"));
-	assert(tryDub("missing_dep"));
-	stderr.writeln("Success!");
+	if (args.length > 1)
+	{
+		foreach (folder; args[1 .. $])
+			if (!tryDub(folder, false))
+				throw new Exception("Failed " ~ folder);
+
+		stderr.writeln("All inputs passed!");
+	}
+	else
+	{
+		assert(tryDub("valid"));
+		assert(!tryDub("empty1"));
+		assert(!tryDub("empty2"));
+		assert(tryDub("empty3"));
+		assert(!tryDub("invalid"));
+		assert(tryDub("sourcelib"));
+		version (Windows)
+			assert(tryDub("empty_windows"));
+		assert(tryDub("missing_dep"));
+		stderr.writeln("Success!");
+	}
 }
 
-bool tryDub(string path)
+bool tryDub(string path, bool clean = true)
 {
 	DubComponent dub;
 	try
 	{
-		if (exists(buildNormalizedPath(getcwd, path, ".dub")))
-			rmdirRecurse(buildNormalizedPath(getcwd, path, ".dub"));
-		if (exists(buildNormalizedPath(getcwd, path, "dub.selections.json")))
-			remove(buildNormalizedPath(getcwd, path, "dub.selections.json"));
+		if (clean)
+		{
+			if (exists(buildNormalizedPath(getcwd, path, ".dub")))
+				rmdirRecurse(buildNormalizedPath(getcwd, path, ".dub"));
+			if (exists(buildNormalizedPath(getcwd, path, "dub.selections.json")))
+				remove(buildNormalizedPath(getcwd, path, "dub.selections.json"));
+		}
 
 		auto dir = buildNormalizedPath(getcwd, path);
 		backend.addInstance(dir);
@@ -64,9 +78,18 @@ bool tryDub(string path)
 	{
 		try
 		{
-			scope (success)
+			static if (is(typeof(mixin("dub." ~ fn ~ "(args)")) == void))
+			{
+				mixin("dub." ~ fn ~ "(args);");
 				stderr.writeln(trace, ": pass ", fn);
-			mixin("return dub." ~ fn ~ "(args);");
+				return;
+			}
+			else
+			{
+				auto ret = mixin("dub." ~ fn ~ "(args)");
+				stderr.writeln(trace, ": pass ", fn, " = ", ret);
+				return ret;
+			}
 		}
 		catch (Exception e)
 		{
@@ -81,9 +104,15 @@ bool tryDub(string path)
 		}
 	}
 
-	foreach (step; 0 .. 2)
+	foreach (step; 0 .. clean ? 2 : 1)
 	{
-		tryRun!"upgrade"(path);
+		stderr.writeln("step #", step + 1, ": ", path);
+		tryRun!"isValidConfiguration"(path);
+		if (clean)
+			tryRun!"upgradeAndSelectAll"(path);
+		else
+			tryRun!"selectAndDownloadMissing"(path);
+		tryRun!"isValidConfiguration"(path);
 		tryRun!"dependencies"(path);
 		tryRun!"rootDependencies"(path);
 		tryRun!"imports"(path);
