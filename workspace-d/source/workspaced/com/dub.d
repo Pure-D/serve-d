@@ -74,7 +74,17 @@ class DubComponent : ComponentWrapper
 		{
 			start();
 
-			_configuration = _dub.project.getDefaultConfiguration(_platform);
+			try
+			{
+				_configuration = _dub.project.getDefaultConfiguration(_platform);
+			}
+			catch (Exception e)
+			{
+				if (_dub.project.configurations.length > 0)
+					_configuration = _dub.project.configurations[0];
+				else
+					throw e;
+			}
 			if (!_dub.project.configurations.canFind(_configuration))
 			{
 				workspaced.messageHandler.warn(refInstance, "dub",
@@ -325,14 +335,28 @@ class DubComponent : ComponentWrapper
 	void validateConfiguration() const
 	{
 		if (!isValidConfiguration)
-			throw new Exception("Cannot use dub with invalid configuration");
+			throwInvalidConfiguration();
 	}
 
 	/// Throws `Exception` if `!isValidBuildConfiguration()`, otherwise does nothing.
-	void validateBuildConfiguration()
+	void validateBuildConfiguration() const
 	{
 		if (!isValidBuildConfiguration)
-			throw new Exception("Cannot use dub with invalid configuration");
+			throwInvalidConfiguration();
+	}
+
+	private void throwInvalidConfiguration() const
+	{
+		if (!_configuration.length && !_dub.project.configurations.length && _settings.targetType == TargetType.none)
+			throw new Exception("Dub package has targetType none and no other configurations are available, cannot list import paths needed for build and auto-complete.");
+		else if (!_configuration.length && !_dub.project.configurations.length)
+			throw new Exception("Dub package failed to load or no configurations are available, cannot list import paths needed for build and auto-complete.");
+
+		throw new Exception(format!("Cannot use dub with invalid configuration, cannot list import paths needed for build and auto-complete.\n"
+			~ "Selected config: '%s' (targetType: %s) - available: %s\n"
+			~ "Try selecting a different configuration.")(
+			_configuration, _settings.targetType, _dub.project.configurations
+		));
 	}
 
 	/// Lists all dependencies. This will go through all dependencies and contain the dependencies of dependencies. You need to create a tree structure from this yourself.
