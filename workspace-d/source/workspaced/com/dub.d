@@ -248,10 +248,9 @@ class DubComponent : ComponentWrapper
 			foreach (target; gen.targetDescriptions)
 			{
 				// remove resolved dependencies from failedPackages
-				assert(target.packages.canFind(target.rootPackage));
-				foreach (name; target.packages)
+				foreach (name; [target.rootPackage] ~ target.packages)
 				{
-					auto match = failedPackages.assumeSorted!"a<b".trisect(target.rootPackage);
+					auto match = failedPackages.assumeSorted!"a<b".trisect(name);
 					foreach (i; 0 .. match[1].length)
 						failedPackages = failedPackages.remove(match[0].length);
 				}
