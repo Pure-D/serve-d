@@ -21,9 +21,9 @@ This is pretty much another abstraction layer on top of workspace-d to simplify 
 
 **Thanks to the following big GitHub sponsors** financially supporting the code-d/serve-d tools:
 
-| ![ZyeByte's GitHub avatar](https://avatars.githubusercontent.com/u/102230672?s=96&v=4) |
+| [![ZyeByte's GitHub avatar](https://avatars.githubusercontent.com/u/102230672?s=96&v=4)]((https://github.com/zyebytevt)) |
 |:---:|
-| [@ZyeByte](https://github.com/ZyeByte) |
+| [@zyebytevt](https://github.com/zyebytevt) |
 
 <!-- additional thanks to the following sponsors:
 
