@@ -1,7 +1,7 @@
 name "workspace-d"
 description "Provides functions for IDEs for managing DCD, Dscanner and Dfmt."
 authors "webfreak"
-copyright "Copyright © 2017-2022, webfreak"
+copyright "Copyright © 2017-2023, webfreak"
 license "MIT"
 
 dependency "dfmt" version="~>0.15.0-beta.1"

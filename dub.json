@@ -2,7 +2,7 @@
 	"name": "serve-d",
 	"description": "Microsoft Language Server Protocol library and D Server",
 	"license": "MIT",
-	"copyright": "Copyright © 2017-2022, webfreak",
+	"copyright": "Copyright © 2017-2023, webfreak",
 	"dflags": ["-lowmem"],
 	"dependencies": {
 		"libddoc": "0.8.0",
