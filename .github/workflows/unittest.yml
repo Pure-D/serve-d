@@ -25,50 +25,57 @@ jobs:
 
       - name: Install D compiler
         uses: dlang-community/setup-dlang@v1
+        timeout-minutes: 5
         with:
           compiler: ${{ matrix.dc }}
 
       - name: Run workspace-d tests
         run: dub test :workspace-d
+        timeout-minutes: 30
         env:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
 
       - name: serialization tests
         run: dub test :protocol
-        timeout-minutes: 5
+        timeout-minutes: 10
         env:
           # shouldn't break other OSes
           MACOSX_DEPLOYMENT_TARGET: '10.12'
 
       - name: LSP tests
         run: dub test :lsp
-        timeout-minutes: 5
+        timeout-minutes: 10
         env:
           # shouldn't break other OSes
           MACOSX_DEPLOYMENT_TARGET: '10.12'
 
       - name: serverbase tests
         run: dub test :serverbase
+        timeout-minutes: 10
         env:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
 
       - name: build minimal server
         run: dub build --root=null_server
+        timeout-minutes: 10
         env:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
 
       - name: test minimal server
         run: dub run --root=null_server_test
+        timeout-minutes: 10
         env:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
 
       - name: Run tests
         run: dub test
+        timeout-minutes: 30
         env:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
 
       - name: Run standalone tests
         run: ./runtests.sh
         working-directory: ./test
+        timeout-minutes: 30
         env:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
