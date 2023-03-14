@@ -64,6 +64,8 @@ CompletionItemKind convertFromDCDType(string type)
 		return CompletionItemKind.keyword;
 	case 'f': // function
 		return CompletionItemKind.function_;
+	case 'F': // UFCS function acts like a method
+		return CompletionItemKind.method;
 	case 'g': // enum name
 		return CompletionItemKind.enum_;
 	case 'P': // package name
@@ -94,6 +96,7 @@ string sortFromDCDType(string type)
 	case 'm': // member variable
 		return "3_";
 	case 'f': // function
+	case 'F': // UFCS function
 		return "4_";
 	case 'k': // keyword
 	case 'e': // enum member
@@ -141,6 +144,8 @@ SymbolKind convertFromDCDSearchType(string type)
 	case 'f':
 	case 'l':
 		return SymbolKind.function_;
+	case 'F':
+		return SymbolKind.method;
 	case 'g':
 		return SymbolKind.enum_;
 	case 'P':
