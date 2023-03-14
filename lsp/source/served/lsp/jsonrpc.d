@@ -496,6 +496,7 @@ private:
 			if (stopped || content is null)
 				break;
 			assert(content.length == contentLength);
+			content = content.chomp(); // https://github.com/Pure-D/serve-d/issues/305
 			RequestMessageRaw request;
 			RequestMessageRaw[] extraRequests;
 			try
