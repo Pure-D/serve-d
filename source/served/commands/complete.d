@@ -1218,7 +1218,7 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 				detailDetail = " " ~ identifier.definition[nameEnd .. $];
 			}
 
-			item.sortText = identifier.definition;
+			item.sortText = identifier.identifier ~ " " ~ identifier.definition;
 
 			// TODO: only add arguments when this is a function call, eg not on template arguments
 			if (identifier.type == "f" && argumentSnippets
