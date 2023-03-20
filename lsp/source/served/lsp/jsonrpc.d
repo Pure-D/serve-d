@@ -222,7 +222,11 @@ class RPCProcessor : Fiber
 		sendRawPacket(parts[]);
 	}
 
-	void registerCapability(T)(scope const(char)[] id, scope const(char)[] method, T options)
+	deprecated("Use registerCapabilityAsync + awaitResponse or registerCapabilitySync instead, since previously this method discarded the request ID and caused for weird log errors")
+	alias registerCapability = registerCapabilityAsync;
+
+	/// Calls registerCapability, but doesn't wait for it. Use registerCapabilitySync to auto-wait/throw on error.
+	RequestToken registerCapabilityAsync(T)(scope const(char)[] id, scope const(char)[] method, T options)
 	{
 		import mir.serde;
 
@@ -250,7 +254,19 @@ class RPCProcessor : Fiber
 			RegistrationT(id, method, options)
 		];
 
-		sendMethod("client/registerCapability", params);
+		return sendMethod("client/registerCapability", params);
+	}
+
+	/// Returns: true if successful / no error, false on error (and logs the error to trace)
+	bool registerCapabilitySync(T)(scope const(char)[] id, scope const(char)[] method, T options, Duration timeout = Duration.max)
+	{
+		auto result = awaitResponse(registerCapabilityAsync!T(id, method, options), timeout);
+		if (!result.error.isNone)
+		{
+			trace("Error on registerCapability: ", result.error.deref);
+			return false;
+		}
+		return true;
 	}
 
 	/// Sends a request with the given `method` name to the other RPC side without any parameters.
@@ -574,6 +590,7 @@ private:
 			ResponseMessage res;
 			if (id.length)
 				res.id = id.deserializeJson!RequestToken;
+			trace("missing required members or has ambiguous members: ", json);
 			res.error = ResponseError(ErrorCode.invalidRequest, "missing required members or has ambiguous members");
 			send(res);
 			return RequestMessageRaw.init;
@@ -586,8 +603,13 @@ private:
 			auto tok = id.deserializeJson!RequestToken;
 			foreach (ref waiting; responseTokens)
 			{
-				if (!waiting.got && waiting.token == tok)
+				if (waiting.token == tok)
 				{
+					if (waiting.got)
+					{
+						trace("Did we reuse an id?! Request ", tok, " already has a response!");
+						continue;
+					}
 					waiting.got = true;
 					waiting.ret.id = tok;
 					auto res = slices.result;
@@ -603,6 +625,7 @@ private:
 
 			if (!isResponse && slices.result.length)
 			{
+				trace("Unknown request response ID: ", json);
 				send(ResponseMessage(tok,
 					ResponseError(ErrorCode.invalidRequest, "unknown request response ID")));
 				return RequestMessageRaw.init;
@@ -622,6 +645,7 @@ private:
 				&& request.paramsJson.ptr[0] != '['
 				&& request.paramsJson.ptr[0] != '{')
 			{
+				trace("broken params: ", json);
 				auto err = ResponseError(ErrorCode.invalidParams,
 					"`params` MUST be an object (named arguments) or array "
 					~ "(positional arguments), other types are not allowed by spec"

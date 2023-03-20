@@ -136,7 +136,7 @@ void setupProfileGCWatchers()
 		.didChangeWatchedFiles.orDefault
 		.dynamicRegistration.orDefault)
 	{
-		rpc.registerCapability(
+		if (!rpc.registerCapabilitySync(
 			"profilegc.watchfiles",
 			"workspace/didChangeWatchedFiles",
 			DidChangeWatchedFilesRegistrationOptions(
@@ -144,7 +144,8 @@ void setupProfileGCWatchers()
 					FileSystemWatcher("**/profilegc.log")
 				]
 			)
-		);
+		))
+			error("Failed to dynamically register GC watchers");
 	}
 }
 
