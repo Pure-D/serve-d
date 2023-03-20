@@ -315,6 +315,8 @@ class ExternalDCDClient : IDCDClient
 				symbol.symbolFilePath = file;
 				symbol.symbolLocation = index;
 				symbol.documentation = splits[4].unescapeTabs;
+				if (splits.length > 5)
+					symbol.typeOf = splits[5];
 				symbols ~= symbol;
 			}
 		}

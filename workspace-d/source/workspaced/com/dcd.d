@@ -583,7 +583,8 @@ class DCDComponent : ComponentWrapper
 						identifiers ~= DCDIdentifier(item.identifier,
 							item.kind == char.init ? "" : [cast(char)item.kind].idup,
 							item.definition, item.symbolFilePath,
-							cast(int)item.symbolLocation, item.documentation);
+							cast(int)item.symbolLocation, item.documentation,
+							item.typeOf);
 					}
 					completions._identifiers = identifiers.data;
 				}
@@ -845,6 +846,8 @@ struct DCDIdentifier
 	int location;
 	///
 	string documentation;
+	///
+	string typeOf;
 }
 
 /// Returned by search-symbol

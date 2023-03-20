@@ -1191,6 +1191,10 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 				}
 			}
 
+			if (identifier.typeOf.length && identifier.type != "f")
+			{
+				detailDescription = identifier.typeOf;
+			}
 
 			// handle special cases
 			if (identifier.type == "e")
