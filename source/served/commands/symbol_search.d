@@ -21,6 +21,8 @@ import io = std.stdio;
 @protocolMethod("workspace/symbol")
 SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 {
+	import fuzzymatch;
+
 	auto infos = appender!(SymbolInformation[]);
 	foreach (workspace; workspaces)
 	{
@@ -31,7 +33,7 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 			indexer.iterateAll(delegate(ModuleRef mod, string fileName, scope const ref DefinitionElement def) {
 				if (def.isImportable
 					&& !mod.isStdLib
-					&& def.name.roughlyContains(params.query))
+					&& def.name.fuzzyMatchesString(params.query))
 				{
 					Position p;
 					p.line = def.line - 1;
@@ -44,30 +46,6 @@ SymbolInformation[] provideWorkspaceSymbols(WorkspaceSymbolParams params)
 		}
 	}
 	return infos.data;
-}
-
-/// Checks if doesThis contains matchThis in a way that a fuzzy search would
-/// find it.
-private bool roughlyContains(string doesThis, string matchThis)
-{
-	import std.utf : byUTF, decode;
-	import std.uni : toUpper;
-
-	if (!matchThis.length)
-		return true;
-
-	size_t i = 0;
-	dchar next = matchThis.decode(i).toUpper;
-	foreach (c; doesThis.byUTF!dchar)
-	{
-		if (toUpper(c) == next)
-		{
-			if (i >= matchThis.length)
-				return true;
-			next = matchThis.decode(i).toUpper;
-		}
-	}
-	return false;
 }
 
 @protocolMethod("textDocument/documentSymbol")

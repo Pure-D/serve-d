@@ -12,7 +12,8 @@
 		"serve-d:http": "*",
 		"serve-d:lsp": "*",
 		"serve-d:serverbase": "*",
-		"serve-d:workspace-d": "*"
+		"serve-d:workspace-d": "*",
+		"fuzzymatch": "~>1.0.0"
 	},
 	"stringImportPaths": [
 		"views"
