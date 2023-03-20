@@ -11,6 +11,7 @@ import std.file;
 import std.experimental.logger;
 
 @component("references")
+@instancedOnly
 class ReferencesComponent : ComponentWrapper
 {
 	mixin DefaultComponentWrapper;

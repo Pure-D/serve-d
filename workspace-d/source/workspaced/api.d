@@ -50,6 +50,16 @@ interface IMessageHandler
 /// UDA; will never try to call this function from rpc
 enum ignoredFunc;
 
+/// UDA: on components, all instance-related get methods will static assert(false)
+enum globalOnly;
+/// ditto
+enum isGlobalOnly(T) = hasUDA!(T, globalOnly);
+
+/// UDA: on components, all instance-related get methods will static assert(false)
+enum instancedOnly;
+/// ditto
+enum isInstanceOnly(T) = hasUDA!(T, instancedOnly);
+
 /// Component call
 struct ComponentInfoParams
 {
@@ -80,7 +90,7 @@ void traceTaskLog(lazy string msg)
 
 static immutable traceTask = `traceTaskLog("new task in " ~ __PRETTY_FUNCTION__); scope (exit) traceTaskLog(__PRETTY_FUNCTION__ ~ " exited");`;
 
-mixin template DefaultComponentWrapper(bool withDtor = true)
+mixin template DefaultGlobalComponentWrapper(bool withDtor = true)
 {
 	@ignoredFunc
 	{
@@ -88,7 +98,6 @@ mixin template DefaultComponentWrapper(bool withDtor = true)
 		import std.parallelism : TaskPool, Task, task, defaultPoolThreads;
 
 		WorkspaceD workspaced;
-		WorkspaceD.Instance refInstance;
 
 		TaskPool _threads;
 
@@ -116,6 +125,61 @@ mixin template DefaultComponentWrapper(bool withDtor = true)
 					}
 			return _threads;
 		}
+
+		bool has(T)()
+		{
+			static if (__traits(hasMember, typeof(this), "refInstance"))
+				if (refInstance)
+					return refInstance.has!T;
+
+			static if (!isInstanceOnly!T)
+				if (workspaced)
+					return workspaced.has!T;
+
+			assert(false, "Unbound component trying to check for component " ~ T.stringof ~ ".");
+		}
+
+		T get(T)()
+		{
+			static if (__traits(hasMember, typeof(this).init, "refInstance"))
+				if (refInstance)
+					return refInstance.get!T;
+
+			static if (!isInstanceOnly!T)
+				if (workspaced)
+					return workspaced.get!T;
+
+			assert(false, "Unbound component trying to get component " ~ T.stringof ~ ".");
+		}
+
+		override void shutdown(bool dtor = false)
+		{
+			if (!dtor && _threads)
+				_threads.finish();
+		}
+
+		override void bind(WorkspaceD workspaced, WorkspaceD.Instance instance)
+		{
+			this.workspaced = workspaced;
+			static if (__traits(hasMember, typeof(this).init, "refInstance"))
+				this.instance = instance;
+			static if (__traits(hasMember, typeof(this).init, "load"))
+				load();
+		}
+	}
+}
+
+mixin template DefaultComponentWrapper(bool withDtor = true)
+{
+	mixin DefaultGlobalComponentWrapper!withDtor;
+
+	static assert(!isGlobalOnly!(typeof(this)),
+		"Attempted to use `DefaultComponentWrapper` with an @globalOnly component, "
+		~ "use `DefaultGlobalComponentWrapper` instead!");
+
+	@ignoredFunc
+	{
+		WorkspaceD.Instance refInstance;
 
 		inout(WorkspaceD.Instance) instance() inout @property
 		{
@@ -192,43 +256,9 @@ mixin template DefaultComponentWrapper(bool withDtor = true)
 				assert(false, "Unbound component trying to access config.");
 		}
 
-		bool has(T)()
-		{
-			if (refInstance)
-				return refInstance.has!T;
-			else if (workspaced)
-				return workspaced.has!T;
-			else
-				assert(false, "Unbound component trying to check for component " ~ T.stringof ~ ".");
-		}
-
-		T get(T)()
-		{
-			if (refInstance)
-				return refInstance.get!T;
-			else if (workspaced)
-				return workspaced.get!T;
-			else
-				assert(false, "Unbound component trying to get component " ~ T.stringof ~ ".");
-		}
-
 		string cwd() @property const
 		{
 			return instance.cwd;
-		}
-
-		override void shutdown(bool dtor = false)
-		{
-			if (!dtor && _threads)
-				_threads.finish();
-		}
-
-		override void bind(WorkspaceD workspaced, WorkspaceD.Instance instance)
-		{
-			this.workspaced = workspaced;
-			this.instance = instance;
-			static if (__traits(hasMember, typeof(this).init, "load"))
-				load();
 		}
 	}
 }

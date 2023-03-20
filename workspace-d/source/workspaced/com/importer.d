@@ -19,9 +19,10 @@ import workspaced.helpers : determineIndentation, endsWithKeyword,
 
 /// ditto
 @component("importer")
+@globalOnly
 class ImporterComponent : ComponentWrapper
 {
-	mixin DefaultComponentWrapper;
+	mixin DefaultGlobalComponentWrapper;
 
 	protected void load()
 	{

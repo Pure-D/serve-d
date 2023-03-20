@@ -31,9 +31,10 @@ public import workspaced.visitors.methodfinder : InterfaceDetails, FieldDetails,
 	MethodDetails, ArgumentInfo;
 
 @component("dcdext")
+@globalOnly
 class DCDExtComponent : ComponentWrapper
 {
-	mixin DefaultComponentWrapper;
+	mixin DefaultGlobalComponentWrapper;
 
 	static immutable CodeRegionProtection[] mixableProtection = [
 		CodeRegionProtection.public_ | CodeRegionProtection.default_,
@@ -44,9 +45,6 @@ class DCDExtComponent : ComponentWrapper
 	/// Loads dcd extension methods. Call with `{"cmd": "load", "components": ["dcdext"]}`
 	void load()
 	{
-		if (!refInstance)
-			return;
-
 		config.stringBehavior = StringBehavior.source;
 	}
 
@@ -787,10 +785,10 @@ class DCDExtComponent : ComponentWrapper
 
 		processTree(tree);
 
-		if (formatCode && instance.has!DfmtComponent)
+		if (formatCode && has!DfmtComponent)
 		{
 			foreach (ref method; methods.data)
-				method.code = instance.get!DfmtComponent.formatSync(method.code, formatArgs).strip;
+				method.code = get!DfmtComponent.formatSync(method.code, formatArgs).strip;
 		}
 
 		foreach (ref method; methods.data)

@@ -56,7 +56,7 @@ class DMDComponent : ComponentWrapper
 				baseArgs ~= "-J=" ~ path;
 			auto pipes = pipeProcess(baseArgs ~ dmdArguments ~ "-",
 					Redirect.stderrToStdout | Redirect.stdout | Redirect.stdin, null,
-					Config.none, instance.cwd);
+					Config.none, refInstance ? refInstance.cwd : getcwd());
 			pipes.stdin.write(code);
 			pipes.stdin.close();
 			if (i == 0)

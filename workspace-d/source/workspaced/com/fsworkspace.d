@@ -4,6 +4,7 @@ import std.json;
 import workspaced.api;
 
 @component("fsworkspace")
+@instancedOnly
 class FSWorkspaceComponent : ComponentWrapper
 {
 	mixin DefaultComponentWrapper;

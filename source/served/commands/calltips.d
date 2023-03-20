@@ -134,14 +134,14 @@ SignatureHelp provideSignatureHelp(TextDocumentPositionParams params)
 SignatureHelp provideDSignatureHelp(TextDocumentPositionParams params,
 		string file, ref Document document)
 {
-	if (!backend.hasBest!DCDComponent(file) || !backend.hasBest!DCDExtComponent(file))
+	if (!backend.hasBest!DCDComponent(file) || !backend.has!DCDExtComponent)
 		return SignatureHelp.init;
 
 	auto currOffset = cast(int) document.positionToBytes(params.position);
 
 	scope codeText = document.rawText.idup;
 
-	DCDExtComponent dcdext = backend.best!DCDExtComponent(file);
+	DCDExtComponent dcdext = backend.get!DCDExtComponent;
 	auto callParams = dcdext.extractCallParameters(codeText, cast(int) currOffset);
 	if (callParams == CalltipsSupport.init)
 		return SignatureHelp.init;
@@ -182,9 +182,9 @@ SignatureHelp provideDietSignatureHelp(TextDocumentPositionParams params,
 		string code;
 		dc.extractD(completion, offset, code, offset);
 		if (offset <= code.length && backend.hasBest!DCDComponent(file)
-				&& backend.hasBest!DCDExtComponent(file))
+				&& backend.has!DCDExtComponent)
 		{
-			auto dcdext = backend.best!DCDExtComponent(file);
+			auto dcdext = backend.get!DCDExtComponent;
 
 			auto callParams = dcdext.extractCallParameters(code, cast(int) offset);
 			if (callParams == CalltipsSupport.init)

@@ -31,6 +31,7 @@ import workspaced.index_format;
 public import workspaced.index_format : ModuleRef;
 
 @component("index")
+@instancedOnly
 class IndexComponent : ComponentWrapper
 {
 	mixin DefaultComponentWrapper;

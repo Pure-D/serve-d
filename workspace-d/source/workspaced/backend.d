@@ -477,6 +477,7 @@ class WorkspaceD
 
 	T get(T)()
 	{
+		static assert(!isInstanceOnly!T, "Cannot use `get` without cwd on an instance-only component");
 		auto info = getUDAs!(T, ComponentInfoParams)[0];
 		onBeforeAccessGlobalComponent(ComponentInfo(info, typeid(T)));
 		foreach (com; globalComponents)
@@ -487,6 +488,7 @@ class WorkspaceD
 
 	bool has(T)()
 	{
+		static assert(!isInstanceOnly!T, "Cannot use `has` without cwd on an instance-only component");
 		auto info = getUDAs!(T, ComponentInfoParams)[0];
 		return checkHasGlobalComponent(ComponentInfo(info, typeid(T)));
 	}
@@ -494,7 +496,13 @@ class WorkspaceD
 	T get(T)(string cwd)
 	{
 		if (!cwd.length)
-			return this.get!T;
+		{
+			static if (!isInstanceOnly!T)
+				return this.get!T;
+			else
+				throw new Exception("attempted to get component " ~ T.stringof
+					~ " without working directory!");
+		}
 		auto inst = getInstance(cwd);
 		if (inst is null)
 			throw new Exception("cwd '" ~ cwd ~ "' not found");
@@ -503,27 +511,48 @@ class WorkspaceD
 
 	bool has(T)(string cwd)
 	{
+		static assert(!isGlobalOnly!T, "Cannot use `has` with cwd on a global-only component");
 		auto inst = getInstance(cwd);
 		if (inst is null)
 			return false;
 		return inst.has!T;
 	}
 
-	T best(T)(string file, bool fallback = true)
+	T best(T)(string file)
 	{
+		static assert(!isGlobalOnly!T, "Cannot use `best` on a global-only component");
 		if (!file.length)
-			return this.get!T;
+		{
+			static if (!isInstanceOnly!T)
+				return this.get!T;
+			else
+				throw new Exception("attempted to get component " ~ T.stringof
+					~ " without working directory!");
+		}
 		auto inst = getBestInstance!T(file);
 		if (inst is null)
-			throw new Exception("cwd for '" ~ file ~ "' not found");
+		{
+			static if (!isInstanceOnly!T)
+				return get!T;
+			else
+				throw new Exception("component " ~ T.stringof
+					~ " is not loaded in any instance for file "
+					~ file ~ "!");
+		}
 		return inst.get!T;
 	}
 
-	bool hasBest(T)(string cwd, bool fallback = true)
+	bool hasBest(T)(string cwd)
 	{
+		static assert(!isGlobalOnly!T, "Cannot use `hasBest` on a global-only component");
 		auto inst = getBestInstance!T(cwd);
 		if (inst is null)
-			return false;
+		{
+			static if (!isInstanceOnly!T)
+				return this.has!T;
+			else
+				return false;
+		}
 		return inst.has!T;
 	}
 

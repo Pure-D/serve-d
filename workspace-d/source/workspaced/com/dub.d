@@ -33,6 +33,7 @@ import dub.internal.vibecompat.inet.url;
 import dub.recipe.io;
 
 @component("dub")
+@instancedOnly
 class DubComponent : ComponentWrapper
 {
 	mixin DefaultComponentWrapper;

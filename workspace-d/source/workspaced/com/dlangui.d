@@ -11,9 +11,10 @@ import workspaced.api;
 import workspaced.completion.dml;
 
 @component("dlangui")
+@globalOnly
 class DlanguiComponent : ComponentWrapper
 {
-	mixin DefaultComponentWrapper;
+	mixin DefaultGlobalComponentWrapper;
 
 	/// Queries for code completion at position `pos` in DML code
 	/// Returns: `[{type: CompletionType, value: string, documentation: string, enumName: string}]`

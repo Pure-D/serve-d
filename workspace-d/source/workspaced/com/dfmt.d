@@ -20,9 +20,10 @@ import core.thread;
 import workspaced.api;
 
 @component("dfmt")
+@globalOnly
 class DfmtComponent : ComponentWrapper
 {
-	mixin DefaultComponentWrapper;
+	mixin DefaultGlobalComponentWrapper;
 
 	/// Will format the code passed in asynchronously.
 	/// Returns: the formatted code as string
