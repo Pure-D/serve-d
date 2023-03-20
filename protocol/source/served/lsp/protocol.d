@@ -2069,11 +2069,13 @@ unittest
 	CodeActionOptions cao = {
 		codeActionKinds: [CodeActionKind.refactor, CodeActionKind.sourceOrganizeImports, cast(CodeActionKind)"CustomKind"]
 	};
+	FoldingRangeOptions foldingRangeProvider;
 	ServerCapabilities cap = {
 		textDocumentSync: TextDocumentSyncKind.incremental,
-		codeActionProvider: cao
+		codeActionProvider: cao,
+		foldingRangeProvider: foldingRangeProvider
 	};
-	assert(cap.serializeJson == `{"textDocumentSync":2,"codeActionProvider":{"codeActionKinds":["refactor","source.organizeImports","CustomKind"]}}`, cap.serializeJson);
+	assert(cap.serializeJson == `{"textDocumentSync":2,"codeActionProvider":{"codeActionKinds":["refactor","source.organizeImports","CustomKind"]},"foldingRangeProvider":{}}`, cap.serializeJson);
 }
 
 @serdeFallbackStruct
