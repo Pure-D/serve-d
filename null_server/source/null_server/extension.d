@@ -5,7 +5,7 @@ import served.utils.events;
 
 import core.thread;
 
-alias members = __traits(derivedMembers, null_server.extension);
+static immutable members = [__traits(derivedMembers, null_server.extension)];
 
 InitializeResult initialize(InitializeParams params)
 {

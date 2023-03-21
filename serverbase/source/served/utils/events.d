@@ -1,5 +1,9 @@
 module served.utils.events;
 
+// disabling this version saves around 25 MiB CTFE RAM skipping duplication
+// checks & linting (decreases error message readability though)
+debug version = LintExtensionMembers;
+
 /// Called for requests (not notifications) from the client to the server. This
 /// UDA must be used at most once per method for regular methods. For methods
 /// returning arrays (T[]) it's possible to register multiple functions with the
@@ -73,105 +77,138 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 	import std.meta;
 	import std.traits;
 
-	// duplicate method name check to avoid name clashes and unreadable error messages
-	private static string[] findDuplicates(string[] fields)
+	version (LintExtensionMembers)
 	{
-		string[] dups;
-		Loop: foreach (i, field; fields)
-		{
-			static foreach (allowed; config.allowedDuplicateMethods)
-				if (field == allowed)
-					continue Loop;
-
-			if (fields[0 .. i].canFind(field) || fields[i + 1 .. $].canFind(field))
-				dups ~= field;
-		}
-		return dups;
-	}
-
-	enum duplicates = findDuplicates([ExtensionModule.members]);
-	static if (duplicates.length > 0)
-	{
-		pragma(msg, "duplicates: ", duplicates);
-		static assert(false, "Found duplicate method handlers of same name");
-	}
-
-	enum lintWarnings = ctLintEvents();
-	static if (lintWarnings.length > 0)
-		pragma(msg, lintWarnings);
-
-	private static string ctLintEvents()
-	{
-		import std.string : chomp;
-
-		static bool isInvalidMethodName(string methodName, AllowedMethods[] allowed)
-		{
-			if (!allowed.length)
-				return false;
-
-			foreach (a; allowed)
-				foreach (m; a.methods)
-					if (m == methodName)
-						return false;
-			return true;
-		}
-
-		static string formatMethodNameWarning(string methodName, AllowedMethods[] allowed,
-			string codeName, string file, size_t line, size_t column)
+		private static string formatCtfeWarning(string file, size_t line, size_t column, string type = "Hint")
 		{
 			import std.conv : to;
 
-			string allowedStr = "";
-			foreach (allow; allowed)
-			{
-				foreach (m; allow.methods)
-				{
-					if (allowedStr.length)
-						allowedStr ~= ", ";
-					allowedStr ~= "`" ~ m ~ "`";
-				}
-			}
-
-			return "\x1B[1m" ~ file ~ "(" ~ line.to!string ~ "," ~ column.to!string ~ "): \x1B[1;34mHint: \x1B[m"
-				~ "method " ~ codeName ~ " listens for event `" ~ methodName
-				~ "`, but the type has set allowed methods to " ~ allowedStr
-				~ ".\n\t\tNote: check back with the LSP specification, in case this is wrongly tagged or annotate parameter with @nonStandard.\n";
+			return "\x1B[1m" ~ file ~ "(" ~ line.to!string ~ "," ~ column.to!string ~ "): \x1B[1;34m" ~ type ~ ": \x1B[m";
 		}
 
-		string lintResult;
-		foreach (name; ExtensionModule.members)
+		// duplicate method name check to avoid name clashes and unreadable error messages
+		private static string[] findDuplicates(immutable(string[]) fields)
 		{
-			static if (__traits(compiles, __traits(getMember, ExtensionModule, name)))
+			string[] dups;
+			Loop: foreach (i, field; fields)
 			{
-				// AliasSeq to workaround AliasSeq members
-				alias symbols = AliasSeq!(__traits(getMember, ExtensionModule, name));
-				static if (symbols.length == 1 && hasUDA!(symbols[0], protocolMethod))
-					enum methodName = getUDAs!(symbols[0], protocolMethod)[0].method;
-				else static if (symbols.length == 1 && hasUDA!(symbols[0], protocolNotification))
-					enum methodName = getUDAs!(symbols[0], protocolNotification)[0].method;
-				else
-					enum methodName = "";
+				static foreach (allowed; config.allowedDuplicateMethods)
+					if (field == allowed)
+						continue Loop;
 
-				static if (methodName.length)
+				if (fields[0 .. i].canFind(field) || fields[i + 1 .. $].canFind(field))
+					dups ~= field;
+			}
+			return dups;
+		}
+
+		static if (is(immutable typeof(ExtensionModule.members) == immutable string[]))
+		{
+			enum duplicates = findDuplicates(ExtensionModule.members);
+			static if (duplicates.length > 0)
+				enum ctfeErrorPrefix = formatCtfeWarning(__traits(getLocation, ExtensionModule.members), "CTFE Error");
+		}
+		else
+		{
+			pragma(msg, "\x1B[1;34mDeprecation: \x1B[m"
+				~ "please change " ~ ExtensionModule.stringof
+				~ "'s `members` definition to `static immutable members = [...]`");
+
+			enum duplicates = findDuplicates([ExtensionModule.members]);
+			static if (duplicates.length > 0)
+				enum ctfeErrorPrefix = "\x1B[1;34mCTFE Error: \x1B[m";
+		}
+
+		static if (duplicates.length > 0)
+		{
+			pragma(msg, ctfeErrorPrefix
+				~ "Cannot define methods with the same name across multiple EventProcessor-covered modules");
+			pragma(msg, "\tduplicates: ", duplicates);
+			static assert(false, "See log above");
+		}
+		else
+		{
+			enum lintWarnings = ctLintEvents();
+			static if (lintWarnings.length > 0)
+			{
+				pragma(msg, lintWarnings);
+				static if (lintWarnings.canFind("Error:"))
+					static assert(false, "Aborting due to EventProcessor errors");
+			}
+
+			private static string ctLintEvents()()
+			{
+				import std.string : chomp;
+
+				static bool isInvalidMethodName(string methodName, AllowedMethods[] allowed)
 				{
-					alias symbol = symbols[0];
-					static if (isSomeFunction!(symbol) && __traits(getProtection, symbol) == "public")
+					if (!allowed.length)
+						return false;
+
+					foreach (a; allowed)
+						foreach (m; a.methods)
+							if (m == methodName)
+								return false;
+					return true;
+				}
+
+				static string formatMethodNameWarning(string methodName, AllowedMethods[] allowed,
+					string codeName, string file, size_t line, size_t column)
+				{
+					string allowedStr = "";
+					foreach (allow; allowed)
 					{
-						alias P = Parameters!symbol;
-						static if (P.length == 1 && is(P[0] == struct)
-							&& staticIndexOf!(nonStandard, __traits(getAttributes, P)) == -1)
+						foreach (m; allow.methods)
 						{
-							enum allowedMethods = getUDAs!(P[0], AllowedMethods);
-							static if (isInvalidMethodName(methodName, [allowedMethods]))
-								lintResult ~= formatMethodNameWarning(methodName, [allowedMethods],
-									name, __traits(getLocation, symbol));
+							if (allowedStr.length)
+								allowedStr ~= ", ";
+							allowedStr ~= "`" ~ m ~ "`";
 						}
 					}
+
+					return formatCtfeWarning(file, line, column)
+						~ "method " ~ codeName ~ " listens for event `" ~ methodName
+						~ "`, but the type has set allowed methods to " ~ allowedStr
+						~ ".\n\t\tNote: check back with the LSP specification, in case this is wrongly tagged or annotate parameter with @nonStandard.\n";
 				}
+
+				string lintResult;
+				static foreach (name; ExtensionModule.members)
+				{{
+					// AliasSeq to workaround AliasSeq members
+					alias symbols = AliasSeq!(__traits(getMember, ExtensionModule, name));
+					static if (symbols.length == 1)
+					{
+						alias symbol = symbols[0];
+
+						static if (__traits(getProtection, symbol) == "public")
+						{
+							static if (getUDAs!(symbol, protocolMethod).length != 0)
+								enum methodName = getUDAs!(symbol, protocolMethod)[0].method;
+							else static if (getUDAs!(symbol, protocolNotification).length != 0)
+								enum methodName = getUDAs!(symbol, protocolNotification)[0].method;
+							else
+								enum methodName = "";
+
+							static if (methodName.length)
+							{
+								alias P = Parameters!symbol;
+								static if (P.length == 1 && is(P[0] == struct)
+									&& staticIndexOf!(nonStandard, __traits(getAttributes, P)) == -1)
+								{
+									enum allowedMethods = getUDAs!(P[0], AllowedMethods);
+									static if (isInvalidMethodName(methodName, [allowedMethods]))
+										lintResult ~= formatMethodNameWarning(methodName, [allowedMethods],
+											name, __traits(getLocation, symbol));
+								}
+							}
+						}
+					}
+				}}
+
+				return lintResult.chomp("\n");
 			}
 		}
-
-		return lintResult.chomp("\n");
 	}
 
 	/// Calls all protocol methods in `ExtensionModule` matching a certain method
@@ -328,39 +365,37 @@ mixin template EventProcessor(alias ExtensionModule, EventProcessorConfig config
 	bool iterateExtensionMethodsByUDA(alias UDA, alias callback, bool returnFirst)()
 	{
 		bool found = false;
-		foreach (name; ExtensionModule.members)
-		{
-			static if (__traits(compiles, __traits(getMember, ExtensionModule, name)))
+		static foreach (name; ExtensionModule.members)
+		{{
+			// AliasSeq to workaround AliasSeq members, which are multiple symbols
+			alias symbols = AliasSeq!(__traits(getMember, ExtensionModule, name));
+			static if (symbols.length == 1
+				&& getUDAs!(symbols[0], UDA).length != 0)
 			{
-				// AliasSeq to workaround AliasSeq members
-				alias symbols = AliasSeq!(__traits(getMember, ExtensionModule, name));
-				static if (symbols.length == 1 && hasUDA!(symbols[0], UDA))
+				static assert (__traits(getOverloads, ExtensionModule, name, true).length == 1,
+					"UDA @" ~ UDA.stringof ~ " annotated method " ~ name
+					~ " has more than one overload, which is not supported. Please rename.");
+				alias symbol = symbols[0];
+				static if (__traits(getProtection, symbol) == "public")
 				{
-					static assert (__traits(getOverloads, ExtensionModule, name, true).length == 1,
-						"UDA @" ~ UDA.stringof ~ " annotated method " ~ name
-						~ " has more than one overload, which is not supported. Please rename.");
-					alias symbol = symbols[0];
-					static if (isSomeFunction!(symbol) && __traits(getProtection, symbol) == "public")
-					{
-						static if (__traits(compiles, { enum uda = getUDAs!(symbol, UDA)[0]; }))
-							enum uda = getUDAs!(symbol, UDA)[0];
-						else
-							enum uda = null;
+					static if (is(typeof(getUDAs!(symbol, UDA)[0])))
+						enum uda = getUDAs!(symbol, UDA)[0];
+					else
+						enum uda = null;
 
-						static if (returnFirst)
-						{
-							if (callback(name, &symbol, uda))
-								return true;
-						}
-						else
-						{
-							if (callback(name, &symbol, uda))
-								found = true;
-						}
+					static if (returnFirst)
+					{
+						if (callback(name, &symbol, uda))
+							return true;
+					}
+					else
+					{
+						if (callback(name, &symbol, uda))
+							found = true;
 					}
 				}
 			}
-		}
+		}}
 
 		return found;
 	}

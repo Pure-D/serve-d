@@ -1122,7 +1122,7 @@ shared static ~this()
 // NOTE: members must be defined at the bottom of this file to make sure mixin
 // templates inside this file are included in it!
 //dfmt off
-alias members = AliasSeq!(
+static immutable members = [AliasSeq!(
 	__traits(derivedMembers, served.extension),
 	__traits(derivedMembers, served.commands.calltips),
 	__traits(derivedMembers, served.commands.code_actions),
@@ -1143,5 +1143,5 @@ alias members = AliasSeq!(
 	__traits(derivedMembers, served.commands.test_provider),
 	__traits(derivedMembers, served.workers.profilegc),
 	__traits(derivedMembers, served.workers.rename_listener),
-);
+)];
 //dfmt on

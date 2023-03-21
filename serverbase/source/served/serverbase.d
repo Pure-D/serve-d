@@ -591,7 +591,7 @@ unittest
 	static struct UTServer
 	{
 	static:
-		alias members = __traits(derivedMembers, UTServer);
+		static immutable members = [__traits(derivedMembers, UTServer)];
 
 		CustomInitializeResult initialize(InitializeParams params)
 		{
