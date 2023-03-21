@@ -48,7 +48,7 @@ struct LanguageServerConfig
 ///
 /// Params:
 ///   ExtensionModule = a module defining the following members:
-///   - `members`: a compile time list of all members in all modules that should
+///   - `moduleMembers`: an AliasSeq list of all imported modules that should
 ///     be introspected to be called automatically on matching RPC commands.
 ///   - `InitializeResult initialize(InitializeParams)`: initialization method.
 ///
@@ -64,7 +64,6 @@ struct LanguageServerConfig
 ///     there is nothing to do.
 mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig serverConfig = LanguageServerConfig.init)
 {
-	static assert(is(typeof(ExtensionModule.members)), "Missing members field in ExtensionModule " ~ ExtensionModule.stringof);
 	static assert(is(typeof(ExtensionModule.initialize)), "Missing initialize function in ExtensionModule " ~ ExtensionModule.stringof);
 
 	import core.sync.mutex;
@@ -87,8 +86,6 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 
 	import io = std.stdio;
 
-	alias members = ExtensionModule.members;
-
 	static if (is(typeof(ExtensionModule.shutdownRequested)))
 		alias shutdownRequested = ExtensionModule.shutdownRequested;
 	else
@@ -96,6 +93,17 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 
 	__gshared bool serverInitializeCalled = false;
 
+	static if (__traits(hasMember, ExtensionModule, "members"))
+		pragma(msg, "\n--------------------------------\n"
+			~ "\x1B[1;34mAPI Change Notice: \x1B[mDeprecation: change " ~ ExtensionModule.stringof
+			~ "'s \x1B[1m`members`\x1B[m field to\n\n\talias memberModules = AliasSeq!(mod1, mod2, ...);\n\t"
+			~ "(excluding the extension module itself)\n\n\t`members` support will be "
+			~ "dropped due to problems with parallel compilation units\n"
+			~ "--------------------------------\n\n");
+	else static if (__traits(hasMember, ExtensionModule, "memberModules"))
+	{ /* ok */ }
+	else
+		static assert(false, "Missing members field in ExtensionModule " ~ ExtensionModule.stringof);
 	mixin EventProcessor!(ExtensionModule, serverConfig.eventConfig) eventProcessor;
 
 	/// Calls a method associated with the given request type in the 
@@ -573,6 +581,7 @@ unittest
 	import std.conv;
 	import std.experimental.logger;
 	import std.stdio;
+	import std.meta;
 
 	import served.lsp.jsonrpc;
 	import served.lsp.protocol;
@@ -591,7 +600,7 @@ unittest
 	static struct UTServer
 	{
 	static:
-		static immutable members = [__traits(derivedMembers, UTServer)];
+		alias memberModules = AliasSeq!();
 
 		CustomInitializeResult initialize(InitializeParams params)
 		{

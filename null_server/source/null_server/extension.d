@@ -4,8 +4,9 @@ import served.lsp.protocol;
 import served.utils.events;
 
 import core.thread;
+import std.meta : AliasSeq;
 
-static immutable members = [__traits(derivedMembers, null_server.extension)];
+alias memberModules = AliasSeq!();
 
 InitializeResult initialize(InitializeParams params)
 {

@@ -1122,26 +1122,25 @@ shared static ~this()
 // NOTE: members must be defined at the bottom of this file to make sure mixin
 // templates inside this file are included in it!
 //dfmt off
-static immutable members = [AliasSeq!(
-	__traits(derivedMembers, served.extension),
-	__traits(derivedMembers, served.commands.calltips),
-	__traits(derivedMembers, served.commands.code_actions),
-	__traits(derivedMembers, served.commands.code_lens),
-	__traits(derivedMembers, served.commands.color),
-	__traits(derivedMembers, served.commands.complete),
-	__traits(derivedMembers, served.commands.dcd_update),
-	__traits(derivedMembers, served.commands.definition),
-	__traits(derivedMembers, served.commands.dub),
-	__traits(derivedMembers, served.commands.file_search),
-	__traits(derivedMembers, served.commands.folding),
-	__traits(derivedMembers, served.commands.format),
-	__traits(derivedMembers, served.commands.highlight),
-	__traits(derivedMembers, served.commands.index),
-	__traits(derivedMembers, served.commands.references),
-	__traits(derivedMembers, served.commands.rename),
-	__traits(derivedMembers, served.commands.symbol_search),
-	__traits(derivedMembers, served.commands.test_provider),
-	__traits(derivedMembers, served.workers.profilegc),
-	__traits(derivedMembers, served.workers.rename_listener),
-)];
+alias memberModules = AliasSeq!(
+	served.commands.calltips,
+	served.commands.code_actions,
+	served.commands.code_lens,
+	served.commands.color,
+	served.commands.complete,
+	served.commands.dcd_update,
+	served.commands.definition,
+	served.commands.dub,
+	served.commands.file_search,
+	served.commands.folding,
+	served.commands.format,
+	served.commands.highlight,
+	served.commands.index,
+	served.commands.references,
+	served.commands.rename,
+	served.commands.symbol_search,
+	served.commands.test_provider,
+	served.workers.profilegc,
+	served.workers.rename_listener,
+);
 //dfmt on
