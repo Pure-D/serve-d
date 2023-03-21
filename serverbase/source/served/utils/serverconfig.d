@@ -122,7 +122,23 @@ mixin template ConfigHandler(TConfig)
 	}
 
 	TConfigHolder[DocumentUri] perWorkspaceConfigurationStore;
-	TConfigHolder* globalConfiguration;
+	TConfigHolder* _globalConfigurationFallback;
+	DocumentUri _globalConfigurationUri;
+
+	TConfigHolder* globalConfiguration(string caller = __FUNCTION__) @safe nothrow
+	{
+		if (!_globalConfigurationUri.length)
+		{
+			if (!_globalConfigurationFallback)
+				assert(false, caller ~ " called while globalConfiguration wasn't initialized");
+			return _globalConfigurationFallback;
+		}
+
+		if (auto config = _globalConfigurationUri in perWorkspaceConfigurationStore)
+			return config;
+
+		return _globalConfigurationFallback;
+	}
 
 	__gshared bool syncedConfiguration = false;
 	__gshared bool syncingConfiguration = false;
@@ -140,9 +156,9 @@ mixin template ConfigHandler(TConfig)
 			perWorkspaceConfigurationStore[workspace.uri] = TConfigHolder.init;
 
 		if (workspaces.length)
-			globalConfiguration = workspaces[0].uri in perWorkspaceConfigurationStore;
+			_globalConfigurationUri = workspaces[0].uri;
 		else
-			globalConfiguration = new TConfigHolder();
+			_globalConfigurationFallback = new TConfigHolder();
 
 		_hasConfigurationCapability = capabilities
 			.workspace.orDefault
@@ -220,8 +236,6 @@ mixin template ConfigHandler(TConfig)
 				warning("This Language Client doesn't support configuration requests and also didn't send any "
 					~ "configuration to serve-d. Initializing using default configuration");
 
-				assert(globalConfiguration, __FUNCTION__ ~ " called while globalConfiguration wasn't initialized");
-
 				emitExtensionEvent!onConfigChanged(ConfigWorkspace.unnamedWorkspace, null, globalConfiguration.config);
 			}
 		}
@@ -285,8 +299,6 @@ mixin template ConfigHandler(TConfig)
 				return processConfigChange(configuration, false);
 			}
 
-			assert(globalConfiguration, __FUNCTION__ ~ " called while globalConfiguration wasn't initialized");
-
 			for (size_t i = 0; i < expected; i++)
 			{
 				const isDefault = i == 0;
@@ -324,7 +336,6 @@ mixin template ConfigHandler(TConfig)
 		else
 		{
 			info("initializing config for global fallback workspace");
-			assert(globalConfiguration, __FUNCTION__ ~ " called while globalConfiguration wasn't initialized");
 
 			auto changed = globalConfiguration.replace(configuration);
 			emitExtensionEvent!onConfigChanged(
@@ -349,7 +360,6 @@ mixin template ConfigHandler(TConfig)
 			}
 			else if (!proj)
 			{
-				assert(globalConfiguration, __FUNCTION__ ~ " called while globalConfiguration wasn't initialized");
 				proj = globalConfiguration;
 			}
 
