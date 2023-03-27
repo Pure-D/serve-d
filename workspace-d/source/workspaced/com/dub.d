@@ -376,6 +376,12 @@ class DubComponent : ComponentWrapper
 		return listDependencies(_dub.project.rootPackage);
 	}
 
+	/// Lists all dependencies that have failed to load in importPath resolution.
+	const(string[]) failedPackages() @property const
+	{
+		return _failedPackages;
+	}
+
 	/// Returns the path to the root package recipe (dub.json/dub.sdl)
 	///
 	/// Note that this can be empty if the package is not in the local file system.

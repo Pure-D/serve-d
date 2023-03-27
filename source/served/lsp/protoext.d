@@ -52,6 +52,8 @@ struct DubDependency
 {
 	/// The name of this package
 	string name;
+	/// `true` if this dependency failed to load.
+	bool failed;
 	/// The installed version of this dependency or null if it isn't downloaded/installed yet
 	@serdeKeys("version")
 	string version_;

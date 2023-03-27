@@ -330,6 +330,7 @@ DubDependency[] listDependencies(ListDependenciesParams params)
 		return ret;
 
 	auto allDeps = instance.get!DubComponent.dependencies;
+	auto failed = instance.get!DubComponent.failedPackages;
 	if (!params.packageName.length)
 	{
 		auto deps = instance.get!DubComponent.rootDependencies;
@@ -337,6 +338,7 @@ DubDependency[] listDependencies(ListDependenciesParams params)
 		{
 			DubDependency r;
 			r.name = dep;
+			r.failed = failed.canFind(dep);
 			r.root = true;
 			foreach (other; allDeps)
 				if (other.name == dep)
@@ -368,6 +370,7 @@ DubDependency[] listDependencies(ListDependenciesParams params)
 		{
 			DubDependency r;
 			r.name = name;
+			r.failed = failed.canFind(name);
 			r.version_ = ver;
 			foreach (other; allDeps)
 				if (other.name == name)
