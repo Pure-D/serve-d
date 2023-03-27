@@ -36,6 +36,9 @@ class DfmtComponent : ComponentWrapper
 	/// Returns: the formatted code as string
 	string formatSync(scope const(char)[] code, string[] arguments = [])
 	{
+		if (!code.strip.length)
+			return null;
+
 		Config config;
 		config.initializeWithDefaults();
 		string configPath;
