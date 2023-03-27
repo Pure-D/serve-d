@@ -66,6 +66,8 @@ DeclarationInfo findDeclarationImpl(WorkspaceD.Instance instance, scope ref Docu
 
 			if (instance.has!DfmtComponent)
 			{
+				trace("Formatting declaration ", [ret.declaration]);
+
 				ret.declaration = instance.get!DfmtComponent.formatSync(ret.declaration,
 					[
 						"--keep_line_breaks=false",
