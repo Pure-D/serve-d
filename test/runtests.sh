@@ -13,8 +13,11 @@ fi
 fail_count=0
 pass_count=0
 
+inCIEnvironment () [[ ! -z "${CI:-}" ]]
+
 echo "Compiling serve-d in release mode with ${DC}..."
 
+inCIEnvironment && echo "::group::Building serve-d"
 pushd ..
 if [ "$DC" = "dmd" ]; then
 	echo "(Debug build because using DMD)"
@@ -23,6 +26,7 @@ else
 	dub build --build=release --compiler="${DC}"
 fi
 popd
+inCIEnvironment && echo "::endgroup::"
 
 tests="${@:1}"
 if [ -z "$tests" ]; then
@@ -33,8 +37,9 @@ echo "Running tests with ${DC}..."
 
 for testCase in $tests; do
 	# GitHub Actions grouping
-	echo "::group::$testCase"
 	echo -e "${YELLOW}$testCase${NORMAL}"
+
+	inCIEnvironment && echo "::group::$testCase"
 	pushd $testCase
 
 	if [ -f .needs_dcd ]; then
@@ -46,17 +51,19 @@ for testCase in $tests; do
 	fi
 
 	dub upgrade 2>&1
+
 	dub --compiler="${DC}" 2>&1
 	if [[ $? -eq 0 ]]; then
+		inCIEnvironment && echo "::endgroup::"
 		echo -e "${YELLOW}$testCase:${NORMAL} ... ${GREEN}Test Pass${NORMAL}";
 		let pass_count=pass_count+1
 	else
+		inCIEnvironment && echo "::endgroup::"
 		echo -e "${YELLOW}$testCase:${NORMAL} ... ${RED}Test Fail${NORMAL}";
 		let fail_count=fail_count+1
 	fi
 
 	popd
-	echo "::endgroup::"
 done
 
 if [[ $fail_count -eq 0 ]]; then
