@@ -193,7 +193,7 @@ int main(string[] args)
 		{
 			writer.writeln("-----------------\n\nTest failed\n\n-----------------\n\n");
 			writer.writeln(message);
-			writeln("Expected fail in ", expect, " but it succeeded. ", message);
+			writeln("Fail ", expect, ": ", message);
 			status = 1;
 		}
 	}

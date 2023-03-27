@@ -325,7 +325,7 @@ TextEdit[] implementMethods(ImplementMethodsParams params)
 
 	auto eol = document.eolAt(0);
 	auto eolStr = eol.toString;
-	auto toImplement = backend.get!DCDExtComponent.implementAll(codeText, cast(int) location,
+	auto toImplement = backend.best!DCDExtComponent(file).implementAll(codeText, cast(int) location,
 			config.d.enableFormatting, generateDfmtArgs(config, eol), implementInterfaceSnippets)
 		.getYield;
 	if (!toImplement.length)
@@ -345,7 +345,7 @@ TextEdit[] implementMethods(ImplementMethodsParams params)
 		}
 	}
 
-	auto existing = backend.get!DCDExtComponent.getInterfaceDetails(file,
+	auto existing = backend.best!DCDExtComponent(file).getInterfaceDetails(file,
 			codeText, cast(int) location);
 	if (existing == InterfaceDetails.init || existing.isEmpty)
 	{

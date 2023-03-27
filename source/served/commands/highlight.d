@@ -59,7 +59,7 @@ package DocumentHighlight[] documentHighlightImpl(scope ref immutable(Document) 
 package DocumentHighlight[] fallbackDocumentHighlight(scope ref immutable(Document) document, int currOffset)
 {
 	string file = document.uri.uriToFile;
-	if (!backend.has!DCDExtComponent)
+	if (!backend.hasBest!DCDExtComponent(file))
 		return null;
 
 	DocumentHighlight[] result;
@@ -68,7 +68,7 @@ package DocumentHighlight[] fallbackDocumentHighlight(scope ref immutable(Docume
 	Position cachePos;
 	size_t cacheBytes;
 
-	foreach (related; backend.get!DCDExtComponent.highlightRelated(codeText, currOffset))
+	foreach (related; backend.best!DCDExtComponent(file).highlightRelated(codeText, currOffset))
 	{
 		auto start = document.nextPositionBytes(cachePos, cacheBytes, related.range[0]);
 		auto end = document.nextPositionBytes(cachePos, cacheBytes, related.range[1]);

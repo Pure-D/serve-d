@@ -14,7 +14,7 @@ Nullable!(FoldingRange[]) provideFoldingRange(FoldingRangeParams params)
 	scope document = documents[params.textDocument.uri];
 	string file = document.uri.uriToFile;
 
-	if (!backend.has!DCDExtComponent)
+	if (!backend.hasBest!DCDExtComponent(file))
 		return typeof(return).init;
 
 	scope codeText = document.rawText;
@@ -23,7 +23,7 @@ Nullable!(FoldingRange[]) provideFoldingRange(FoldingRangeParams params)
 	size_t cacheBytes;
 
 	auto ret = appender!(FoldingRange[]);
-	foreach (range; backend.get!DCDExtComponent.getFoldingRanges(codeText))
+	foreach (range; backend.best!DCDExtComponent(file).getFoldingRanges(codeText))
 	{
 		auto start = document.nextPositionBytes(cachePos, cacheBytes, range.start);
 		auto end = document.nextPositionBytes(cachePos, cacheBytes, range.end);
