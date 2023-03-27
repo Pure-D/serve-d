@@ -31,10 +31,9 @@ public import workspaced.visitors.methodfinder : InterfaceDetails, FieldDetails,
 	MethodDetails, ArgumentInfo;
 
 @component("dcdext")
-@globalOnly
 class DCDExtComponent : ComponentWrapper
 {
-	mixin DefaultGlobalComponentWrapper;
+	mixin DefaultComponentWrapper;
 
 	static immutable CodeRegionProtection[] mixableProtection = [
 		CodeRegionProtection.public_ | CodeRegionProtection.default_,

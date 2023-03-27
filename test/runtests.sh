@@ -32,6 +32,8 @@ fi
 echo "Running tests with ${DC}..."
 
 for testCase in $tests; do
+	# GitHub Actions grouping
+	echo "::group::$testCase"
 	echo -e "${YELLOW}$testCase${NORMAL}"
 	pushd $testCase
 
@@ -54,6 +56,7 @@ for testCase in $tests; do
 	fi
 
 	popd
+	echo "::endgroup::"
 done
 
 if [[ $fail_count -eq 0 ]]; then
