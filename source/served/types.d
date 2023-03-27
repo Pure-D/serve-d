@@ -388,6 +388,8 @@ ref Workspace bestWorkspaceByDependency(string uri)
 			continue;
 		foreach (folder; chain(inst.importPaths, inst.importFiles, inst.stringImportPaths))
 		{
+			if (!isAbsolute(folder))
+				folder = buildNormalizedPath(inst.cwd, folder);
 			string folderUri = folder.uriFromFile;
 			if (folderUri.length > bestLength && uri.startsWith(folderUri))
 			{
