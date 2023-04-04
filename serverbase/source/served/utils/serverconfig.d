@@ -175,17 +175,27 @@ mixin template ConfigHandler(TConfig)
 			// Editor extensions can use `nonStandardConfiguration` to
 			// circumvent limitations in the LSP frameworks they have to work
 			// with.
-			auto options = params.initializationOptions.deref.get!(StringMap!JsonValue);
+			//
+			// Users of nonStandardConfiguration: Nova D-veleop extension
+			auto optionsRaw = params.initializationOptions.deref;
+			if (optionsRaw.kind == JsonValue.Kind.object)
+			{
+				auto options = optionsRaw.get!(StringMap!JsonValue);
 
-			const nsc = "nonStandardConfiguration" in options;
-			if (nsc) {
-				nonStandardConfiguration = nsc.get!bool;
+				const nsc = "nonStandardConfiguration" in options;
+				if (nsc) {
+					nonStandardConfiguration = nsc.get!bool;
+				}
+
+				const settings = "startupConfiguration" in options;
+				if (settings) {
+					initializeConfig = new TConfig();
+					*initializeConfig = jsonValueTo!TConfig(*settings);
+				}
 			}
-
-			const settings = "startupConfiguration" in options;
-			if (settings) {
-				initializeConfig = new TConfig();
-				*initializeConfig = jsonValueTo!TConfig(*settings);
+			else
+			{
+				warning("initializationOptions is not an object, cannot use it for config initialization");
 			}
 		}
 	}
