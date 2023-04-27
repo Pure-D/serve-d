@@ -337,8 +337,9 @@ private string prepareDDoc(string str)
 	str = str.preProcessContent;
 
 	auto lex = Lexer(str, true);
-	string output;
-	foreach (tok; lex)
+	auto output = appender!string;
+
+	void process(const(Token) tok)
 	{
 		if (tok.type == Type.embedded || tok.type == Type.inlined)
 		{
@@ -351,12 +352,284 @@ private string prepareDDoc(string str)
 			output ~= tok.text;
 			output ~= ")";
 		}
+		else if (tok.type == Type.dollar)
+		{
+			lex.popFront;
+			if (lex.empty)
+				output ~= "$";
+			else if (lex.front.type != Type.lParen)
+			{
+				output ~= "$";
+				process(lex.front);
+			}
+			else
+			{
+				lex.popFront;
+				if (lex.empty)
+					output ~= "$(";
+				else if (lex.front.text.isSpecialMacro)
+				{
+					matchSpecialMacro(output, lex);
+				}
+				else
+				{
+					output ~= "$(";
+					process(lex.front);
+				}
+			}
+		}
 		else
 		{
 			output ~= tok.text;
 		}
 	}
-	return output;
+
+	while (!lex.empty)
+	{
+		process(lex.front);
+		lex.popFront;
+	}
+	return output.data;
+}
+
+bool isSpecialMacro(string macroName)
+{
+	return macroName == "TABLE2"
+		|| macroName == "P";
+}
+
+string processSpecialMacro(string macroName, string ddoc)
+{
+	if (macroName == "TABLE2")
+	{
+		auto parts = ddoc.findSplit(",");
+		return parts[0] // table heading
+			~ "\n\n"
+			~ processDdocTableMacro(parts[2]);
+	}
+	else if (macroName == "P")
+	{
+		string dedented(string s)
+		{
+			auto leadingSpaces = s[0 .. $ - s.stripLeft.length];
+			return s
+				.lineSplitter!(KeepTerminator.yes)
+				.map!(line => line.startsWith(leadingSpaces) ? line[leadingSpaces.length .. $] : line)
+				.join();
+		}
+
+		if (ddoc.startsWith("\r\n"))
+		{
+			ddoc = ddoc[2 .. $];
+			return "$(P\n" ~ dedented(ddoc) ~ ")";
+		}
+		else if (ddoc.startsWith("\n", "\r"))
+		{
+			ddoc = ddoc[1 .. $];
+			return "$(P\n" ~ dedented(ddoc) ~ ")";
+		}
+		else
+			return "$(P " ~ ddoc ~ ")";
+	}
+	else
+		assert(false, "Unknown special macro, don't know why this method was called");
+}
+
+unittest
+{
+	assert(processSpecialMacro("TABLE2", `getFunctionVariadicStyle,
+    $(THEAD result, kind, access, example)
+    $(TROW $(D "none"), not a variadic function, $(NBSP), $(D void foo();))
+    $(TROW $(D "argptr"), D style variadic function, $(D _argptr) and $(D _arguments), $(D void bar(...)))
+    $(TROW $(D "stdarg"), C style variadic function, $(LINK2 $(ROOT_DIR)phobos/core_stdc_stdarg.html, $(D core.stdc.stdarg)), $(D extern (C) void abc(int, ...)))
+    $(TROW $(D "typesafe"), typesafe variadic function, array on stack, $(D void def(int[] ...)))
+`) == `getFunctionVariadicStyle
+
+| result | kind | access | example |
+| --- | --- | --- | --- |
+| $(D "none") | not a variadic function | $(NBSP) | $(D void foo();) |
+| $(D "argptr") | D style variadic function | $(D _argptr) and $(D _arguments) | $(D void bar(...)) |
+| $(D "stdarg") | C style variadic function | $(LINK2 $(ROOT_DIR)phobos/core_stdc_stdarg.html, $(D core.stdc.stdarg)) | $(D extern (C) void abc(int, ...)) |
+| $(D "typesafe") | typesafe variadic function | array on stack | $(D void def(int[] ...)) |
+`, processSpecialMacro("TABLE2", `getFunctionVariadicStyle,
+    $(THEAD result, kind, access, example)
+    $(TROW $(D "none"), not a variadic function, $(NBSP), $(D void foo();))
+    $(TROW $(D "argptr"), D style variadic function, $(D _argptr) and $(D _arguments), $(D void bar(...)))
+    $(TROW $(D "stdarg"), C style variadic function, $(LINK2 $(ROOT_DIR)phobos/core_stdc_stdarg.html, $(D core.stdc.stdarg)), $(D extern (C) void abc(int, ...)))
+    $(TROW $(D "typesafe"), typesafe variadic function, array on stack, $(D void def(int[] ...)))
+`));
+}
+
+string processDdocTableMacro(string ddoc)
+{
+	auto ret = appender!string;
+	int columnCount = 0;
+
+	void processRow(bool header)
+	{
+		bool shouldBeHeader = columnCount == 0;
+		if (header != shouldBeHeader)
+		{
+			// malformed table / undisplayable in markdown
+			ret ~= ddoc;
+			ddoc = null;
+			return;
+		}
+
+		auto row = extractUntilClosingParenAndDropParen(ddoc);
+		auto parts = row.splitOutsideParens;
+		if (header)
+			columnCount = cast(int)parts.length;
+		else
+		{
+			while (parts.length < columnCount)
+				parts ~= "";
+		}
+
+		foreach (part; parts)
+		{
+			ret ~= "| ";
+			ret ~= part.strip;
+			ret ~= " ";
+		}
+		ret ~= "|\n";
+
+		if (header)
+		{
+			foreach (i; 0 .. columnCount)
+				ret ~= "| --- ";
+			ret ~= "|\n";
+		}
+	}
+
+	while (ddoc.length)
+	{
+		ddoc = ddoc.stripLeft();
+		switch (ddoc.startsWith("$(THEAD", "$(TROW"))
+		{
+			case 1:
+				ddoc = ddoc["$(THEAD".length .. $].chompPrefix(" ");
+				processRow(true);
+				break;
+			case 2:
+				ddoc = ddoc["$(TROW".length .. $].chompPrefix(" ");
+				processRow(false);
+				break;
+			default:
+				ret ~= ddoc;
+				ddoc = null;
+				break;
+		}
+	}
+	return ret.data;
+}
+
+void matchSpecialMacro(T)(ref T output, ref Lexer lex)
+in (lex.front.type == Type.word)
+out (; lex.empty || lex.front.type == Type.rParen)
+{
+	string macroName = lex.front.text;
+	lex.popFront;
+	auto content = appender!string;
+	int depth = 1;
+	while (!lex.empty)
+	{
+		if (lex.front.type == Type.rParen)
+			depth--;
+		else if (lex.front.type == Type.lParen)
+			depth++;
+
+		if (depth == 0)
+			break;
+		content ~= lex.front.text;
+		lex.popFront;
+	}
+
+	output ~= processSpecialMacro(macroName, content.data);
+}
+
+private ptrdiff_t indexOfClosingParenBalanced(string s, ptrdiff_t i)
+in(s[i] == '(')
+{
+	int depth = 0;
+	do
+	{
+		if (s[i] == '(')
+			depth++;
+		else if (s[i] == ')')
+			depth--;
+	} while (depth != 0 && ++i < s.length);
+
+	if (i >= s.length)
+		return -1;
+	return i;
+}
+
+private string extractUntilClosingParenAndDropParen(ref string s)
+{
+	string source = s;
+	int depth = 1;
+	while (depth > 0 && s.length)
+	{
+		if (s[0] == ')')
+			depth--;
+		else if (s[0] == '(')
+			depth++;
+		s = s[1 .. $];
+	}
+	return source[0 .. $ - s.length - (depth == 0 ? 1 : 0)];
+}
+
+private string[] splitOutsideParens(string s)
+{
+	string[] ret;
+	size_t i;
+	while (i < s.length)
+	{
+		auto next = s.indexOfAny("(,", i);
+
+		while (next != -1 && s[next] == '(')
+		{
+			next = s.indexOfClosingParenBalanced(next);
+			if (next != -1)
+				next = s.indexOfAny("(,", next);
+		}
+
+		if (next == -1)
+			break;
+
+		assert(s[next] == ',');
+		ret ~= s[i .. next];
+		i = next + 1;
+	}
+
+	if (i != s.length)
+		ret ~= s[i .. $];
+	return ret;
+}
+
+unittest
+{
+	void testExtract(string input, string expected, string remaining)
+	{
+		assert(extractUntilClosingParenAndDropParen(input) == expected);
+		assert(input == remaining);
+	}
+
+	testExtract("foobar", "foobar", "");
+	testExtract("foo)", "foo", "");
+	testExtract("foo(", "foo(", "");
+	testExtract("foo) bar", "foo", " bar");
+	testExtract("foo()) bar", "foo()", " bar");
+	testExtract("foo(xd())) bar", "foo(xd())", " bar");
+
+	assert(splitOutsideParens("foo, bar") == ["foo", " bar"]);
+	assert(splitOutsideParens("foo(), bar") == ["foo()", " bar"]);
+	assert(splitOutsideParens("foo(,), bar") == ["foo(,)", " bar"]);
+	assert(splitOutsideParens("foo(a,b), bar") == ["foo(a,b)", " bar"]);
+	assert(splitOutsideParens("foo(a,b), bar()") == ["foo(a,b)", " bar()"]);
+	assert(splitOutsideParens("foo(a,b,)), bar(a)") == ["foo(a,b,))", " bar(a)"]);
+	assert(splitOutsideParens("foo(a,b), bar(a,)") == ["foo(a,b)", " bar(a,)"]);
 }
 
 static immutable inlineRefPrefix = "__CODED_INLINE_REF__:";
@@ -456,7 +729,14 @@ $(BODY)`,
 		`DDOC_PSYMBOL`: `$(U $0)`,
 		`DDOC_PSUPER_SYMBOL`: `$(U $0)`,
 		`DDOC_KEYWORD`: `$(B $0)`,
-		`DDOC_PARAM`: `$(I $0)`
+		`DDOC_PARAM`: `$(I $0)`,
+
+		// from __traits() auto-completion / built-ins that the user is likely to see
+		`SPEC_RUNNABLE_EXAMPLE_COMPILE`: `$0`,
+		`GLINK`: `**$0**`,
+		`CONSOLE`: `$(BACKTICK)$(BACKTICK)$(BACKTICK)
+$0
+$(BACKTICK)$(BACKTICK)$(BACKTICK)`,
 	];
 }
 
@@ -525,4 +805,60 @@ There is more content.
 	//dfmt on
 
 	assert(ddocToMarkdown(comment) == commentMarkdown);
+}
+
+@("long paragraph")
+unittest
+{
+	auto comment = `$(P Takes a single argument, which must evaluate to either
+a module, a struct, a union, a class, an interface, an enum, or a
+template instantiation.
+
+A sequence of string literals is returned, each of which
+is the name of a member of that argument combined with all
+of the members of its base classes (if the argument is a class).
+No name is repeated.
+Builtin properties are not included.
+)`;
+
+	auto commentMarkdown = `
+
+Takes a single argument, which must evaluate to either
+a module, a struct, a union, a class, an interface, an enum, or a
+template instantiation.
+
+
+
+A sequence of string literals is returned, each of which
+is the name of a member of that argument combined with all
+of the members of its base classes (if the argument is a class).
+No name is repeated.
+Builtin properties are not included.
+)
+
+`;
+	// TODO: trailing parentheses here, because Comment.parse/splitSections split the paragraph!
+
+	assert(ddocToMarkdown(comment) == commentMarkdown, '"' ~ ddocToMarkdown(comment) ~ '"');
+}
+
+@("indented paragraph")
+unittest
+{
+	auto comment = `$(P
+    For more information, see: $(DDSUBLINK spec/attribute, uda, User-Defined Attributes)
+)`;
+
+	auto commentMarkdown = `
+
+For more information, see: 
+
+
+
+
+
+
+`;
+
+	assert(ddocToMarkdown(comment) == commentMarkdown, '"' ~ ddocToMarkdown(comment) ~ '"');
 }
