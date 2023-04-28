@@ -14,3 +14,4 @@ __dummy.html
 /version.txt
 /bin/
 *.lst
+/build/
