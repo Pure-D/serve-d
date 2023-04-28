@@ -634,8 +634,8 @@ unittest
 
 static immutable inlineRefPrefix = "__CODED_INLINE_REF__:";
 
-string[string] markdownMacros;
-static this()
+__gshared string[string] markdownMacros;
+shared static this()
 {
 	markdownMacros = [
 		`B`: `**$0**`,
@@ -652,12 +652,13 @@ $0
 		`DD`: `
 
 * $0`,
-		`TABLE`: `$0`,
+		`TABLE`: `\n$0\n`,
+		`TABLE_SV`: `\n$0\n`,
 		`TR`: `$0|`,
 		`TH`: `| **$0** `,
 		`TD`: `| $0 `,
-		`OL`: `$0`,
-		`UL`: `$0`,
+		`OL`: `\n$0\n`,
+		`UL`: `\n$0\n`,
 		`LI`: `* $0`,
 		`LINK`: `[$0]$(LPAREN)$0$(RPAREN)`,
 		`LINK2`: `[$+]$(LPAREN)$1$(RPAREN)`,
@@ -670,12 +671,12 @@ $0
 		`LREF`: `[$(BACKTICK)$0$(BACKTICK)](command$(COLON)code-d.navigateLocal?$0)`,
 		`REF`: `[$(BACKTICK)` ~ inlineRefPrefix ~ `$+.$1$(BACKTICK)](command$(COLON)code-d.navigateGlobal?`
 		~ inlineRefPrefix ~ `$+.$1)`,
-		`RED`: `<font color=red>**$0**</font>`,
-		`BLUE`: `<font color=blue>$0</font>`,
-		`GREEN`: `<font color=green>$0</font>`,
-		`YELLOW`: `<font color=yellow>$0</font>`,
-		`BLACK`: `<font color=black>$0</font>`,
-		`WHITE`: `<font color=white>$0</font>`,
+		`RED`: `<span style="color:#cc0000;">**$0**</span>`,
+		`BLUE`: `<span style="color:#0088cc;">$0</span>`,
+		`GREEN`: `<span style="color:#00cc00;">$0</span>`,
+		`YELLOW`: `<span style="color:#ddaa00;">$0</span>`,
+		`BLACK`: `<span style="color:#333333;">$0</span>`,
+		`WHITE`: `<span style="color:#cccccc;">$0</span>`,
 		`D_CODE`: "$(BACKTICK)$(BACKTICK)$(BACKTICK)d
 $0
 $(BACKTICK)$(BACKTICK)$(BACKTICK)",
