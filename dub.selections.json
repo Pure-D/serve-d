@@ -29,6 +29,8 @@
 		"openssl": "3.3.0",
 		"requests": "2.0.9",
 		"rm-rf": "0.1.0",
+		"sdlfmt": "0.1.1",
+		"sdlite": "1.1.2",
 		"silly": "1.1.1",
 		"standardpaths": "0.8.2",
 		"stdx-allocator": "2.77.5",

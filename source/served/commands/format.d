@@ -129,15 +129,42 @@ void tryFindFormattingSettings(UserConfiguration config, Document document)
 TextEdit[] provideFormatting(DocumentFormattingParams params)
 {
 	auto config = workspace(params.textDocument.uri).config;
-	if (!config.d.enableFormatting)
-		return [];
 	auto document = documents[params.textDocument.uri];
-	if (document.languageId != "d")
+	string result;
+	if (document.languageId == "d")
+	{
+		if (!config.d.enableFormatting)
+			return [];
+		gFormattingOptionsApplyOn = params.textDocument.uri;
+		gFormattingOptions = ResolvedFormattingOptions(params.options);
+		result = backend.get!DfmtComponent.format(document.rawText,
+				generateDfmtArgs(config, document.eolAt(0))).getYield;
+	}
+	else if (document.languageId == "sdl")
+	{
+		if (!config.sdl.enableFormatting)
+			return [];
+
+		import sdlfmt;
+		import std.array : array;
+		import std.range : repeat;
+
+		SdlFmtConfig fmt = {
+			indent: params.options.insertSpaces
+				? cast(string)' '.repeat(params.options.tabSize).array
+				: "\t",
+			lineEnding: document.eolAt(0).toString,
+			whitespaceAroundEquals: config.sdl.whitespaceAroundEquals,
+			backslashTempIndent: config.sdl.backslashTempIndent,
+		};
+
+		result = fmt.format(document.rawText, params.textDocument.uri);
+	}
+	else
+	{
+		trace("attemted to format code that has unsupported language: '", document.languageId, "'");
 		return [];
-	gFormattingOptionsApplyOn = params.textDocument.uri;
-	gFormattingOptions = ResolvedFormattingOptions(params.options);
-	auto result = backend.get!DfmtComponent.format(document.rawText,
-			generateDfmtArgs(config, document.eolAt(0))).getYield;
+	}
 	return diff(document, result);
 }
 

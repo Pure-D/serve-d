@@ -129,6 +129,14 @@ struct Configuration
 		string[] ignoredKeys;
 	}
 
+	struct SDL
+	{
+		@serdeOptional:
+		bool enableFormatting = true;
+		bool whitespaceAroundEquals = false;
+		int backslashTempIndent = 2;
+	}
+
 	struct Editor
 	{
 		@serdeOptional:
@@ -145,6 +153,7 @@ struct Configuration
 	D d;
 	DFmt dfmt;
 	DScanner dscanner;
+	SDL sdl;
 	Editor editor;
 	Git git;
 

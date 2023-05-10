@@ -13,7 +13,8 @@
 		"serve-d:lsp": "*",
 		"serve-d:serverbase": "*",
 		"serve-d:workspace-d": "*",
-		"fuzzymatch": "~>1.0.0"
+		"fuzzymatch": "~>1.0.0",
+		"sdlfmt": "~>0.1.1"
 	},
 	"stringImportPaths": [
 		"views"
