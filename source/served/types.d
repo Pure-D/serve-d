@@ -81,6 +81,7 @@ struct Configuration
 		bool enableStaticLinting = true;
 		bool enableDubLinting = true;
 		bool enableAutoComplete = true;
+		bool enableAutoImportCompletions = true;
 		bool enableFormatting = true;
 		bool enableIndex = true;
 		bool enableDMDImportTiming = false;

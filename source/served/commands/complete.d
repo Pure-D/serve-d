@@ -622,7 +622,7 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 		else
 			snippetInfo = getSnippetInfo(instance, document, byteOff);
 	}, {
-		if (completeIndex && config.d.enableIndex && prefixIdentifier.length)
+		if (completeIndex && config.d.enableIndex && config.d.enableAutoImportCompletions && prefixIdentifier.length)
 			provideAutoImports(params, instance, document, completion, byteOff, prefixIdentifier);
 	});
 
