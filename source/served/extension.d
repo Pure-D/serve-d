@@ -260,6 +260,13 @@ InitializeResult initialize(InitializeParams params)
 	}
 
 	InitializeResult result;
+	SaveOptions save = {
+		includeText: false,
+	};
+	TextDocumentSyncOptions textDocumentSync = {
+		change: documents.syncKind,
+		save: save,
+	};
 	CompletionOptions completionProvider = {
 		resolveProvider: doCompleteSnippets,
 		triggerCharacters: [
@@ -285,7 +292,7 @@ InitializeResult initialize(InitializeParams params)
 	};
 	FoldingRangeOptions foldingRangeProvider;
 	ServerCapabilities serverCapabilities = {
-		textDocumentSync: documents.syncKind,
+		textDocumentSync: textDocumentSync,
 		// only provide fixes when doCompleteSnippets is requested
 		completionProvider: completionProvider,
 		referencesProvider: true,
