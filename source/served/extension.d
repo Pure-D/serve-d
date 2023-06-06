@@ -264,6 +264,7 @@ InitializeResult initialize(InitializeParams params)
 		includeText: false,
 	};
 	TextDocumentSyncOptions textDocumentSync = {
+		openClose: true,
 		change: documents.syncKind,
 		save: save,
 	};
