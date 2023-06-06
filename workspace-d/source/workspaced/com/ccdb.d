@@ -166,6 +166,8 @@ public struct CompileCommand
 	string[] args;
 	string output;
 
+	private bool argsAdjusted;
+
 	private static CompileCommand fromJson(JSONValue json)
 	{
 		import std.algorithm : map;
@@ -233,22 +235,87 @@ public struct CompileCommand
 		return absolutePath(filename, directory);
 	}
 
-	Future!(BuildIssue[]) run() const
+	Future!(BuildIssue[]) run()
 	{
-		import std.algorithm : canFind, remove;
 		import std.process : Config, execute;
 
+		if (!argsAdjusted)
+		{
+			argsAdjusted = true;
+			adjustArgs();
+		}
+
 		return Future!(BuildIssue[]).async({
-			trace("stripping color from ", args);
-			string[] program = args.dup.remove!(a => a.canFind("-color=on") || a.canFind(
-				"-enable-color"));
-			trace("running ", program);
-			auto res = execute(program, null, Config.none, size_t.max, directory);
+			trace("running ", args);
+			auto res = execute(args, null, Config.none, size_t.max, directory);
 			trace(res.status, " ", res.output);
 			auto issues = parseBuildIssues(res.output);
 			trace("found ", issues.length, " issue(s)!");
 			return issues;
 		});
+	}
+
+	private void adjustArgs() nothrow
+	{
+		import std.algorithm : canFind, remove, startsWith;
+
+		// determine compiler
+		const exe = args.length ? args[0].baseName : null;
+		if (!exe)
+			return;
+
+		const isDmd = exe.canFind("dmd");
+		const isLdc = !isDmd && exe.canFind("ldc");
+		const isGdc = !isDmd && !isLdc && exe.canFind("gdc");
+
+		if (!isDmd && !isLdc && !isGdc)
+			return;
+
+		version (Posix)
+			enum nulFile = "/dev/null";
+		else version (Windows)
+			enum nulFile = "NUL";
+
+		if (isDmd || isLdc)
+		{
+			const ofArg = isDmd ? "-of" : "--of=";
+			const columnsArg = isDmd ? "-vcolumns" : "--vcolumns";
+			bool foundColumns;
+
+			for (size_t i = 1; i < args.length; ++i)
+			{
+				if (args[i].startsWith(ofArg))
+				{
+					args[i] = ofArg ~ nulFile;
+				}
+				else if (args[i] == columnsArg)
+				{
+					foundColumns = true;
+				}
+				else if (isDmd && args[i].startsWith("-color"))
+				{
+					args[i] = "-color=off";
+				}
+				else if (isLdc && args[i].startsWith("--enable-color"))
+				{
+					args[i] = "--disable-color";
+				}
+			}
+
+			if (!foundColumns)
+				args ~= columnsArg;
+		}
+		else if (isGdc)
+		{
+			for (size_t i = 1; i < args.length; ++i)
+			{
+				if (args[i] == "-o" && (i + 1) < args.length)
+				{
+					args[i + 1] = nulFile;
+					break;
+				}
+			}
+		}
 	}
 }
 
