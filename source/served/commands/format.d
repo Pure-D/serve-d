@@ -8,6 +8,7 @@ import workspaced.com.snippets : SnippetLevel;
 import workspaced.coms;
 
 import std.conv : to;
+import std.experimental.logger : trace;
 import std.json;
 import std.string;
 
