@@ -120,7 +120,7 @@ void lint(Document document)
 			auto uri = uriFromFile(command.getPath(issue.file));
 
 			Diagnostic error;
-			error.range = TextRange(issue.line - 1, issue.column - 1, issue.line - 1, uint.max);
+			error.range = TextRange(issue.line - 1, issueColumn(issue.column), issue.line - 1, uint.max);
 			applyDubLintType(error, issue.type);
 			error.source = CcdbDiagnosticSource;
 			error.message = issue.text;
@@ -129,8 +129,9 @@ void lint(Document document)
 						DiagnosticRelatedInformation related;
 						string otherUri = other.file != issue.file ? command.getPath(
 						other.file) : uri;
-						related.location = Location(otherUri, TextRange(other.line - 1,
-						other.column - 1, other.line - 1, uint.max));
+						related.location = Location(
+							otherUri, TextRange(other.line - 1, issueColumn(other.column), other.line - 1, uint.max)
+						);
 						related.message = other.text;
 						return related;
 					}).array);
@@ -151,8 +152,9 @@ void lint(Document document)
 						continue;
 
 					Diagnostic supplError;
-					supplError.range = TextRange(suppl.line - 1, suppl.column - 1, suppl.line - 1, uint
-							.max);
+					supplError.range = TextRange(
+						suppl.line - 1, issueColumn(suppl.column), suppl.line - 1, uint.max
+					);
 					applyDubLintType(supplError, issue.type);
 					supplError.source = CcdbDiagnosticSource;
 					supplError.message = issue.text ~ "\n" ~ suppl.text;
@@ -169,6 +171,11 @@ void lint(Document document)
 		updateDiagnostics();
 	}
 	while (statusp.retryAtEnd);
+}
+
+int issueColumn(const int column) pure
+{
+	return column > 0 ? column - 1 : 0;
 }
 
 void clear()
