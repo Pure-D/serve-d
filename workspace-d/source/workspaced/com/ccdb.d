@@ -6,6 +6,7 @@ module workspaced.com.ccdb;
 import std.exception;
 import std.json;
 import std.path;
+import std.string;
 import fs = std.file;
 
 import workspaced.api;
@@ -144,7 +145,7 @@ class ClangCompilationDatabaseComponent : ComponentWrapper
 	/// in the database.
 	CompileCommand getCompileCommand(string filename) @property
 	{
-		auto normalized = buildNormalizedPath(filename);
+		const normalized = normalizedCcdbPath(filename);
 		auto ccp = normalized in _compileCommands;
 		if (ccp)
 			return *ccp;
@@ -171,8 +172,10 @@ public class CompileCommand
 		import std.algorithm : map;
 		import std.array : array;
 
-		this.directory = enforce("directory" in json, "'directory' missing from Clang compilation database entry")
-			.str;
+		this.directory = normalizedCcdbPath(
+			enforce("directory" in json, "'directory' missing from Clang compilation database entry")
+				.str
+		);
 		this.file = enforce("file" in json, "'file' missing from Clang compilation database entry")
 			.str;
 
@@ -209,7 +212,7 @@ public class CompileCommand
 
 	string getNormalizedFilePath() const
 	{
-		return getPath(file).buildNormalizedPath();
+		return normalizedCcdbPath(getPath(file));
 	}
 
 	string getPath(string filename) const
@@ -301,6 +304,17 @@ public class CompileCommand
 			}
 		}
 	}
+}
+
+string normalizedCcdbPath(string filePath)
+{
+	const normalized = filePath.buildNormalizedPath();
+	// Let the drive be lower case on Windows (not handled by buildNormalizedPath).
+	// This is needed because commands are resolved by simple string comparison.
+	version (Windows)
+		return driveName(normalized).toLower() ~ stripDrive(normalized);
+	else
+		return normalized;
 }
 
 void feedOptions(
