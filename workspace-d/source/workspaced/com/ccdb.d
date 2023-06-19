@@ -84,15 +84,13 @@ class ClangCompilationDatabaseComponent : ComponentWrapper
 			// two represention of the same data
 			jsonString = null;
 
-			auto ccRng = json.array
-				.map!(jv => CompileCommand.fromJson(jv))
-				.filter!(cc => cc.isValid);
-
-			foreach (cc; ccRng)
-			{
-				cc.feedOptions(imports, stringImports, fileImports, versions, debugVersions);
-				_compileCommands[cc.getNormalizedFilePath()] = cc;
-			}
+			json.array
+				.map!(jv => new CompileCommand(jv))
+				.filter!(cc => cc.isValid)
+				.each!((cc) {
+					cc.feedOptions(imports, stringImports, fileImports, versions, debugVersions);
+					_compileCommands[cc.getNormalizedFilePath()] = cc;
+				});
 		}
 
 		_importPaths = imports[].array;
@@ -149,8 +147,8 @@ class ClangCompilationDatabaseComponent : ComponentWrapper
 		auto normalized = buildNormalizedPath(filename);
 		auto ccp = normalized in _compileCommands;
 		if (ccp)
-			return ccp.dup;
-		return CompileCommand.init;
+			return *ccp;
+		return null;
 	}
 
 private:
@@ -159,7 +157,7 @@ private:
 	CompileCommand[string] _compileCommands;
 }
 
-public struct CompileCommand
+public class CompileCommand
 {
 	string directory;
 	string file;
@@ -168,25 +166,23 @@ public struct CompileCommand
 
 	private bool argsAdjusted;
 
-	private static CompileCommand fromJson(JSONValue json)
+	private this(JSONValue json)
 	{
 		import std.algorithm : map;
 		import std.array : array;
 
-		CompileCommand cc;
-
-		cc.directory = enforce("directory" in json, "'directory' missing from Clang compilation database entry")
+		this.directory = enforce("directory" in json, "'directory' missing from Clang compilation database entry")
 			.str;
-		cc.file = enforce("file" in json, "'file' missing from Clang compilation database entry")
+		this.file = enforce("file" in json, "'file' missing from Clang compilation database entry")
 			.str;
 
 		if (auto args = "arguments" in json)
 		{
-			cc.args = args.array.map!(jv => jv.str).array;
+			this.args = args.array.map!(jv => jv.str).array;
 		}
 		else if (auto cmd = "command" in json)
 		{
-			cc.args = unescapeCommand(cmd.str);
+			this.args = unescapeCommand(cmd.str);
 		}
 		else
 		{
@@ -196,10 +192,8 @@ public struct CompileCommand
 
 		if (auto o = "output" in json)
 		{
-			cc.output = o.str;
+			this.output = o.str;
 		}
-
-		return cc;
 	}
 
 	@property bool isValid() const
@@ -211,16 +205,6 @@ public struct CompileCommand
 		if (!file.endsWith(".d"))
 			return false;
 		return true;
-	}
-
-	bool opCast(T : bool)() const
-	{
-		return isValid;
-	}
-
-	@property CompileCommand dup() const
-	{
-		return CompileCommand(directory, file, args.dup, output);
 	}
 
 	string getNormalizedFilePath() const
