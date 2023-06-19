@@ -19,7 +19,12 @@ DocumentUri uriFromFile(scope const(char)[] file)
 	if ((!isAbsolute(file) && !file.startsWith("/"))
 		|| !file.length)
 		throw new Exception(text("Tried to pass relative path '", file, "' to uriFromFile"));
-	file = file.buildNormalizedPath.replace("\\", "/");
+	file = file.buildNormalizedPath();
+	version(Windows)
+	{
+		file = file.replace("\\", "/");
+		file = driveName(file).toLower() ~ stripDrive(file);
+	}
 	assert(file.length);
 	if (file.ptr[0] != '/')
 		file = '/' ~ file; // always triple slash at start but never quad slash
@@ -34,7 +39,7 @@ unittest
 
 	version (Windows)
 	{
-
+		assertEquals(uriFromFile(`C:\Home\foo\bar.d`), `file://c%3A/Home/foo/bar.d`);
 	}
 	else
 	{
@@ -283,7 +288,7 @@ unittest
 {
 	assertEquals(uriNormalize(`b/../a.d`), `a.d`);
 	assertEquals(uriNormalize(`b/../../a.d`), `../a.d`);
-	
+
 	foreach (prefix; ["file:///", "file://", "", "/", "//"])
 	{
 		assertEquals(uriNormalize(prefix ~ `foo/bar/./a.d`), prefix ~ `foo/bar/a.d`);
