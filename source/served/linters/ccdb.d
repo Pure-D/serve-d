@@ -78,11 +78,13 @@ void lint(Document document)
 	scope (exit)
 		statusp.running = false;
 
+	removeForDoc();
+
 	do
 	{
 		statusp.retryAtEnd = false;
 
-		tracef("running CCDB command for ", document.uri);
+		tracef("running CCDB command for %s", document.uri);
 		auto issues = command.run().getYield();
 		auto result = appender!(PublishDiagnosticsParams[]);
 
@@ -105,7 +107,6 @@ void lint(Document document)
 
 			auto issue = issues.front;
 			issues.popFront();
-			tracef("issue %s", issue);
 			int numSupplemental = cast(int) issues.length;
 			foreach (i, other; issues)
 				if (!other.cont)
