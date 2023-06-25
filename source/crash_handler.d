@@ -1,6 +1,8 @@
 module crash_handler;
 
-version (linux)
+version (CRuntime_Musl)
+	enum BacktraceHandler = false;
+else version (linux)
 	enum BacktraceHandler = true;
 else version (OSX)
 	enum BacktraceHandler = true;
