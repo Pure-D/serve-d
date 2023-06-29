@@ -27,7 +27,7 @@
 		"mir-linux-kernel": "1.0.1",
 		"msgpack-d": "1.0.4",
 		"openssl": "3.3.0",
-		"requests": "2.1.0",
+		"requests": "2.1.1",
 		"rm-rf": "0.1.0",
 		"sdlfmt": "0.1.1",
 		"sdlite": "1.1.2",
