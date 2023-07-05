@@ -50,7 +50,7 @@ class DscannerComponent : ComponentWrapper
 	Future!(DScannerIssue[]) lint(string file = "", string ini = "dscanner.ini",
 			scope const(char)[] code = "", bool skipWorkspacedPaths = false,
 			const StaticAnalysisConfig defaultConfig = StaticAnalysisConfig.init,
-			bool resolveRanges = false)
+			bool resolveRanges = true)
 	{
 		auto ret = new typeof(return);
 		gthreads.create({
@@ -94,12 +94,22 @@ class DscannerComponent : ComponentWrapper
 					ret.finish(issues);
 					return;
 				}
-				foreach (msg; results)
+				foreach (Message msg; results)
 				{
 					DScannerIssue issue;
 					issue.file = msg.fileName;
-					issue.line = cast(int) msg.line;
-					issue.column = cast(int) msg.column;
+					issue.range = [
+						ResolvedLocation(
+							msg.diagnostic.startIndex,
+							cast(uint) msg.diagnostic.startLine,
+							cast(uint) msg.diagnostic.startColumn
+						),
+						ResolvedLocation(
+							msg.diagnostic.endIndex,
+							cast(uint) msg.diagnostic.endLine,
+							cast(uint) msg.diagnostic.endColumn
+						)
+					];
 					issue.type = typeForWarning(msg.key);
 					issue.description = msg.message;
 					issue.key = msg.key;
@@ -154,7 +164,12 @@ class DscannerComponent : ComponentWrapper
 	}
 	do
 	{
-		auto tokenIndex = tokens.tokenIndexAtPosition(issue.line, issue.column);
+		if (issue.range[0] != issue.range[1])
+			return true;
+
+		auto tokenIndex = issue.range[0].index == 0
+			? tokens.tokenIndexAtPosition(issue.range[0].line, issue.range[0].column)
+			: tokens.tokenIndexAtByteIndex(issue.range[0].index);
 		if (tokenIndex >= tokens.length)
 		{
 			if (tokens.length)
@@ -164,25 +179,11 @@ class DscannerComponent : ComponentWrapper
 			return true;
 		}
 
-		switch (issue.key)
-		{
-		case null:
-			// syntax errors
-			if (!adjustRangeForSyntaxError(tokens, tokenIndex, issue))
-				return false;
-			improveErrorMessage(issue);
-			return true;
-		case LocalImportCheckKEY:
-			if (adjustRangeForLocalImportsError(tokens, tokenIndex, issue))
-				return true;
-			goto default;
-		case LongLineCheckKEY:
-			issue.range = makeTokenRange(tokens[tokenIndex], tokens[min($ - 1, tokens.tokenIndexAtPosition(issue.line, 1000))]);
-			return true;
-		default:
-			issue.range = makeTokenRange(tokens[tokenIndex]);
-			return true;
-		}
+		if (issue.key == null // is null for syntax errors
+			&& !adjustRangeForSyntaxError(tokens, tokenIndex, issue))
+			return false;
+		improveErrorMessage(issue);
+		return true;
 	}
 
 	private void improveErrorMessage(ref DScannerIssue issue)
@@ -275,7 +276,7 @@ class DscannerComponent : ComponentWrapper
 
 			// span to end of next word
 			size_t searchStart = issueStart;
-			if (tokens[searchStart].column + tokens[searchStart].tokenText.length <= issue.column)
+			if (tokens[searchStart].column + tokens[searchStart].tokenText.length <= issue.range[0].column)
 				searchStart++;
 			size_t issueEnd = min(max(0, cast(ptrdiff_t)tokens.length - 1), searchStart);
 			foreach (i, token; tokens[searchStart .. $])
@@ -310,24 +311,6 @@ class DscannerComponent : ComponentWrapper
 
 			issue.range = makeTokenRange(tokens[currentToken]);
 		}
-		return true;
-	}
-
-	// adjusts error location of
-	// import |std.stdio;
-	// to
-	// ~import std.stdio;~
-	private bool adjustRangeForLocalImportsError(scope const(Token)[] tokens, size_t currentToken, ref DScannerIssue issue)
-	{
-		size_t startIndex = currentToken;
-		size_t endIndex = currentToken;
-
-		while (startIndex > 0 && tokens[startIndex].type != tok!"import")
-			startIndex--;
-		while (endIndex < tokens.length && tokens[endIndex].type != tok!";")
-			endIndex++;
-
-		issue.range = makeTokenRange(tokens[startIndex], tokens[endIndex]);
 		return true;
 	}
 
@@ -386,8 +369,9 @@ class DscannerComponent : ComponentWrapper
 
 		void addIssue(string fileName, size_t line, size_t column, string message, bool isError)
 		{
-			issues ~= DScannerIssue(file, cast(int) line, cast(int) column, isError
-					? "error" : "warn", message);
+			issues ~= DScannerIssue(file, isError ? "error" : "warn", message, null,
+				[ResolvedLocation(0, cast(uint) line, cast(uint) column),
+				 ResolvedLocation(0, cast(uint) line, cast(uint) column)]);
 		}
 
 		uint err, warn;
@@ -521,8 +505,6 @@ struct DScannerIssue
 {
 	///
 	string file;
-	/// one-based line & column (in bytes) of this diagnostic location
-	int line, column;
 	///
 	string type;
 	///

@@ -57,7 +57,7 @@ void lint(Document document)
 		if (ignoredKeys.canFind(issue.key))
 			continue;
 		Diagnostic d;
-		scope text = document.lineAtScope(cast(uint) issue.line - 1).stripRight;
+		scope text = document.lineAtScope(issue.range[0].line - 1).stripRight;
 		string keyNormalized = issue.key.startsWith("dscanner.")
 			? issue.key["dscanner.".length .. $] : issue.key;
 		if (text.canFind("@suppress(all)", "@suppress:all",
@@ -66,8 +66,7 @@ void lint(Document document)
 				.endsWith("stfu"))
 			continue;
 
-		if (!d.adjustRangeForType(document, issue))
-			continue;
+		d.setDscannerDiagnosticRange(document, issue);
 		d.adjustSeverityForType(document, issue);
 
 		if (d.source.orDefault.length)
@@ -112,23 +111,25 @@ string getDscannerIniForDocument(DocumentUri document, WorkspaceD.Instance insta
 }
 
 /// Sets the range for the diagnostic from the issue
-/// Returns: `false` if this issue should be discarded (handled by other issues)
-bool adjustRangeForType(ref Diagnostic d, Document document, DScannerIssue issue)
+void setDscannerDiagnosticRange(ref Diagnostic d, Document document, DScannerIssue issue)
 {
-	d.range = TextRange(
-		document.lineColumnBytesToPosition(issue.range[0].line - 1, issue.range[0].column - 1),
-		document.lineColumnBytesToPosition(issue.range[1].line - 1, issue.range[1].column - 1)
-	);
-
-	auto s = issue.description;
-	if (s.startsWith("Line is longer than ") && s.endsWith(" characters"))
+	if (issue.range[0].index && issue.range[1].index)
 	{
-		d.range.start.character = s["Line is longer than ".length .. $ - " characters".length].to!uint;
-		d.range.end.line = d.range.start.line + 1;
-		d.range.end.character = 0;
-	}
+		Position pos;
+		size_t index;
 
-	return true;
+		d.range = TextRange(
+			document.nextPositionBytes(pos, index, issue.range[0].index),
+			document.nextPositionBytes(pos, index, issue.range[1].index)
+		);
+	}
+	else
+	{
+		d.range = TextRange(
+			document.lineColumnBytesToPosition(issue.range[0].line - 1, issue.range[0].column - 1),
+			document.lineColumnBytesToPosition(issue.range[1].line - 1, issue.range[1].column - 1)
+		);
+	}
 }
 
 void adjustSeverityForType(ref Diagnostic d, Document, DScannerIssue issue)
@@ -234,8 +235,7 @@ version (unittest)
 			foreach (issue; issues)
 			{
 				Diagnostic d;
-				if (!d.adjustRangeForType(document, issue))
-					continue;
+				d.setDscannerDiagnosticRange(document, issue);
 				d.adjustSeverityForType(document, issue);
 
 				if (d.source.orDefault.length)
@@ -269,7 +269,7 @@ void main()
 	test.build(document);
 	assert(test.syntaxErrorsAt(Position(0, 0)).length == 0);
 	assert(test.syntaxErrorsAt(Position(3, 4)).length == 1);
-	assert(test.syntaxErrorsAt(Position(3, 4))[0].message == "Expected `(` instead of `x`");
+	assert(test.syntaxErrorsAt(Position(3, 4))[0].message == "Expected `(` instead of identifier `x`");
 	assert(test.syntaxErrorsAt(Position(3, 4))[0].range == TextRange(3, 1, 3, 5));
 
 	document = Document.nullDocument(q{
@@ -393,5 +393,5 @@ void main()
 	assert(test.diagnosticsAt(Position(0, 0), LocalImportCheckKEY).length == 0);
 	auto diag = test.diagnosticsAt(Position(3, 11), LocalImportCheckKEY);
 	assert(diag.length == 1);
-	assert(diag[0].range == TextRange(3, 1, 3, 24));
+	assert(diag[0].range == TextRange(3, 10, 3, 23), diag.to!string);
 }
