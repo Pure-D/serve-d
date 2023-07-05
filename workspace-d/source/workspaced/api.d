@@ -544,7 +544,7 @@ unittest
 }
 
 version (unittest)
-package string normLF(scope string str)
+package string normLF(scope return string str)
 {
 	import std.string : replace;
 

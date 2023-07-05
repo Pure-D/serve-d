@@ -319,11 +319,16 @@ class SnippetInfoGenerator : ASTVisitor
 		mixin(MethodSnippetLevelWrapper!(SnippetLevel.switch_));
 	}
 
-	static foreach (T; AliasSeq!(Arguments, ExpressionNode))
-		override void visit(const T dec)
-		{
-			mixin(FullSnippetLevelWrapper!(SnippetLevel.value));
-		}
+	override void visit(const Arguments dec)
+	{
+		mixin(FullSnippetLevelWrapper!(SnippetLevel.value));
+	}
+
+	override void dynamicDispatch(const ExpressionNode dec)
+	{
+		mixin(SnippetLevelWrapper!(SnippetLevel.value));
+		super.dynamicDispatch(dec);
+	}
 
 	override void visit(const VariableDeclaration dec)
 	{

@@ -3355,7 +3355,7 @@ class FoldingRangeGenerator : ASTVisitor
 		expr.accept(this);
 	}
 
-	static foreach (T; AliasSeq!(TemplateArgumentList, ArgumentList))
+	static foreach (T; AliasSeq!(TemplateArgumentList, ArgumentList, NamedArgumentList, NamedTemplateArgumentList))
 		override void visit(const T stmt)
 		{
 			auto localSuppress = suppressThisArgumentList;

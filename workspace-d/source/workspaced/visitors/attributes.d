@@ -222,7 +222,7 @@ struct ASTContext
 	alias AnyAttribute = Algebraic!(PragmaExpression, Deprecated, AtAttribute, AlignAttribute, LinkageAttribute,
 			SimpleAttribute, MemberFunctionAttribute, ContainerAttribute, UserdataAttribute);
 
-	class AttributeWithInfo(T)
+	struct AttributeWithInfo(T)
 	{
 		T value;
 		bool sticky;
@@ -239,6 +239,11 @@ struct ASTContext
 		{
 			return this;
 		}
+
+		bool opCast(T : bool)() const
+		{
+			return this !is typeof(this).init;
+		}
 	}
 
 	struct AnyAttributeInfo
@@ -251,9 +256,9 @@ struct ASTContext
 		{
 			auto ret = base.peek!T;
 			if (!!ret)
-				return new AttributeWithInfo!T(*ret, sticky);
+				return AttributeWithInfo!T(*ret, sticky);
 			else
-				return null;
+				return AttributeWithInfo!T.init;
 		}
 
 		alias base this;
@@ -457,7 +462,7 @@ struct ASTContext
 	{
 		auto prot = simpleAttributes.filter!(a => a.firstAttribute.isProtectionToken).tail(1);
 		if (prot.empty)
-			return null;
+			return typeof(return).init;
 		else
 			return prot.front;
 	}
@@ -465,7 +470,7 @@ struct ASTContext
 	IdType protectionType() @property
 	{
 		auto attr = protectionAttribute;
-		if (attr is null)
+		if (!attr)
 			return IdType.init;
 		else
 			return attr.attributes[0].type;
