@@ -77,7 +77,8 @@ class DubLintGenerator : ProjectGenerator
 	{
 		scope (failure)
 		{
-			tracef("FAIL %s %s %s" , buildsettings.targetPath,
+			tracef("FAIL compiler=%s, targetPath=%s, targetName=%s, targetType=%s",
+					settings.platform.compilerBinary, buildsettings.targetPath,
 					buildsettings.targetName, buildsettings.targetType);
 		}
 
