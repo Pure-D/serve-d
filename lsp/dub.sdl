@@ -1,5 +1,5 @@
 name "lsp"
 
 dependency "serve-d:protocol" path=".."
-dependency "mir-algorithm" version="~>3.18.2"
+dependency "mir-algorithm" version="~>3.20"
 dependency "mir-ion" version="~>2.1"
