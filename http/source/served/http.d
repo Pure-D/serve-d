@@ -115,6 +115,6 @@ string humanSize(T)(T bytes) if (isIntegral!T)
 
 	if (bytes < 1024)
 		return text(bytes, " B");
-	int exp = cast(int)(log2(bytes) / 8); // 8 = log2(1024)
+	int exp = cast(int)(log2(double(bytes)) / 8); // 8 = log2(1024)
 	return format!"%.1f %siB"(bytes / cast(float) pow(1024, exp), prefixes[exp - 1]);
 }
