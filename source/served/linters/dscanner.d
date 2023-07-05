@@ -66,8 +66,7 @@ void lint(Document document)
 				.endsWith("stfu"))
 			continue;
 
-		d.setDscannerDiagnosticRange(document, issue);
-		d.adjustSeverityForType(document, issue);
+		d.convertFromWorkspaced(document, issue);
 
 		if (d.source.orDefault.length)
 		{
@@ -110,24 +109,38 @@ string getDscannerIniForDocument(DocumentUri document, WorkspaceD.Instance insta
 	return ini;
 }
 
-/// Sets the range for the diagnostic from the issue
-void setDscannerDiagnosticRange(ref Diagnostic d, Document document, DScannerIssue issue)
+void convertFromWorkspaced(ref Diagnostic d, Document document, DScannerIssue issue)
 {
-	if (issue.range[0].index && issue.range[1].index)
+	import std.array : array;
+
+	d.range = getDscannerDiagnosticRange(document, issue.range);
+	d.adjustSeverityForType(document, issue);
+	d.relatedInformation = issue.supplemental.map!(
+		suppl => DiagnosticRelatedInformation(
+			/* location: */ Location(document.uri, getDscannerDiagnosticRange(document, suppl.range)),
+			/* message: */ suppl.description
+		)
+	).array;
+}
+
+/// Sets the range for the diagnostic from the issue
+TextRange getDscannerDiagnosticRange(Document document, ResolvedLocation[2] range)
+{
+	if (range[0].index && range[1].index)
 	{
 		Position pos;
 		size_t index;
 
-		d.range = TextRange(
-			document.nextPositionBytes(pos, index, issue.range[0].index),
-			document.nextPositionBytes(pos, index, issue.range[1].index)
+		return TextRange(
+			document.nextPositionBytes(pos, index, range[0].index),
+			document.nextPositionBytes(pos, index, range[1].index)
 		);
 	}
 	else
 	{
-		d.range = TextRange(
-			document.lineColumnBytesToPosition(issue.range[0].line - 1, issue.range[0].column - 1),
-			document.lineColumnBytesToPosition(issue.range[1].line - 1, issue.range[1].column - 1)
+		return TextRange(
+			document.lineColumnBytesToPosition(range[0].line - 1, range[0].column - 1),
+			document.lineColumnBytesToPosition(range[1].line - 1, range[1].column - 1)
 		);
 	}
 }
@@ -235,8 +248,7 @@ version (unittest)
 			foreach (issue; issues)
 			{
 				Diagnostic d;
-				d.setDscannerDiagnosticRange(document, issue);
-				d.adjustSeverityForType(document, issue);
+				d.convertFromWorkspaced(document, issue);
 
 				if (d.source.orDefault.length)
 				{

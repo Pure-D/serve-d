@@ -118,6 +118,27 @@ class DscannerComponent : ComponentWrapper
 						if (!this.resolveRange(tokens, issue))
 							continue;
 					}
+
+					foreach (suppl; msg.supplemental)
+					{
+						issue.supplemental ~= DScannerIssue.Supplemental(
+							/* file: */ suppl.fileName,
+							/* range: */ [
+								ResolvedLocation(
+									suppl.startIndex,
+									cast(uint) suppl.startLine,
+									cast(uint) suppl.startColumn
+								),
+								ResolvedLocation(
+									suppl.endIndex,
+									cast(uint) suppl.endLine,
+									cast(uint) suppl.endColumn
+								)
+							],
+							/* description: */ suppl.message
+						);
+					}
+
 					issues ~= issue;
 				}
 				ret.finish(issues);
@@ -503,6 +524,16 @@ struct INIEntry
 /// Issue type returned by lint
 struct DScannerIssue
 {
+	struct Supplemental
+	{
+		///
+		string file;
+		/// Issue range
+		ResolvedLocation[2] range;
+		///
+		string description;
+	}
+
 	///
 	string file;
 	///
@@ -511,8 +542,10 @@ struct DScannerIssue
 	string description;
 	///
 	string key;
-	/// Resolved range for content that can be filled with a call to resolveRanges
+	/// Issue range
 	ResolvedLocation[2] range;
+	/// Supplemental information
+	Supplemental[] supplemental;
 }
 
 /// Describes a code location in exact byte offset, line number and column for a
