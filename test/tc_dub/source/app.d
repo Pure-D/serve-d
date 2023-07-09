@@ -41,7 +41,8 @@ void main()
 	try
 	{
 		auto result = dub.build.getBlocking;
-		assert(result.count!(a => a.type == ErrorType.Warning || a.type == ErrorType.Error) == 0);
+		assert(result.count!(a => a.type == ErrorType.Warning || a.type == ErrorType.Error) == 0,
+			"got unexpected warnings/errors: " ~ result.to!string);
 	}
 	catch (Exception e)
 	{
