@@ -47,6 +47,7 @@ CodeAction[] provideCodeActions(CodeActionParams params)
 	auto instance = activeInstance = backend.getBestInstance(document.uri.uriToFile);
 	if (document.getLanguageId != "d" || !instance)
 		return [];
+	auto config = workspace(params.textDocument.uri).config;
 
 	// eagerly load DCD in opened files which request code actions
 	if (instance.has!DCDComponent)
@@ -89,7 +90,7 @@ CodeAction[] provideCodeActions(CodeActionParams params)
 	{
 		if (diagnostic.source == DScannerDiagnosticSource)
 		{
-			addDScannerDiagnostics(ret, instance, document, diagnostic, params);
+			addDScannerDiagnostics(config, ret, instance, document, diagnostic, params);
 		}
 		else if (diagnostic.source == SyntaxHintDiagnosticSource)
 		{
@@ -218,19 +219,102 @@ void addDubDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 	}
 }
 
-void addDScannerDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
+void addDScannerDiagnostics(const ref UserConfiguration config,
+	ref CodeAction[] ret, WorkspaceD.Instance instance,
 	Document document, Diagnostic diagnostic, CodeActionParams params)
 {
 	import dscanner.analysis.imports_sortedness : ImportSortednessCheck;
+	import served.linters.dscanner : diagnosticDataToCodeReplacement,
+		diagnosticDataToResolveContext, servedDefaultDscannerConfig;
+	import workspaced.com.dscanner : DScannerAutoFix;
+
+	Position cachePos;
+	size_t cacheIndex;
+
+	TextEdit toTextEdit(DScannerAutoFix.CodeReplacement replacement)
+	{
+		return TextEdit(
+			TextRange(
+				document.nextPositionBytes(cachePos, cacheIndex, replacement.range[0]),
+				document.nextPositionBytes(cachePos, cacheIndex, replacement.range[1])
+			),
+			replacement.newText
+		);
+	}
 
 	string key = diagnostic.code.orDefault.match!((string s) => s, _ => cast(string)(null));
-
-	info("Diagnostic: ", diagnostic);
 
 	if (key == ImportSortednessCheck.KEY)
 	{
 		ret ~= CodeAction(Command("Sort imports", "code-d.sortImports",
 				[JsonValue(document.positionToOffset(params.range[0]))]));
+	}
+
+	if (!diagnostic.data.isNone)
+	{
+		auto data = diagnostic.data.deref;
+		if (auto autofixes = "autofixes" in data.object)
+		{
+			string checkName = data.object["checkName"].string;
+
+			DScannerAutoFix.ResolveContext[] resolveContexts;
+			size_t[] resolveContextIndices;
+
+			foreach (autofix; autofixes.array)
+			{
+				if (autofix.kind != JsonValue.Kind.object)
+				{
+					warning("Unsupported dscanner autofix: ", autofix);
+					continue;
+				}
+
+				auto nameJson = "name" in autofix.object;
+				if (!nameJson)
+				{
+					warning("Unsupported dscanner autofix: ", autofix);
+					continue;
+				}
+				string name = (*nameJson).get!string;
+
+				DScannerAutoFix.CodeReplacement[] codeReplacements;
+
+				if (auto replacements = "replacements" in autofix.object)
+				{
+					codeReplacements = (*replacements).array.map!(
+						j => diagnosticDataToCodeReplacement(j)
+					).array;
+				}
+				else if (auto jcontext = "context" in autofix.object)
+				{
+					resolveContexts ~= diagnosticDataToResolveContext(*jcontext);
+					resolveContextIndices ~= ret.length;
+				}
+				else
+				{
+					warning("Unsupported dscanner autofix: ", autofix);
+					continue;
+				}
+
+				ret ~= CodeAction(name, WorkspaceEdit([
+					document.uri: codeReplacements.map!toTextEdit.array
+				]));
+			}
+
+			if (resolveContexts.length)
+			{
+				auto codeReplacementsList = instance.get!DscannerComponent.resolveAutoFixes(
+					checkName, resolveContexts, document.uri.uriToFile, "dscanner.ini",
+					generateDfmtArgs(config, document.eolAt(0)), document.rawText, false,
+					servedDefaultDscannerConfig).getYield;
+
+				foreach (i, codeReplacements; codeReplacementsList)
+				{
+					ret[resolveContextIndices[i]].edit = WorkspaceEdit([
+						document.uri: codeReplacements.map!toTextEdit.array
+					]);
+				}
+			}
+		}
 	}
 
 	if (key.length)

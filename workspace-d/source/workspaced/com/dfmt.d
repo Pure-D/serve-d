@@ -39,6 +39,17 @@ class DfmtComponent : ComponentWrapper
 		if (!code.strip.length)
 			return null;
 
+		Config config = parseConfig(arguments);
+		auto output = appender!string;
+		fmt("stdin", cast(ubyte[]) code, output, &config);
+		if (output.data.length)
+			return output.data;
+		else
+			return code.idup;
+	}
+
+	static Config parseConfig(string[] arguments)
+	{
 		Config config;
 		config.initializeWithDefaults();
 		string configPath;
@@ -143,12 +154,7 @@ class DfmtComponent : ComponentWrapper
 			);
 			//dfmt on
 		}
-		auto output = appender!string;
-		fmt("stdin", cast(ubyte[]) code, output, &config);
-		if (output.data.length)
-			return output.data;
-		else
-			return code.idup;
+		return config;
 	}
 
 	/// Finds dfmt instruction comments (dfmt off, dfmt on)

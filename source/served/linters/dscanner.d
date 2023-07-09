@@ -121,6 +121,72 @@ void convertFromWorkspaced(ref Diagnostic d, Document document, DScannerIssue is
 			/* message: */ suppl.description
 		)
 	).array;
+	if (issue.autofixes.length)
+		d.data = JsonValue([
+			"checkName": JsonValue(issue.checkName),
+			"autofixes": JsonValue(issue.autofixes.map!toJson.array)
+		]);
+}
+
+private JsonValue toJson(DScannerAutoFix f)
+{
+	import std.array : array;
+
+	JsonValue[string] ret = [
+		"name": JsonValue(f.name)
+	];
+	f.replacements.match!(
+		(DScannerAutoFix.CodeReplacement[] replacements) {
+			ret["replacements"] = JsonValue(replacements.map!(a => toJson(a)).array);
+		},
+		(DScannerAutoFix.ResolveContext context) {
+			ret["context"] = toJson(context);
+		}
+	);
+	return JsonValue(ret);
+}
+
+private JsonValue toJson(DScannerAutoFix.CodeReplacement replacement)
+{
+	return JsonValue([
+		"r": JsonValue([JsonValue(replacement.range[0]), JsonValue(replacement.range[1])]),
+		"t": JsonValue(replacement.newText)
+	]);
+}
+
+DScannerAutoFix.CodeReplacement diagnosticDataToCodeReplacement(JsonValue json)
+{
+	return DScannerAutoFix.CodeReplacement(
+		[
+			json.object["r"].array[0].integer,
+			json.object["r"].array[1].integer
+		],
+		json.object["t"].string
+	);
+}
+
+private JsonValue toJson(DScannerAutoFix.ResolveContext context)
+{
+	auto params = new JsonValue[context.params.length];
+	foreach (i, param; context.params)
+		params[i] = JsonValue(param);
+	return JsonValue([
+		"p": JsonValue(params),
+		"s": JsonValue(context.extraInfo)
+	]);
+}
+
+DScannerAutoFix.ResolveContext diagnosticDataToResolveContext(JsonValue json)
+{
+	size_t i;
+	return DScannerAutoFix.ResolveContext(
+		[
+			json.object["p"].array[i++].integer,
+			json.object["p"].array[i++].integer,
+			json.object["p"].array[i++].integer,
+		],
+		json.object["s"].string
+	);
 }
 
 /// Sets the range for the diagnostic from the issue

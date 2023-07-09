@@ -3,6 +3,7 @@ module workspaced.com.dscanner;
 version (unittest)
 debug = ResolveRange;
 
+import mir.algebraic;
 import std.algorithm;
 import std.array;
 import std.conv;
@@ -10,8 +11,8 @@ import std.experimental.logger;
 import std.file;
 import std.json;
 import std.meta : AliasSeq;
+import std.range : repeat;
 import std.stdio;
-import std.sumtype;
 import std.traits;
 import std.typecons;
 
@@ -113,6 +114,8 @@ class DscannerComponent : ComponentWrapper
 					issue.type = typeForWarning(msg.key);
 					issue.description = msg.message;
 					issue.key = msg.key;
+					issue.checkName = msg.checkName;
+					issue.autofixes = msg.autofixes.map!(f => DScannerAutoFix(f)).array;
 					if (resolveRanges)
 					{
 						if (!this.resolveRange(tokens, issue))
@@ -149,6 +152,108 @@ class DscannerComponent : ComponentWrapper
 			}
 		});
 		return ret;
+	}
+
+	Future!(DScannerAutoFix.CodeReplacement[][]) resolveAutoFixes(
+			string messageCheckName,
+			DScannerAutoFix.ResolveContext[] contexts,
+			string file = "", string ini = "dscanner.ini",
+			string[] dfmtArgs = null,
+			scope const(char)[] code = "", bool skipWorkspacedPaths = false,
+			const StaticAnalysisConfig defaultConfig = StaticAnalysisConfig.init)
+	{
+		import dscanner.analysis.run : resolveAutoFix;
+
+		auto ret = new typeof(return);
+		gthreads.create({
+			mixin(traceTask);
+			try
+			{
+				if (code.length && !file.length)
+					file = "stdin";
+				auto config = getConfig(ini, skipWorkspacedPaths, defaultConfig);
+				if (!code.length)
+					code = readText(file);
+				if (!code.length)
+				{
+					ret.finish(null);
+					return;
+				}
+				RollbackAllocator r;
+				const(Token)[] tokens;
+				StringCache cache = StringCache(StringCache.defaultBucketCount);
+				DScannerIssue[] parseIssues;
+				const Module m = parseModule(file, cast(ubyte[]) code, &r, cache, tokens, parseIssues);
+				if (!m)
+					throw new Exception(text("parseModule returned null?! - file: '",
+						file, "', code: '", code, "'"));
+
+				ModuleCache moduleCache;
+				AutoFixFormatting formatting = parseDfmtArgs(dfmtArgs);
+				DScannerAutoFix.CodeReplacement[][] replacementsList;
+				foreach (context; contexts)
+				{
+					// ensured by static asserts in DScannerAutoFix that these casts work
+					auto dscannerContext = *cast(AutoFix.ResolveContext*)&context;
+					auto resolved = resolveAutoFix(messageCheckName, dscannerContext, file, moduleCache, tokens, m, config, formatting);
+					replacementsList ~= *cast(DScannerAutoFix.CodeReplacement[]*)&resolved;
+				}
+				assert(replacementsList.length == contexts.length);
+				ret.finish(replacementsList);
+			}
+			catch (Throwable e)
+			{
+				ret.error(e);
+			}
+		});
+		return ret;
+	}
+
+	private static AutoFixFormatting parseDfmtArgs(string[] dfmtArgs)
+	{
+		import std.getopt;
+		import workspaced.com.dfmt;
+		import dfmt.editorconfig : IndentStyle, EOL;
+		import dfmt.config : BraceStyle;
+
+		auto config = DfmtComponent.parseConfig(dfmtArgs);
+
+		AutoFixFormatting.BraceStyle braceStyle;
+		switch (config.dfmt_brace_style) with (AutoFixFormatting.BraceStyle)
+		{
+		case BraceStyle.otbs:
+			braceStyle = otbs;
+			break;
+		case BraceStyle.stroustrup:
+			braceStyle = stroustrup;
+			break;
+		case BraceStyle.knr:
+			braceStyle = knr;
+			break;
+		default:
+		case BraceStyle.allman:
+			braceStyle = allman;
+			break;
+		}
+
+		string indentString = "\t";
+		if (config.indent_style == IndentStyle.tab)
+			indentString = "\t";
+		else if (config.indent_style == IndentStyle.space)
+			indentString = (cast(immutable)' ').repeat(config.indent_size).array;
+
+		string eol = "\n";
+		if (config.end_of_line == EOL.crlf)
+			eol = "\r\n";
+		else if (config.end_of_line == EOL.cr)
+			eol = "\r";
+
+		return AutoFixFormatting(
+			braceStyle,
+			indentString,
+			config.indent_size,
+			eol
+		);
 	}
 
 	/// Takes line & column from the D-Scanner issue array and resolves the
@@ -390,7 +495,7 @@ class DscannerComponent : ComponentWrapper
 
 		void addIssue(string fileName, size_t line, size_t column, string message, bool isError)
 		{
-			issues ~= DScannerIssue(file, isError ? "error" : "warn", message, null,
+			issues ~= DScannerIssue(file, isError ? "error" : "warn", message, null, null,
 				[ResolvedLocation(0, cast(uint) line, cast(uint) column),
 				 ResolvedLocation(0, cast(uint) line, cast(uint) column)]);
 		}
@@ -542,10 +647,91 @@ struct DScannerIssue
 	string description;
 	///
 	string key;
+	///
+	string checkName;
 	/// Issue range
 	ResolvedLocation[2] range;
 	/// Supplemental information
 	Supplemental[] supplemental;
+	///
+	DScannerAutoFix[] autofixes;
+}
+
+struct DScannerAutoFix
+{
+	///
+	struct CodeReplacement
+	{
+		/// Byte index `[start, end)` within the file what text to replace.
+		/// `start == end` if text is only getting inserted.
+		size_t[2] range;
+		/// The new text to put inside the range. (empty to delete text)
+		string newText;
+
+		this(size_t[2] range, string newText)
+		{
+			this.range = range;
+			this.newText = newText;
+		}
+
+		this(AutoFix.CodeReplacement dscannerCodeReplacement)
+		{
+			// see static assert below
+			this.tupleof = dscannerCodeReplacement.tupleof;
+		}
+	}
+
+	/// Context that the analyzer resolve method can use to generate the
+	/// resolved `CodeReplacement` with.
+	struct ResolveContext
+	{
+		/// Arbitrary analyzer-defined parameters. May grow in the future with
+		/// more items.
+		ulong[3] params;
+		/// For dynamically sized data, may contain binary data.
+		string extraInfo;
+
+		this(ulong[3] params, string extraInfo)
+		{
+			this.params = params;
+			this.extraInfo = extraInfo;
+		}
+
+		this(AutoFix.ResolveContext dscannerResolveContext)
+		{
+			// see static assert below
+			this.tupleof = dscannerResolveContext.tupleof;
+		}
+	}
+
+	/// Display name for the UI.
+	string name;
+	/// Either code replacements, sorted by range start, never overlapping, or a
+	/// context that can be passed to `BaseAnalyzer.resolveAutoFix` along with
+	/// the message key from the parent `Message` object.
+	///
+	/// `CodeReplacement[]` should be applied to the code in reverse, otherwise
+	/// an offset to the following start indices must be calculated and be kept
+	/// track of.
+	Variant!(CodeReplacement[], ResolveContext) replacements;
+
+	this(AutoFix f)
+	{
+		import std.sumtype : match;
+
+		static assert(AutoFix.CodeReplacement.sizeof == CodeReplacement.sizeof);
+		static assert(typeof(AutoFix.CodeReplacement.tupleof).stringof == typeof(CodeReplacement.tupleof).stringof);
+		static assert(AutoFix.CodeReplacement.tupleof.stringof == CodeReplacement.tupleof.stringof);
+		static assert(AutoFix.ResolveContext.sizeof == ResolveContext.sizeof);
+		static assert(typeof(AutoFix.ResolveContext.tupleof).stringof == typeof(ResolveContext.tupleof).stringof);
+		static assert(AutoFix.ResolveContext.tupleof.stringof == ResolveContext.tupleof.stringof);
+
+		name = f.name;
+		replacements = f.replacements.match!(
+			(AutoFix.CodeReplacement[] r) => typeof(replacements)(*cast(CodeReplacement[]*)&r),
+			(AutoFix.ResolveContext r) => typeof(replacements)(*cast(ResolveContext*)&r),
+		);
+	}
 }
 
 /// Describes a code location in exact byte offset, line number and column for a
@@ -634,6 +820,8 @@ public import workspaced.index_format : DefinitionElement, ModuleDefinition;
 
 bool isVisibleOutside(DefinitionElement.Visibility v)
 {
+	import std.sumtype : match;
+
 	return v.match!(
 		(typeof(null) _) => true,
 		(DefinitionElement.BasicVisibility v) => v != DefinitionElement.BasicVisibility.protected_
@@ -644,6 +832,8 @@ bool isVisibleOutside(DefinitionElement.Visibility v)
 
 bool isPublicImportVisibility(DefinitionElement.Visibility v)
 {
+	import std.sumtype : match;
+
 	return v.match!(
 		(typeof(null) _) => false,
 		(DefinitionElement.BasicVisibility v) => v != DefinitionElement.BasicVisibility.protected_
@@ -1285,6 +1475,8 @@ struct ContextType
 
 string toLegacyAccess(DefinitionElement.Visibility v)
 {
+	import std.sumtype : match;
+
 	return v.match!(
 		(typeof(null) _) => null,
 		(DefinitionElement.PackageVisibility v) => "protected",
