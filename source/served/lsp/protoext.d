@@ -494,3 +494,10 @@ struct ListDependenciesParams
 {
 	mixin SingleValueParams!(string, "packageName");
 }
+
+/// Sent with `coded/skippedLoads`
+struct SkippedLoadsNotification
+{
+	/// List of folder file paths
+	string[] roots;
+}

@@ -11,7 +11,7 @@ public import served.utils.async;
 
 import core.time : msecs, seconds;
 
-import std.algorithm : any, canFind, endsWith, map;
+import std.algorithm : any, canFind, endsWith, map, remove;
 import std.array : appender, array;
 import std.conv : text, to;
 import std.datetime.stopwatch : StopWatch;
@@ -463,6 +463,25 @@ struct RootSuggestion
 	bool useDub;
 }
 
+bool dubRecipeExists(string rootDir, bool testPackageJson = false)
+{
+	if (fs.exists(chainPath(rootDir, "dub.json")) || fs.exists(chainPath(rootDir, "dub.sdl")))
+		return true;
+	if (testPackageJson && fs.exists(chainPath(rootDir, "package.json")))
+	{
+		try
+		{
+			scope packageJson = fs.readText(chainPath(rootDir, "package.json"));
+			if (seemsLikeDubJson(packageJson))
+				return true;
+		}
+		catch (Exception)
+		{
+		}
+	}
+	return false;
+}
+
 RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 		string[] extra)
 {
@@ -478,19 +497,7 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 			ret ~= RootSuggestion(dir, useDub);
 	}
 
-	bool rootDub = fs.exists(chainPath(root, "dub.json")) || fs.exists(chainPath(root, "dub.sdl"));
-	if (!rootDub && fs.exists(chainPath(root, "package.json")))
-	{
-		try
-		{
-			auto packageJson = fs.readText(chainPath(root, "package.json"));
-			if (seemsLikeDubJson(packageJson))
-				rootDub = true;
-		}
-		catch (Exception)
-		{
-		}
-	}
+	bool rootDub = dubRecipeExists(root, true);
 	addSuggestion(root, rootDub);
 
 	if (recursive)
@@ -511,7 +518,7 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 	foreach (dir; extra)
 	{
 		string p = buildNormalizedPath(root, dir);
-		addSuggestion(p, fs.exists(chainPath(p, "dub.json")) || fs.exists(chainPath(p, "dub.sdl")));
+		addSuggestion(p, dubRecipeExists(p));
 	}
 	info("Root Suggestions: ", ret);
 	return ret;
@@ -521,7 +528,7 @@ void doStartup(string workspaceUri, UserConfiguration userConfig)
 {
 	ensureStartedUp(userConfig);
 
-	Workspace* proj = &workspace(workspaceUri);
+	Workspace* proj = &workspace(workspaceUri, false);
 	if (proj is &fallbackWorkspace)
 	{
 		error("Trying to do startup on unknown workspace ", workspaceUri, "?");
@@ -536,7 +543,6 @@ void doStartup(string workspaceUri, UserConfiguration userConfig)
 		WorkspaceD.Instance instance;
 	}
 
-	bool gotOneDub;
 	scope roots = appender!(Root[]);
 
 	auto rootSuggestions = rootsForProject(workspaceUri.uriToFile, proj.config.d.scanAllFolders,
@@ -595,8 +601,102 @@ void doStartup(string workspaceUri, UserConfiguration userConfig)
 	trace("Started all completion servers in ", dcdTimer.peek);
 }
 
+@protocolMethod("served/forceLoadProjects")
+bool[] forceLoadProjects(string[] rootPaths)
+{
+	struct Root
+	{
+		string uri;
+		WorkspaceD.Instance instance;
+		bool success;
+	}
+
+	Root[] roots;
+	roots.length = rootPaths.length;
+
+	foreach (i, rootPath; rootPaths)
+	{
+		string rootUri = rootPath.uriFromFile;
+
+		Workspace* proj = &workspace(rootUri, false);
+		if (proj is &fallbackWorkspace)
+		{
+			error("Trying to do startup on unknown workspace ", rootUri, "?");
+			roots[i].success = false;
+			continue;
+		}
+		trace("Initializing serve-d for " ~ rootUri);
+
+		bool isDub = dubRecipeExists(rootPath, true);
+		RootSuggestion suggestion;
+		suggestion.dir = rootPath;
+		suggestion.useDub = isDub;
+
+		reportProgress(ProgressType.workspaceStartup, i, rootPaths.length, rootUri);
+		info("registering instance for root ", suggestion);
+
+		WConfiguration config;
+		config.base = [
+			"dcd": WConfiguration.Section([
+				"clientPath": WConfiguration.ValueT(proj.config.dcdClientPath.userPath),
+				"serverPath": WConfiguration.ValueT(proj.config.dcdServerPath.userPath),
+				"port": WConfiguration.ValueT(9166)
+			]),
+			"dmd": WConfiguration.Section([
+				"path": WConfiguration.ValueT(proj.config.d.dmdPath.userPath)
+			])
+		];
+		auto instance = backend.addInstance(rootPath, config);
+		if (!activeInstance)
+			activeInstance = instance;
+
+		roots[i].instance = instance;
+
+		emitExtensionEvent!onProjectAvailable(instance, rootPath, rootUri);
+
+		if (auto lazyInstance = cast(LazyWorkspaceD.LazyInstance)instance)
+		{
+			auto lazyLoadCallback(WorkspaceD.Instance instance, string rootPath, string rootUri, RootSuggestion suggestion)
+			{
+				return () => delayedProjectActivation(instance, rootPath, rootUri, suggestion, true);
+			}
+
+			lazyInstance.onLazyLoadInstance(lazyLoadCallback(instance, rootPath, rootUri, suggestion));
+		}
+		else
+		{
+			delayedProjectActivation(instance, rootPath, rootUri, suggestion, true);
+		}
+
+		roots[i].uri = rootUri;
+		roots[i].success = true;
+	}
+
+	trace("Starting auto completion service...");
+	StopWatch dcdTimer;
+	dcdTimer.start();
+	foreach (i, root; roots)
+	{
+		if (root.success)
+		{
+			reportProgress(ProgressType.completionStartup, i, roots.length,
+					root.instance.cwd.uriFromFile);
+
+			lazyStartDCDServer(root.instance, root.uri);
+		}
+	}
+	dcdTimer.stop();
+	trace("Started all completion servers in ", dcdTimer.peek);
+
+	return roots.map!"a.success".array;
+}
+
+/// If true, "ask" will act as "skip", but will send coded/skippedLoads afterwards
+__gshared bool bundleAskLoads;
 shared int totalLoadedProjects;
-void delayedProjectActivation(WorkspaceD.Instance instance, string workspaceRoot, string workspaceUri, RootSuggestion root)
+string[] skippedRoots;
+void delayedProjectActivation(WorkspaceD.Instance instance, string workspaceRoot, string workspaceUri, RootSuggestion root,
+	bool skipManyProjectsAction = false)
 {
 	import core.atomic;
 
@@ -609,31 +709,42 @@ void delayedProjectActivation(WorkspaceD.Instance instance, string workspaceRoot
 
 	auto numLoaded = atomicOp!"+="(totalLoadedProjects, 1);
 
-	auto manyProjectsAction = cast(ManyProjectsAction) proj.config.d.manyProjectsAction;
-	auto manyThreshold = proj.config.d.manyProjectsThreshold;
-	if (manyThreshold > 0 && numLoaded > manyThreshold)
+	if (!skipManyProjectsAction)
 	{
-		switch (manyProjectsAction)
+		auto manyProjectsAction = cast(ManyProjectsAction) proj.config.d.manyProjectsAction;
+		auto manyThreshold = proj.config.d.manyProjectsThreshold;
+		if (manyThreshold > 0 && numLoaded > manyThreshold)
 		{
-		case ManyProjectsAction.ask:
-			auto loadButton = translate!"d.served.tooManySubprojects.load";
-			auto skipButton = translate!"d.served.tooManySubprojects.skip";
-			auto res = rpc.window.requestMessage(MessageType.warning,
-					translate!"d.served.tooManySubprojects.path"(root.dir),
-					[loadButton, skipButton]);
-			if (res != loadButton)
-				goto case ManyProjectsAction.skip;
-			break;
-		case ManyProjectsAction.load:
-			break;
-		default:
-			error("Ignoring invalid manyProjectsAction value ", manyProjectsAction, ", defaulting to skip");
-			goto case;
-		case ManyProjectsAction.skip:
-			backend.removeInstance(workspaceRoot);
-			throw new Exception("skipping load of this instance");
+			switch (manyProjectsAction)
+			{
+			case ManyProjectsAction.ask:
+				if (bundleAskLoads)
+				{
+					skippedRoots ~= workspaceRoot;
+					notifySkippedRoots();
+					goto case ManyProjectsAction.skip;
+				}
+				auto loadButton = translate!"d.served.tooManySubprojects.load";
+				auto skipButton = translate!"d.served.tooManySubprojects.skip";
+				auto res = rpc.window.requestMessage(MessageType.warning,
+						translate!"d.served.tooManySubprojects.path"(root.dir),
+						[loadButton, skipButton]);
+				if (res != loadButton)
+					goto case ManyProjectsAction.skip;
+				break;
+			case ManyProjectsAction.load:
+				break;
+			default:
+				error("Ignoring invalid manyProjectsAction value ", manyProjectsAction, ", defaulting to skip");
+				goto case;
+			case ManyProjectsAction.skip:
+				backend.removeInstance(workspaceRoot);
+				throw new Exception("skipping load of this instance");
+			}
 		}
 	}
+
+	skippedRoots = skippedRoots.remove!(a => a == workspaceRoot);
 
 	info("Initializing instance for root ", root);
 	StopWatch rootTimer;
@@ -707,6 +818,15 @@ void delayedProjectActivation(WorkspaceD.Instance instance, string workspaceRoot
 
 	rootTimer.stop();
 	info("Root ", root, " initialized in ", rootTimer.peek);
+}
+
+void notifySkippedRoots()
+{
+	static int timer;
+	clearTimeout(timer);
+	timer = setTimeout(delegate() {
+		rpc.notifyMethod("coded/skippedLoads", SkippedLoadsNotification(skippedRoots));
+	}, 500.msecs);
 }
 
 void didLoadDubProject()

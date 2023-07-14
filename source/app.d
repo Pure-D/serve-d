@@ -200,6 +200,12 @@ int main(string[] args)
 			useBuildTaskDollarCurrent = true;
 			trace("Using `$current` in build tasks");
 			break;
+		case "async-ask-load":
+			import served.extension : bundleAskLoads;
+
+			bundleAskLoads = true;
+			trace("Bundling consecutive ManyProjectsAction.ask loads into a single async notification (skips load meanwhile)");
+			break;
 		default:
 			warningf("Unknown --provide flag '%s' provided. Maybe serve-d is outdated?", provide);
 			break;

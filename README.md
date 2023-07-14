@@ -627,8 +627,6 @@ Once this is received, the server will ignore `workspace/didConfigurationChange`
 notifications.  This mechanisms exists to support some client/plugin combinations
 where the plugin needs more direct control over the configuration.
 
-------
-
 #### Request `served/getInfo`
 
 **Params**: `ServedInfoParams`
@@ -679,6 +677,16 @@ interface ServedInfoResponse
 	selectedWorkspaceIndex: number;
 }
 ```
+
+#### Request `served/forceLoadProjects`
+
+**Params**: `string[]`
+
+Forces the load of projects, regardless of manyProjects limit or action configuration of the given file paths. Returns true if successful, false otherwise, for each item in the params array in order that was given in.
+
+**Returns**: `bool[]`
+
+------
 
 #### Client notification `coded/updateSetting`
 
@@ -742,6 +750,24 @@ interface WorkspaceState
 	 * Value: human readable message.
 	 * */
 	pendingErrors: { [folderUri: string]: string };
+}
+```
+
+#### Client notification `coded/skippedLoads`
+
+**Params**: `InteractiveDownload`
+
+Tells the client that project loading was skipped for the given path(s). The client may then ask the user or query configuration if the paths should be loaded or skipped. When requesting to load projects, pass these roots as arguments to the reqeust `served/forceLoadProjects`.
+
+Otherwise, project loading is blocking and asks the client using a message box for each lazy-loaded project. IDE functionality is otherwise limited while these message boxes are open.
+
+This must be implemented if `--provide async-ask-load` is given in the command line, otherwise this is not called.
+
+```ts
+interface SkippedLoadsNotification
+{
+	/** List of folder file paths */
+	roots: string[];
 }
 ```
 
