@@ -434,3 +434,31 @@ C[] substr(C)(C[] s, size_t start, size_t end)
 		return s[start .. start];
 	return s[start .. end];
 }
+
+/// Overrides visit for each ASTScopes to only travese them when the ast node
+/// tokens contain a token at index `mixin(member)`
+mixin template ASTSearchScopeLimit(string member, ASTScopes...)
+{
+	static foreach (ASTScope; ASTScopes)
+		override void visit(const ASTScope n)
+		{
+			if (!n.tokens.length ||
+				(mixin(member) >= n.tokens[0].index && mixin(member) <= n.tokens[$ - 1].index + n.tokens[$ - 1].textLength))
+				super.visit(n);
+		}
+}
+
+/// Defines a `exitVisitor` method, when it's set to true, almost all traversing
+/// will be skipped. This is realized by overriding DeclarationOrStatement and
+/// just returning if it's true.
+mixin template ASTFinisher()
+{
+	bool exitVisitor;
+
+	override void visit(const DeclarationOrStatement decl)
+	{
+		if (exitVisitor)
+			return;
+		super.visit(decl);
+	}
+}

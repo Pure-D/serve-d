@@ -884,6 +884,15 @@ class DCDExtComponent : ComponentWrapper
 		if (token >= tokens.length || !tokens[token].isLikeIdentifier)
 			return null;
 
+		Module _parsed;
+		RollbackAllocator rba;
+		Module parsed()
+		{
+			if (_parsed)
+				return _parsed;
+			return _parsed = parseModule(tokens, "stdin", &rba);
+		}
+
 		Related[] ret;
 
 		switch (tokens[token].type)
@@ -908,8 +917,6 @@ class DCDExtComponent : ComponentWrapper
 			// if lister
 			auto finder = new IfFinder();
 			finder.target = tokens[token].index;
-			RollbackAllocator rba;
-			auto parsed = parseModule(tokens, "stdin", &rba);
 			finder.visit(parsed);
 			foreach (ifToken; finder.foundIf)
 				ret ~= Related(Related.Type.controlFlow, [ifToken.index, ifToken.index + ifToken.tokenText.length]);
@@ -929,8 +936,6 @@ class DCDExtComponent : ComponentWrapper
 			finder.isLoop = !(tokens[token].type == tok!"break" || tokens[token].type == tok!"continue");
 			if (token + 1 < tokens.length && tokens[token + 1].type == tok!"identifier")
 				finder.label = tokens[token + 1].text;
-			RollbackAllocator rba;
-			auto parsed = parseModule(tokens, "stdin", &rba);
 			finder.visit(parsed);
 
 			if (finder.isLoop && finder.foundBlock.length)
@@ -951,8 +956,6 @@ class DCDExtComponent : ComponentWrapper
 			// switch/case lister
 			auto finder = new SwitchFinder();
 			finder.target = tokens[token].index;
-			RollbackAllocator rba;
-			auto parsed = parseModule(tokens, "stdin", &rba);
 			finder.visit(parsed);
 			foreach (switchToken; finder.foundSwitch)
 				ret ~= Related(Related.Type.controlFlow, [switchToken.index, switchToken.index + switchToken.tokenText.length]);
@@ -961,8 +964,6 @@ class DCDExtComponent : ComponentWrapper
 			// return effect lister
 			auto finder = new ReturnFinder();
 			finder.target = tokens[token].index;
-			RollbackAllocator rba;
-			auto parsed = parseModule(tokens, "stdin", &rba);
 			finder.visit(parsed);
 			foreach (switchToken; finder.related)
 				ret ~= Related(Related.Type.controlFlow, [switchToken.index, switchToken.index + switchToken.tokenText.length]);
@@ -2149,6 +2150,9 @@ final class IfFinder : ASTVisitor
 
 	alias visit = ASTVisitor.visit;
 
+	mixin ASTSearchScopeLimit!("target", FunctionBody);
+	mixin ASTFinisher;
+
 	static foreach (If; AliasSeq!(IfStatement, ConditionalStatement))
 	override void visit(const If ifStatement)
 	{
@@ -2279,6 +2283,7 @@ final class IfFinder : ASTVisitor
 			if (v.index == target)
 			{
 				foundIf = currentIf;
+				exitVisitor = true;
 				return;
 			}
 	}
@@ -2339,6 +2344,9 @@ final class SwitchFinder : ASTVisitor
 	size_t target;
 
 	alias visit = ASTVisitor.visit;
+
+	mixin ASTSearchScopeLimit!("target", FunctionBody);
+	mixin ASTFinisher;
 
 	override void visit(const SwitchStatement stmt)
 	{
@@ -2404,6 +2412,7 @@ final class SwitchFinder : ASTVisitor
 			if (v.index == target)
 			{
 				foundSwitch = currentSwitch;
+				exitVisitor = true;
 				return;
 			}
 	}
@@ -2456,6 +2465,9 @@ final class BreakFinder : ASTVisitor
 	string label;
 
 	alias visit = ASTVisitor.visit;
+
+	mixin ASTSearchScopeLimit!("target", FunctionBody);
+	mixin ASTFinisher;
 
 	override void visit(const LabeledStatement stmt)
 	{
@@ -2622,6 +2634,7 @@ final class BreakFinder : ASTVisitor
 			if (v.index == target)
 			{
 				foundBlock = currentBlock;
+				exitVisitor = true;
 				return;
 			}
 	}
