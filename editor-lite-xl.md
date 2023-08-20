@@ -14,5 +14,7 @@ lsp.add_server {
   language = "d",
   file_patterns = { "%.d$" },
   command = { "serve-d" },
+  incremental_changes = true,
 }
 ```
+
