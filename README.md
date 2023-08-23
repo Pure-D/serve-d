@@ -67,7 +67,7 @@ _add LSP configurations using serve-d for other editors and PR them here!_
 * [emacs](editor-emacs.md)
 * [Helix](editor-helix.md)
 * [Nova](editor-nova.md)
-* [Lite-XL](editor.lite-xl.md)
+* [Lite-XL](editor-lite-xl.md)
 
 ### Project Layout
 
