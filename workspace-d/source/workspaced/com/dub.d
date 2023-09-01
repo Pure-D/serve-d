@@ -145,7 +145,7 @@ class DubComponent : ComponentWrapper
 		}
 
 		if (!_compilerBinaryName.length)
-			_compilerBinaryName = _dub.defaultCompiler;
+			_compilerBinaryName = config.get("dub", "defaultCompiler", _dub.defaultCompiler);
 		setCompiler(_compilerBinaryName);
 
 		_settingsTemplate = cast() _dub.project.rootPackage.getBuildSettings();

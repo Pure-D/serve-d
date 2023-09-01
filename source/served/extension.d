@@ -361,7 +361,12 @@ void doGlobalStartup(UserConfiguration config)
 	{
 		trace("Initializing serve-d for global access");
 
+		Configuration.ValueT[string] dubSettings;
+		if (config.d.dubCompiler.length)
+			dubSettings["defaultCompiler"] = Configuration.ValueT(config.d.dubCompiler);
+
 		backend.globalConfiguration.base = [
+			"dub": Configuration.Section(dubSettings),
 			"dcd": Configuration.Section([
 				"clientPath": Configuration.ValueT(config.dcdClientPath.userPath),
 				"serverPath": Configuration.ValueT(config.dcdServerPath.userPath),
