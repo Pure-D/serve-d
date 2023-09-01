@@ -79,6 +79,13 @@ static immutable PlainSnippet[] plainSnippets = [
 		"int main(int argc, const(char)** argv) {\n\t${0:return 0;}\n}",
 		"C entry point when using D with -betterC with integer status return value"
 	),
+	PlainSnippet(
+		[SnippetLevel.global, SnippetLevel.mixinTemplate],
+		"trymain",
+		"int main(string[] args) => try / catch",
+		"int main(string[] args) {\n\ttry {\n\t\t${1:run(args);}\n\t\treturn 0;\n\t} catch (Exception e) {\n\t\timport std.stdio : stderr;\n\n\t\t${2:stderr.writeln(\"Error: \", e.msg);}\n\t\t${3:debug stderr.writeln(e);}\n\n\t\treturn 1;\n\t}\n}$0",
+		"Normal D entry point main function with arguments and no return value"
+	),
 
 	// properties
 
