@@ -15,14 +15,14 @@ import served.commands.format : generateDfmtArgs;
 import served.linters.dscanner : DScannerDiagnosticSource, SyntaxHintDiagnosticSource;
 import served.linters.dub : DubDiagnosticSource;
 
-import std.algorithm : canFind, map, min, sort, startsWith, uniq;
+import std.algorithm : canFind, endsWith, find, findSplit, map, min, sort, startsWith, uniq;
 import std.array : array;
 import std.conv : to;
 import std.experimental.logger;
 import std.format : format;
 import std.path : buildNormalizedPath, isAbsolute;
 import std.regex : Captures, matchFirst, regex, replaceAll;
-import std.string : indexOf, indexOfAny, join, replace, strip;
+import std.string : chomp, indexOf, indexOfAny, join, replace, strip;
 
 import fs = std.file;
 import io = std.stdio;
@@ -192,31 +192,110 @@ void addDubDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
 		}
 	}
 
-	foreach (diagnostic; diagnostics)
+	void autofixFromError(T)(Diagnostic diag, T check)
 	{
-		if (diagnostic.message.startsWith("use `is` instead of `==`",
-				"use `!is` instead of `!=`")
-			&& diagnostic.range.end.character - diagnostic.range.start.character == 2)
+		static if (is(T : Diagnostic))
+			auto range = check.range;
+		else
 		{
-			auto b = document.positionToBytes(diagnostic.range.start);
+			if (check.location.uri != document.uri)
+				return;
+
+			auto range = check.location.range;
+		}
+
+		if (check.message.startsWith("use `is` instead of `==`",
+				"use `!is` instead of `!=`")
+			&& range.end.character - range.start.character == 2)
+		{
+			auto b = document.positionToBytes(range.start);
 			auto text = document.rawText[b .. $];
 
-			string target = diagnostic.message[5] == '!' ? "!=" : "==";
-			string replacement = diagnostic.message[5] == '!' ? "!is" : "is";
+			string target = check.message[5] == '!' ? "!=" : "==";
+			string replacement = check.message[5] == '!' ? "!is" : "is";
 
 			if (text.startsWith(target))
 			{
 				string title = format!"Change '%s' to '%s'"(target, replacement);
 				TextEditCollection[DocumentUri] changes;
-				changes[document.uri] = [TextEdit(diagnostic.range, replacement)];
+				changes[document.uri] = [TextEdit(range, replacement)];
 				auto action = CodeAction(title, WorkspaceEdit(changes));
 				action.isPreferred = true;
-				action.diagnostics = [diagnostic];
+				action.diagnostics = [diag];
 				action.kind = CodeActionKind.quickfix;
 				ret ~= action;
 			}
 		}
+		else if (check.message.startsWith("perhaps change the `"))
+		{
+			auto line = check.message["perhaps change the `".length .. $].strip;
+			auto parts = line.findSplit("` into `");
+			if (parts[2].endsWith("`"))
+			{
+				auto action = createCodeReplacementSuggestion(ret, document, parts[0], parts[2].chomp("`"), range.start);
+				if (action != CodeAction.init)
+				{
+					action.diagnostics = [diag];
+					action.isPreferred = true;
+					ret ~= action;
+				}
+			}
+		}
 	}
+
+	foreach (diagnostic; diagnostics)
+	{
+		autofixFromError(diagnostic, diagnostic);
+		if (!diagnostic.relatedInformation.isNone)
+			foreach (related; diagnostic.relatedInformation.deref)
+				autofixFromError(diagnostic, related);
+	}
+}
+
+private CodeAction createCodeReplacementSuggestion(ref CodeAction[] ret,
+	Document document, scope const(char)[] from, scope const(char)[] to, Position at)
+{
+	import dparse.lexer;
+	import workspaced.dparseext : textLength;
+
+	StringCache stringCache = StringCache(StringCache.defaultBucketCount);
+
+	auto lineRange = document.lineByteRangeAt(at.line);
+	auto line = document.rawText[lineRange[0] .. lineRange[1]];
+	auto lineTokens = getTokensForParser(line, LexerConfig.init, &stringCache);
+	auto fromTokens = getTokensForParser(from, LexerConfig.init, &stringCache);
+
+	ptrdiff_t startIndex = -1;
+	ptrdiff_t endIndex = -1;
+	auto start = lineTokens.find(fromTokens);
+	if (!start.length)
+		return CodeAction.init;
+	assert(start.length >= fromTokens.length);
+
+	foreach (i; 0 .. fromTokens.length)
+	{
+		if (startIndex == -1)
+			startIndex = start[0].index;
+		endIndex = start[0].index + start[0].textLength;
+		start = start[1 .. $];
+	}
+
+	Position cachePos;
+	size_t cacheIdx;
+
+	startIndex += lineRange[0];
+	endIndex += lineRange[0];
+
+	TextRange range;
+	range.start = document.movePositionBytes(cachePos, cacheIdx, startIndex);
+	range.end = document.movePositionBytes(cachePos, cacheIdx, endIndex);
+
+	string title = format!"Change '%s' to '%s'"(from, to);
+	TextEditCollection[DocumentUri] changes;
+	changes[document.uri] = [TextEdit(range, to.idup)];
+	auto action = CodeAction(title, WorkspaceEdit(changes));
+	action.kind = CodeActionKind.quickfix;
+	return action;
 }
 
 void addDScannerDiagnostics(const ref UserConfiguration config,
