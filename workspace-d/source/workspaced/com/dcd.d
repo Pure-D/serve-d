@@ -262,6 +262,7 @@ class DCDComponent : ComponentWrapper
 				workspaced.messageHandler.handleCrash(refInstance, "dcd", this);
 			}
 		});
+		serverThreads.isDaemon = true;
 	}
 
 	void stopServerSync()
