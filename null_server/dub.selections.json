@@ -1,0 +1,10 @@
+{
+	"fileVersion": 1,
+	"versions": {
+		"dunit": "1.0.16",
+		"eventsystem": "1.2.0",
+		"painlessjson": "1.4.0",
+		"painlesstraits": "0.3.0",
+		"serve-d": {"path":".."}
+	}
+}

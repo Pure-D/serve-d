@@ -1,0 +1,10 @@
+{
+	"fileVersion": 1,
+	"versions": {
+		"automem": "0.6.9",
+		"cachetools": "0.4.1",
+		"requests": "2.1.1",
+		"test_allocator": "0.3.4",
+		"unit-threaded": "0.10.8"
+	}
+}

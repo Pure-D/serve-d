@@ -1,0 +1,32 @@
+{
+	"fileVersion": 1,
+	"versions": {
+		"automem": "0.6.9",
+		"cachetools": "0.4.1",
+		"dcd": "0.13.6",
+		"dfmt": "0.14.1",
+		"diet-complete": "0.0.3",
+		"dscanner": "0.12.2",
+		"dsymbol": "0.11.3",
+		"dub": "1.26.1",
+		"dunit": "1.0.16",
+		"emsi_containers": "0.8.0",
+		"eventsystem": "1.2.0",
+		"inifiled": "1.3.3",
+		"isfreedesktop": "0.1.1",
+		"libddoc": "0.7.4",
+		"libdparse": "0.19.4",
+		"msgpack-d": "1.0.1",
+		"painlessjson": "1.4.0",
+		"painlesstraits": "0.3.0",
+		"requests": "2.1.1",
+		"rm-rf": "0.1.0",
+		"silly": "1.1.1",
+		"standardpaths": "0.8.1",
+		"stdx-allocator": "2.77.5",
+		"test_allocator": "0.3.4",
+		"unit-threaded": "0.10.8",
+		"workspace-d": "3.7.0",
+		"xdgpaths": "0.2.5"
+	}
+}
