@@ -2,8 +2,7 @@ name: Run Unittests
 on:
   push:
     branches:
-    - master
-  pull_request:
+    - "0.7.4-hotfixes"
 
 jobs:
   dubtest:
