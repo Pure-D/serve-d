@@ -32,7 +32,6 @@
 		{
 			"name": "unittest",
 			"mainSourceFile": "source/app.d",
-			"dflags": ["-checkaction=context"],
 			"excludedSourceFiles": [
 				"source/app.d",
 				"source/served/info.d"
@@ -45,7 +44,6 @@
 			"name": "unittest-optimized",
 			"buildOptions": ["optimize", "debugInfo", "unittests"],
 			"mainSourceFile": "source/app.d",
-			"dflags": ["-checkaction=context"],
 			"excludedSourceFiles": [
 				"source/app.d",
 				"source/served/info.d"
