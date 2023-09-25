@@ -9,23 +9,34 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest, macOS-latest]
+        # ubuntu / linux must run on kinda old linux for glibc compatibility!
+        os: [ubuntu-20.04, windows-latest, macos-latest]
         arch: [x86_64]
         include:
           # use for 32 bit build
           - os: windows-latest
             arch: x86
+          - os: macos-latest
+            arch: arm64-apple-macos
+            arch_short: arm64
+            cross: "1"
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v2
+
+      - id: vars
+        shell: bash
+        run: |
+          if [ -z "${{matrix.arch_short}}" ]; then
+            echo "arch_short=${{matrix.arch}}" >> $GITHUB_OUTPUT
+          else
+            echo "arch_short=${{matrix.arch_short}}" >> $GITHUB_OUTPUT
+          fi
 
       - name: Install D compiler
         uses: dlang-community/setup-dlang@v1
         with:
             compiler: ldc-latest
-
-      - name: dub upgrade
-        uses: WebFreak001/dub-upgrade@v0.1.0
 
       - name: Run tests
         run: dub test
@@ -33,17 +44,18 @@ jobs:
       # Linux release
       - name: Build Linux release
         run: ./ci/build.sh && rdmd ci/validate_version.d
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-20.04'
         env:
           ARCH: ${{ matrix.arch }}
           BUILD: release
+          CROSS: ${{ matrix.cross }}
 
       - name: Deploy Linux release
-        if: matrix.os == 'ubuntu-latest'
+        if: matrix.os == 'ubuntu-20.04'
         uses: WebFreak001/upload-asset@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OS: linux-${{ matrix.arch }}
+          OS: linux-${{ steps.vars.outputs.arch_short }}
         with:
           file: ./serve-d.tar.xz
           mime: application/x-gtar
@@ -52,18 +64,19 @@ jobs:
       # OSX release
       - name: Build OSX release
         run: ./ci/build.sh && rdmd ci/validate_version.d
-        if: matrix.os == 'macOS-latest'
+        if: matrix.os == 'macos-latest'
         env:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
           ARCH: ${{ matrix.arch }}
           BUILD: release
+          CROSS: ${{ matrix.cross }}
 
       - name: Deploy OSX release
-        if: matrix.os == 'macOS-latest'
+        if: matrix.os == 'macos-latest'
         uses: WebFreak001/upload-asset@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OS: osx-${{ matrix.arch }}
+          OS: osx-${{ steps.vars.outputs.arch_short }}
         with:
           file: ./serve-d.tar.xz
           mime: application/x-gtar
@@ -76,13 +89,14 @@ jobs:
         env:
           BUILD: release
           ARCH: ${{ matrix.arch }}
+          CROSS: ${{ matrix.cross }}
 
       - name: Deploy Windows release
         if: matrix.os == 'windows-latest'
         uses: WebFreak001/upload-asset@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          OS: windows-${{ matrix.arch }}
+          OS: windows-${{ steps.vars.outputs.arch_short }}
         with:
           file: ./serve-d.zip
           mime: application/zip

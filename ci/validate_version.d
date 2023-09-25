@@ -15,12 +15,18 @@ void main()
 	else
 		string served = "./serve-d";
 
+	if (environment.get("CROSS").length)
+	{
+		writeln("Not checking if serve-d version is up-to-date because it's cross-compiled!");
+		return;
+	}
+
 	auto res = execute([served, "--version"]);
 	enforce(res.status == 0, "serve-d --version didn't return status 0");
 
 	string output = res.output.strip;
-	enforce(output.startsWith("serve-d v"), "serve-d --version didn't begin with `serve-d v`");
-	output = output["serve-d v".length .. $];
+	enforce(output.startsWith("serve-d standalone v"), "serve-d --version didn't begin with `serve-d standalone v`");
+	output = output["serve-d standalone v".length .. $];
 
 	auto space = output.indexOfAny(" \t\r\n");
 	if (space != -1)
