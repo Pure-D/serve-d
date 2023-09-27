@@ -264,7 +264,26 @@ class DubComponent : ComponentWrapper
 				debugVersions ~= target.buildSettings.debugVersions;
 			}
 
-			_importPaths = importPaths.data;
+			string[] rootSourcePaths;
+			if (auto rootTargetIndex = _dub.projectName in gen.targetDescriptionLookup)
+			{
+				auto rootTarget = gen.targetDescriptions[*rootTargetIndex];
+				// upstream PR: https://github.com/dlang/dub/pull/2704
+				static if (__traits(hasMember, rootTarget.buildSettings, "specifiedSourcePaths"))
+				{
+					pragma(msg,
+						"\n\n\n\n\n\n\nTODO: remove this message and the `static if` around this code, this change made it into DUB now and we upgraded!\n\n"
+						~ __FILE__ ~ ":" ~ __LINE__.stringof
+						~ "\n\n\n\n\n\n\n");
+
+					// adds the specified `sourcePaths` of the current package (only) as import paths for DCD
+					foreach (sourcePath; rootTarget.buildSettings.specifiedSourcePaths)
+						if (!rootTarget.buildSettings.importPaths.canFind(sourcePath))
+							rootSourcePaths ~= sourcePath;
+				}
+			}
+
+			_importPaths = rootSourcePaths ~ importPaths.data;
 			_stringImportPaths = stringImportPaths.data;
 			_importFiles = sourceFiles.data;
 			_versions = versions.data;
@@ -280,6 +299,9 @@ class DubComponent : ComponentWrapper
 				e.toString);
 			_importPaths = [];
 			_stringImportPaths = [];
+			_importFiles = [];
+			_versions = [];
+			_debugVersions = [];
 			return false;
 		}
 	}
