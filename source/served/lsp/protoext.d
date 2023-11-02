@@ -161,6 +161,12 @@ struct DocumentSymbolParamsEx
 		textDocument = params.textDocument;
 	}
 
+	this(DocumentSymbolParams params, bool verbose)
+	{
+		textDocument = params.textDocument;
+		this.verbose = verbose;
+	}
+
 	this(TextDocumentIdentifier textDocument, bool verbose)
 	{
 		this.textDocument = textDocument;

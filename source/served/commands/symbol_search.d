@@ -57,7 +57,7 @@ JsonValue provideDocumentSymbols(DocumentSymbolParams params)
 		.hierarchicalDocumentSymbolSupport.orDefault)
 		return provideDocumentSymbolsHierarchical(params).toJsonValue;
 	else
-		return provideDocumentSymbolsOld(DocumentSymbolParamsEx(params)).map!"a.downcast".array.toJsonValue;
+		return provideDocumentSymbolsOld(DocumentSymbolParamsEx(params, true)).map!"a.downcast".array.toJsonValue;
 }
 
 private struct OldSymbolsCache
@@ -120,8 +120,10 @@ SymbolInformationEx makeSymbolInfoEx(scope const ref DefinitionElement def, stri
 		info.containerName = *ptr;
 	if ("deprecation" in attribs)
 		info.tags = [SymbolTag.deprecated_];
-	if (auto name = "name" in attribs)
-		info.detail = *name;
+	if (auto signature = "signature" in attribs)
+		info.detail = *signature;
+	if (auto detail = "detail" in attribs)
+		info.detail = *detail;
 	return info;
 }
 
@@ -140,7 +142,7 @@ DocumentSymbolInfo[] provideDocumentSymbolsHierarchical(DocumentSymbolParams par
 	if (cached.length)
 		return cached;
 	DocumentSymbolInfo[] all;
-	auto symbols = provideDocumentSymbolsOld(DocumentSymbolParamsEx(params));
+	auto symbols = provideDocumentSymbolsOld(DocumentSymbolParamsEx(params, true));
 	foreach (symbol; symbols)
 	{
 		DocumentSymbolInfo sym;

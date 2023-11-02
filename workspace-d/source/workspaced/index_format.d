@@ -437,6 +437,7 @@ struct DefinitionElement
 	/// * `P` = postblit/copy ctor (only in verbose mode)
 	/// * `I` = import (only in verbose mode)
 	/// * `N` = invariant
+	/// * `:` = attribute declaration like `private:` (only in verbose mode)
 	char type;
 	/// Arbitrary per-symbol data that differs from type to type.
 	string[string] attributes;

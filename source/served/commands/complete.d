@@ -197,6 +197,8 @@ SymbolKind convertFromDscannerType(char type, string name = null)
 		return SymbolKind.variable;
 	case 'a':
 		return SymbolKind.field;
+	case ':':
+		return SymbolKind.module_;
 	default:
 		return cast(SymbolKind) 0;
 	}

@@ -913,13 +913,14 @@ final class DefinitionFinder : ASTVisitor
 	{
 		if (!dec.structBody)
 			return;
-		definitions ~= makeDefinition(dec.name.text, dec.name.line, 'c', context,
-			dec.safeRange);
-		auto c = context;
-		context = ContextType(["class": dec.name.text], null, c, DefinitionElement.BasicVisibility.default_);
-		context.insideAggregate = true;
+		definitions ~= context.makeDefinition('c', dec.name.text, dec.name.line,
+			dec.safeRange, "class");
+
+		mixin(SaveContext);
+		context.inAggregate = true;
+		context.pushMetadata("class", dec.name.text);
+		context.visibility = DefinitionElement.BasicVisibility.default_;
 		dec.accept(this);
-		context = c;
 	}
 
 	override void visit(const StructDeclaration dec)
@@ -931,55 +932,64 @@ final class DefinitionFinder : ASTVisitor
 			dec.accept(this);
 			return;
 		}
-		definitions ~= makeDefinition(dec.name.text, dec.name.line, 's', context,
-			dec.safeRange);
-		auto c = context;
-		context = ContextType(["struct": dec.name.text], null, c, DefinitionElement.BasicVisibility.default_);
-		context.insideAggregate = true;
+		definitions ~= context.makeDefinition('s', dec.name.text, dec.name.line,
+			dec.safeRange, "struct");
+
+		mixin(SaveContext);
+		context.inAggregate = true;
+		context.pushMetadata("struct", dec.name.text);
+		context.visibility = DefinitionElement.BasicVisibility.default_;
 		dec.accept(this);
-		context = c;
 	}
 
 	override void visit(const InterfaceDeclaration dec)
 	{
 		if (!dec.structBody)
 			return;
-		definitions ~= makeDefinition(dec.name.text, dec.name.line, 'i', context,
-			dec.safeRange);
-		auto c = context;
-		context = ContextType(["interface:": dec.name.text], null, context);
-		context.insideAggregate = true;
+		definitions ~= context.makeDefinition('i', dec.name.text, dec.name.line,
+			dec.safeRange, "interface");
+
+		mixin(SaveContext);
+		context.inAggregate = true;
+		context.pushMetadata("interface", dec.name.text);
+		context.visibility = DefinitionElement.BasicVisibility.default_;
 		dec.accept(this);
-		context = c;
 	}
 
 	override void visit(const TemplateDeclaration dec)
 	{
-		auto def = makeDefinition(dec.name.text, dec.name.line, 'T', context,
-			dec.safeRange);
+		auto def = context.makeDefinition('T', dec.name.text, dec.name.line,
+			dec.safeRange, "template");
 		def.attributes["signature"] = paramsToString(dec);
 		definitions ~= def;
-		auto c = context;
-		context = ContextType(["template": dec.name.text], null, context);
-		context.insideAggregate = true;
+
+		mixin(SaveContext);
+		context.inAggregate = true;
+		context.pushMetadata("template", dec.name.text);
+		context.visibility = DefinitionElement.BasicVisibility.default_;
 		dec.accept(this);
-		context = c;
 	}
 
 	override void visit(const FunctionDeclaration dec)
 	{
-		auto def = makeDefinition(dec.name.text, dec.name.line, 'f', context,
+		mixin(SaveContext);
+		foreach (attr; dec.attributes)
+			visit(attr);
+		foreach (sc; dec.storageClasses)
+			visit(sc);
+
+		auto def = context.makeDefinition('f', dec.name.text, dec.name.line,
 			dec.safeRange);
 		def.attributes["signature"] = paramsToString(dec);
 		if (dec.returnType !is null)
 			def.attributes["return"] = astToString(dec.returnType);
 		definitions ~= def;
-		dec.accept(this);
+		visit(dec.functionBody);
 	}
 
 	override void visit(const Constructor dec)
 	{
-		auto def = makeDefinition("this", dec.line, 'f', context,
+		auto def = context.makeDefinition('f', "this", dec.line,
 			dec.safeRange);
 		def.attributes["signature"] = paramsToString(dec);
 		definitions ~= def;
@@ -988,7 +998,7 @@ final class DefinitionFinder : ASTVisitor
 
 	override void visit(const Destructor dec)
 	{
-		definitions ~= makeDefinition("~this", dec.line, 'f', context,
+		definitions ~= context.makeDefinition('f', "~this", dec.line,
 			dec.safeRange);
 		dec.accept(this);
 	}
@@ -996,7 +1006,7 @@ final class DefinitionFinder : ASTVisitor
 	override void visit(const Postblit dec)
 	{
 		if (verbose)
-			definitions ~= makeDefinition("this(this)", dec.line, 'f', context,
+			definitions ~= context.makeDefinition('f', "this(this)", dec.line,
 				dec.safeRange);
 		dec.accept(this);
 	}
@@ -1004,14 +1014,21 @@ final class DefinitionFinder : ASTVisitor
 	override void visit(const EnumDeclaration dec)
 	{
 		if (!dec.enumBody)
+		{
+			if (shouldAddVariable)
+				definitions ~= context.makeDefinition('v', dec.name.text, dec.name.line,
+					dec.safeRange);
 			return;
-		definitions ~= makeDefinition(dec.name.text, dec.name.line, 'g', context,
-				dec.safeRange);
-		auto c = context;
-		context = ContextType(["enum": dec.name.text], null, context);
-		context.insideAggregate = true;
+		}
+
+		mixin(SaveContext);
+
+		definitions ~= context.makeDefinition('g', dec.name.text, dec.name.line,
+				dec.safeRange, dec.type.astToString);
+
+		context.inAggregate = true;
+		context.pushMetadata("enum", dec.name.text);
 		dec.accept(this);
-		context = c;
 	}
 
 	override void visit(const UnionDeclaration dec)
@@ -1023,42 +1040,43 @@ final class DefinitionFinder : ASTVisitor
 			dec.accept(this);
 			return;
 		}
-		definitions ~= makeDefinition(dec.name.text, dec.name.line, 'u', context,
+		definitions ~= context.makeDefinition('u', dec.name.text, dec.name.line,
 				dec.safeRange);
-		auto c = context;
-		context = ContextType(["union": dec.name.text], null, context);
-		context.insideAggregate = true;
+		mixin(SaveContext);
+		context.inAggregate = true;
+		context.pushMetadata("union", dec.name.text);
 		dec.accept(this);
-		context = c;
 	}
 
 	override void visit(const FunctionBody fn)
 	{
-		auto c = context;
-		context.insideFunction = true;
+		mixin(SaveContext);
+		context.inFunction = true;
 		fn.accept(this);
-		context = c;
 	}
 
 	override void visit(const AnonymousEnumMember mem)
 	{
-		definitions ~= makeDefinition(mem.name.text, mem.name.line, 'e', context,
-				mem.safeRange);
+		definitions ~= context.makeDefinition('e', mem.name.text, mem.name.line,
+				mem.safeRange, mem.assignExpression.astToString);
 		mem.accept(this);
 	}
 
 	override void visit(const EnumMember mem)
 	{
-		definitions ~= makeDefinition(mem.name.text, mem.name.line, 'e', context,
-				mem.safeRange);
+		definitions ~= context.makeDefinition('e', mem.name.text, mem.name.line,
+				mem.safeRange, mem.assignExpression.astToString);
 		mem.accept(this);
 	}
 
 	override void visit(const VariableDeclaration dec)
 	{
 		if (shouldAddVariable)
+		{
+			mixin(SaveContext);
+			string typeStr = dec.type.astToString;
 			foreach (i, d; dec.declarators)
-				definitions ~= makeDefinition(d.name.text, d.name.line, 'v', context,
+				definitions ~= context.makeDefinition('v', d.name.text, d.name.line,
 					[
 						i == 0
 							? cast(int) min(
@@ -1069,7 +1087,8 @@ final class DefinitionFinder : ASTVisitor
 						i == dec.declarators.length - 1
 							? cast(int) dec.safeEndLocation
 							: cast(int) d.safeEndLocation
-					]);
+					], typeStr);
+		}
 		dec.accept(this);
 	}
 
@@ -1077,7 +1096,7 @@ final class DefinitionFinder : ASTVisitor
 	{
 		if (shouldAddVariable)
 			foreach (i, d; dec.parts)
-				definitions ~= makeDefinition(d.identifier.text, d.identifier.line, 'v', context,
+				definitions ~= context.makeDefinition('v', d.identifier.text, d.identifier.line,
 					[
 						i == 0
 							? cast(int) dec.safeStartLocation
@@ -1091,36 +1110,23 @@ final class DefinitionFinder : ASTVisitor
 
 	override void visit(const Invariant dec)
 	{
-		if (!dec.blockStatement)
+		if (dec.blockStatement)
 		{
-			auto c = context;
-			context.insideFunction = true;
-			dec.accept(this);
-			context = c;
-			return;
+			definitions ~= context.makeDefinition('N', "invariant", dec.line,
+					dec.safeRange);
 		}
 
-		definitions ~= makeDefinition("invariant", dec.line, 'N', context,
-				dec.safeRange);
-
-		if ((extraMask & ExtraMask.includeFunctionMembers) == 0)
-		{
-			auto c = context;
-			context.insideFunction = true;
-			dec.accept(this);
-			context = c;
+		if (!(extraMask & ExtraMask.includeFunctionMembers))
 			return;
-		}
 
-		auto c = context;
-		context.insideFunction = true;
+		mixin(SaveContext);
+		context.inFunction = true;
 		dec.accept(this);
-		context = c;
 	}
 
 	override void visit(const ModuleDeclaration dec)
 	{
-		context = ContextType(null, null, context, DefinitionElement.BasicVisibility.default_);
+		context.visibility = DefinitionElement.BasicVisibility.default_;
 		dec.accept(this);
 	}
 
@@ -1157,7 +1163,7 @@ final class DefinitionFinder : ASTVisitor
 			string reason;
 			if (attribute.deprecated_.assignExpression)
 				reason = evaluateExpressionString(attribute.deprecated_.assignExpression);
-			context.attr["deprecation"] = reason.length ? reason : "";
+			context.pushMetadata("deprecation", reason.length ? reason : "");
 		}
 
 		attribute.accept(this);
@@ -1165,6 +1171,7 @@ final class DefinitionFinder : ASTVisitor
 
 	override void visit(const AtAttribute atAttribute)
 	{
+		string stringUDA;
 		if (atAttribute.argumentList)
 		{
 			foreach (item; atAttribute.argumentList.items)
@@ -1172,32 +1179,48 @@ final class DefinitionFinder : ASTVisitor
 				auto str = evaluateExpressionString(item);
 
 				if (str !is null)
-					context.privateAttr["utName"] = str;
+					stringUDA = str;
 			}
 		}
+		else if (atAttribute.templateSingleArgument)
+		{
+			stringUDA = evaluateExpressionString(atAttribute.templateSingleArgument.token);
+		}
+
+		if (stringUDA !is null)
+			context.pushMetadata("utName", stringUDA, true);
 		atAttribute.accept(this);
 	}
 
 	override void visit(const AttributeDeclaration dec)
 	{
-		accessSt = AccessState.Keep;
+		auto sticky = stickyAttribute;
+		stickyAttribute = true;
 		dec.accept(this);
+		stickyAttribute = sticky;
+
+		if (verbose)
+		{
+			// TODO: emit with range until end of block or next AttributeDeclaration
+			// TODO: emit for regular blocks like `private { ... }` as well
+			// auto def = context.makeDefinition(':', dec.astToString.strip,
+			// 		dec.line, dec.safeRange);
+
+			// definitions ~= def;
+		}
 	}
 
 	override void visit(const Declaration dec)
 	{
-		auto c = context;
-		dec.accept(this);
-
-		final switch (accessSt) with (AccessState)
+		if (dec.attributeDeclaration)
 		{
-		case Reset:
-			context = c;
-			break;
-		case Keep:
-			break;
+			dec.accept(this);
 		}
-		accessSt = AccessState.Reset;
+		else
+		{
+			mixin(SaveContext);
+			dec.accept(this);
+		}
 	}
 
 	override void visit(const DebugSpecification dec)
@@ -1206,7 +1229,7 @@ final class DefinitionFinder : ASTVisitor
 			return;
 
 		auto tok = dec.identifierOrInteger;
-		auto def = makeDefinition(tok.tokenText, tok.line, 'D', context,
+		auto def = context.makeDefinition('D', tok.tokenText, tok.line,
 				dec.safeRange);
 
 		definitions ~= def;
@@ -1219,7 +1242,7 @@ final class DefinitionFinder : ASTVisitor
 			return;
 
 		auto tok = dec.token;
-		auto def = makeDefinition(tok.tokenText, tok.line, 'V', context,
+		auto def = context.makeDefinition('V', tok.tokenText, tok.line,
 				dec.safeRange);
 
 		definitions ~= def;
@@ -1231,32 +1254,21 @@ final class DefinitionFinder : ASTVisitor
 		if (!dec.blockStatement)
 			return;
 
-		if (!verbose)
+		if (verbose)
 		{
-			auto c = context;
-			context.insideFunction = true;
-			dec.accept(this);
-			context = c;
-			return;
+			mixin(SaveContext);
+			auto utName = context.getMetadata("utName");
+			string testName = text("__unittest_L", dec.line, "_C", dec.column);
+			definitions ~= context.makeDefinition('U', testName, dec.line,
+					dec.safeRange, utName);
 		}
 
-		string testName = text("__unittest_L", dec.line, "_C", dec.column);
-		definitions ~= makeDefinition(testName, dec.line, 'U', context,
-				dec.safeRange, "U");
-
-		if ((extraMask & ExtraMask.includeFunctionMembers) == 0)
-		{
-			auto c = context;
-			context.insideFunction = true;
-			dec.accept(this);
-			context = c;
+		if (!(extraMask & ExtraMask.includeFunctionMembers))
 			return;
-		}
 
-		auto c = context;
-		context.insideFunction = true;
+		mixin(SaveContext);
+		context.inFunction = true;
 		dec.accept(this);
-		context = c;
 	}
 
 	private static immutable CtorTypes = ['C', 'S', 'Q', 'W'];
@@ -1275,7 +1287,7 @@ final class DefinitionFinder : ASTVisitor
 				return;
 			}
 
-			definitions ~= makeDefinition(CtorNames[i], dec.line, CtorTypes[i], context,
+			definitions ~= context.makeDefinition(/*C/S/Q/W*/ CtorTypes[i], CtorNames[i], dec.line,
 				dec.safeRange);
 
 			dec.accept(this);
@@ -1287,14 +1299,14 @@ final class DefinitionFinder : ASTVisitor
 		// Old style alias
 		if (dec.declaratorIdentifierList)
 			foreach (i; dec.declaratorIdentifierList.identifiers)
-				definitions ~= makeDefinition(i.text, i.line, 'a', context,
+				definitions ~= context.makeDefinition('a', i.text, i.line,
 						i.safeRange);
 		dec.accept(this);
 	}
 
 	override void visit(const AliasInitializer dec)
 	{
-		definitions ~= makeDefinition(dec.name.text, dec.name.line, 'a', context,
+		definitions ~= context.makeDefinition('a', dec.name.text, dec.name.line,
 				dec.safeRange);
 
 		dec.accept(this);
@@ -1303,7 +1315,7 @@ final class DefinitionFinder : ASTVisitor
 	override void visit(const AliasThisDeclaration dec)
 	{
 		auto name = dec.identifier;
-		definitions ~= makeDefinition(name.text, name.line, 'a', context,
+		definitions ~= context.makeDefinition('a', name.text, name.line,
 				dec.safeRange);
 
 		dec.accept(this);
@@ -1316,17 +1328,15 @@ final class DefinitionFinder : ASTVisitor
 
 		if (conditional.trueStatement)
 		{
-			scope c = context;
-			context = makeConditionalContext(conditional.compileCondition, false);
+			mixin(SaveContext);
+			makeConditionalContext(conditional.compileCondition, false);
 			conditional.trueStatement.accept(this);
-			context = c;
 		}
 		if (conditional.falseStatement)
 		{
-			scope c = context;
-			context = makeConditionalContext(conditional.compileCondition, true);
+			mixin(SaveContext);
+			makeConditionalContext(conditional.compileCondition, true);
 			conditional.falseStatement.accept(this);
-			context = c;
 		}
 	}
 
@@ -1337,37 +1347,33 @@ final class DefinitionFinder : ASTVisitor
 
 		if (conditional.trueDeclarations.length)
 		{
-			scope c = context;
-			context = makeConditionalContext(conditional.compileCondition, false);
+			mixin(SaveContext);
+			makeConditionalContext(conditional.compileCondition, false);
 			foreach (d; conditional.trueDeclarations)
 				d.accept(this);
-			context = c;
 		}
 		if (conditional.falseDeclarations.length)
 		{
-			scope c = context;
-			context = makeConditionalContext(conditional.compileCondition, true);
+			mixin(SaveContext);
+			makeConditionalContext(conditional.compileCondition, true);
 			foreach (d; conditional.falseDeclarations)
 				d.accept(this);
-			context = c;
 		}
 	}
 
-	private ContextType makeConditionalContext(const CompileCondition cond, bool invert)
+	private void makeConditionalContext(const CompileCondition cond, bool invert)
 	{
-		ContextType ret = context;
 		if (cond.versionCondition)
-			ret.versions ~= DefinitionElement.VersionCondition(cond.versionCondition.token.text, invert);
+			context.pushVersion(DefinitionElement.VersionCondition(cond.versionCondition.token.text, invert));
 		if (cond.debugCondition)
-			ret.versions ~= DefinitionElement.VersionCondition(cond.debugCondition.identifierOrInteger.text, invert);
+			context.pushDebugVersion(DefinitionElement.VersionCondition(cond.debugCondition.identifierOrInteger.text, invert));
 		if (cond.staticIfCondition)
-			ret.hasOtherConditional = true;
-		return ret;
+			context.pushOtherConditional();
 	}
 
 	override void visit(const ImportDeclaration decl)
 	{
-		if ((extraMask & ExtraMask.imports) == 0)
+		if (!(extraMask & ExtraMask.imports))
 			return;
 
 		void process(const SingleImport imp)
@@ -1377,8 +1383,8 @@ final class DefinitionFinder : ASTVisitor
 			auto ids = imp.identifierChain.identifiers;
 			if (ids.length)
 			{
-				definitions ~= makeDefinition(
-					ids.map!"a.text".join("."), ids[0].line, 'I', context, imp.safeRange);
+				definitions ~= context.makeDefinition('I',
+					ids.map!"a.text".join("."), ids[0].line, imp.safeRange);
 			}
 		}
 
@@ -1402,76 +1408,174 @@ final class DefinitionFinder : ASTVisitor
 
 	bool shouldAddVariable() const @property
 	{
-		return !context.insideFunction
+		return !context.inFunction
 			|| (extraMask & ExtraMask.includeVariablesInFunctions) != 0;
 	}
 
 	alias visit = ASTVisitor.visit;
 
-	ContextType context;
-	AccessState accessSt;
+	Context context;
+	bool stickyAttribute;
 	DefinitionElement[] definitions;
 	bool hasMixin;
 	bool verbose;
 	ExtraMask extraMask;
 }
 
-DefinitionElement makeDefinition(string name, size_t line, char type,
-		ContextType context, int[2] range, string forType = null)
+DefinitionElement makeDefinition(ref Context context, char type, string name,
+	size_t line, int[2] range, string detail = null)
 {
-	auto ret = DefinitionElement(name, cast(int) line, type, context.attr.dup, range);
+	auto ret = DefinitionElement(name, cast(int) line, type, context.attr, range);
 	auto access = context.visibility.toLegacyAccess;
 	if (access.length)
 		ret.attributes["access"] = access;
+	if (detail.length)
+		ret.attributes["detail"] = detail;
 	ret.visibility = context.visibility;
 	ret.versioned = context.versions;
 	ret.debugVersioned = context.debugVersions;
 	ret.hasOtherConditional = context.hasOtherConditional;
-	ret.insideFunction = context.insideFunction;
-	ret.insideAggregate = context.insideAggregate;
-
-	if (forType == "U")
-	{
-		if (auto utName = "utName" in context.privateAttr)
-			ret.attributes["name"] = *utName;
-	}
+	ret.insideFunction = context.inFunction;
+	ret.insideAggregate = context.inAggregate;
 	return ret;
 }
 
-enum AccessState
+struct Context
 {
-	Reset, /// when ascending the AST reset back to the previous access.
-	Keep /// when ascending the AST keep the new access.
-}
-
-struct ContextType
-{
-	string[string] attr;
-	string[string] privateAttr;
-	DefinitionElement.Visibility visibility;
-	DefinitionElement.VersionCondition[] versions, debugVersions;
-	bool hasOtherConditional;
-	bool insideFunction;
-	bool insideAggregate;
-
-	this(string[string] attr, string[string] privateAttr, ContextType inherit)
+	struct Metadata
 	{
-		this.attr = attr;
-		this.privateAttr = privateAttr;
-		this.visibility = inherit.visibility;
-		this.versions = inherit.versions;
-		this.debugVersions = inherit.debugVersions;
-		this.hasOtherConditional = inherit.hasOtherConditional;
-		this.insideFunction = inherit.insideFunction;
-		this.insideAggregate = inherit.insideAggregate;
+		string name;
+		string value;
+		/// To only make it visible on explicit `get`, but not by default
+		bool hidden;
+	}
+	struct InFunction { bool now; }
+	struct InAggregate { bool now; }
+	struct HasOtherConditional {}
+	struct Version { DefinitionElement.VersionCondition v; }
+	struct DebugVersion { DefinitionElement.VersionCondition v; }
+
+	alias Item = Algebraic!(
+		DefinitionElement.Visibility,
+		Version,
+		DebugVersion,
+		InFunction,
+		InAggregate,
+		HasOtherConditional,
+		Metadata,
+	);
+
+	private Item[] stack;
+
+	void pushMetadata(string name, string value, bool hidden = false)
+	{
+		stack.assumeSafeAppend ~= Item(Metadata(name, value, hidden));
 	}
 
-	this(T)(string[string] attr, string[string] privateAttr, ContextType inherit, T visibility)
+	string getMetadata(string name, string defaultValue = null) const
 	{
-		this(attr, privateAttr, inherit);
-		this.visibility = visibility;
+		foreach_reverse (s; stack)
+			if (s._is!Metadata && s.get!Metadata.name == name)
+				return s.get!Metadata.value;
+		return defaultValue;
+	}
+
+	string[string] attr() const
+	{
+		string[string] ret;
+		foreach_reverse (s; stack)
+			if (s._is!Metadata)
+			{
+				auto m = s.get!Metadata;
+				if (!m.hidden)
+					ret[m.name] = m.value;
+			}
+		return ret;
+	}
+
+	void visibility(T)(T visibility)
+	{
+		DefinitionElement.Visibility v = visibility;
+		stack.assumeSafeAppend ~= Item(v);
+	}
+
+	DefinitionElement.Visibility visibility() const
+	{
+		foreach_reverse (s; stack)
+			if (s._is!(DefinitionElement.Visibility))
+				return s.get!(DefinitionElement.Visibility);
+		return DefinitionElement.Visibility.init;
+	}
+
+	void pushVersion(DefinitionElement.VersionCondition ver)
+	{
+		stack.assumeSafeAppend ~= Item(Version(ver));
+	}
+
+	DefinitionElement.VersionCondition[] versions() const
+	{
+		auto ret = appender!(typeof(return));
+		foreach (s; stack)
+			if (s._is!Version)
+				ret ~= s.get!Version.v;
+		return ret.data;
+	}
+
+	void pushDebugVersion(DefinitionElement.VersionCondition ver)
+	{
+		stack.assumeSafeAppend ~= Item(DebugVersion(ver));
+	}
+
+	DefinitionElement.VersionCondition[] debugVersions() const
+	{
+		auto ret = appender!(typeof(return));
+		foreach (s; stack)
+			if (s._is!DebugVersion)
+				ret ~= s.get!DebugVersion.v;
+		return ret.data;
+	}
+
+	void pushOtherConditional()
+	{
+		stack.assumeSafeAppend ~= Item(HasOtherConditional.init);
+	}
+
+	bool hasOtherConditional() const
+	{
+		foreach (s; stack)
+			if (s._is!HasOtherConditional)
+				return true;
+		return false;
+	}
+
+	void inFunction(bool v)
+	{
+		stack.assumeSafeAppend ~= Item(InFunction(v));
+	}
+
+	bool inFunction() const
+	{
+		foreach_reverse (s; stack)
+			if (s._is!InFunction)
+				return s.get!InFunction.now;
+		return false;
+	}
+
+	void inAggregate(bool v)
+	{
+		stack.assumeSafeAppend ~= Item(InAggregate(v));
+	}
+
+	bool inAggregate() const
+	{
+		foreach_reverse (s; stack)
+			if (s._is!InAggregate)
+				return s.get!InAggregate.now;
+		return false;
 	}
 }
+
+enum string SaveContext = `scope _contextCopy = context; scope (exit) context = _contextCopy;`;
 
 string toLegacyAccess(DefinitionElement.Visibility v)
 {

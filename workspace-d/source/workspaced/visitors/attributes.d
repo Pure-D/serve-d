@@ -88,9 +88,10 @@ class AttributesVisitor : ASTVisitor
 
 	override void visit(const AttributeDeclaration dec)
 	{
+		auto wasSticky = sticky;
 		sticky = true;
 		dec.accept(this);
-		sticky = false;
+		sticky = wasSticky;
 	}
 
 	override void visit(const Declaration dec)
