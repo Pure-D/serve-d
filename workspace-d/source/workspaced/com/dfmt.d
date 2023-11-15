@@ -25,16 +25,9 @@ class DfmtComponent : ComponentWrapper
 {
 	mixin DefaultGlobalComponentWrapper;
 
-	/// Will format the code passed in asynchronously.
+	/// Will format the code passed in. Might take a noticable amount of time on larger documents.
 	/// Returns: the formatted code as string
-	Future!string format(scope const(char)[] code, string[] arguments = [])
-	{
-		mixin(gthreadsAsyncProxy!`formatSync(code, arguments)`);
-	}
-
-	/// Will format the code passed in synchronously. Might take a short moment on larger documents.
-	/// Returns: the formatted code as string
-	string formatSync(scope const(char)[] code, string[] arguments = [])
+	string format(scope const(char)[] code, string[] arguments = [])
 	{
 		if (!code.strip.length)
 			return null;

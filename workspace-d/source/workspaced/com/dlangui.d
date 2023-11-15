@@ -19,100 +19,88 @@ class DlanguiComponent : ComponentWrapper
 	/// Queries for code completion at position `pos` in DML code
 	/// Returns: `[{type: CompletionType, value: string, documentation: string, enumName: string}]`
 	/// Where type is an integer
-	Future!(CompletionItem[]) complete(scope const(char)[] code, int pos)
+	CompletionItem[] complete(scope const(char)[] code, int pos)
 	{
-		auto ret = new typeof(return);
-		gthreads.create({
-			mixin(traceTask);
-			try
+		LocationInfo info = getLocationInfo(code, pos);
+		CompletionItem[] suggestions;
+		string name = info.itemScope[$ - 1];
+		string[] stack;
+		if (info.itemScope.length > 1)
+			stack = info.itemScope[0 .. $ - 1];
+		string[][] curScope = stack.getProvidedScope();
+		if (info.type == LocationType.RootMember)
+		{
+			foreach (CompletionLookup item; dmlCompletions)
 			{
-				LocationInfo info = getLocationInfo(code, pos);
-				CompletionItem[] suggestions;
-				string name = info.itemScope[$ - 1];
-				string[] stack;
-				if (info.itemScope.length > 1)
-					stack = info.itemScope[0 .. $ - 1];
-				string[][] curScope = stack.getProvidedScope();
-				if (info.type == LocationType.RootMember)
+				if (item.item.type == CompletionType.Class)
 				{
-					foreach (CompletionLookup item; dmlCompletions)
+					if (name.length == 0 || item.item.value.canFind(name))
 					{
-						if (item.item.type == CompletionType.Class)
-						{
-							if (name.length == 0 || item.item.value.canFind(name))
-							{
-								suggestions ~= item.item;
-							}
-						}
+						suggestions ~= item.item;
 					}
 				}
-				else if (info.type == LocationType.Member)
-				{
-					foreach (CompletionLookup item; dmlCompletions)
-					{
-						if (item.item.type == CompletionType.Class)
-						{
-							if (name.length == 0 || item.item.value.canFind(name))
-							{
-								suggestions ~= item.item;
-							}
-						}
-						else if (item.item.type != CompletionType.EnumDefinition)
-						{
-							if (curScope.canFind(item.requiredScope))
-							{
-								if (name.length == 0 || item.item.value.canFind(name))
-								{
-									suggestions ~= item.item;
-								}
-							}
-						}
-					}
-				}
-				else if (info.type == LocationType.PropertyValue)
-				{
-					foreach (CompletionLookup item; dmlCompletions)
-					{
-						if (item.item.type == CompletionType.EnumValue)
-						{
-							if (curScope.canFind(item.requiredScope))
-							{
-								if (item.item.value == name)
-								{
-									foreach (CompletionLookup enumdef; dmlCompletions)
-									{
-										if (enumdef.item.type == CompletionType.EnumDefinition)
-										{
-											if (enumdef.item.enumName == item.item.enumName)
-												suggestions ~= enumdef.item;
-										}
-									}
-									break;
-								}
-							}
-						}
-						else if (item.item.type == CompletionType.Boolean)
-						{
-							if (curScope.canFind(item.requiredScope))
-							{
-								if (item.item.value == name)
-								{
-									suggestions ~= CompletionItem(CompletionType.Keyword, "true");
-									suggestions ~= CompletionItem(CompletionType.Keyword, "false");
-									break;
-								}
-							}
-						}
-					}
-				}
-				ret.finish(suggestions);
 			}
-			catch (Throwable e)
+		}
+		else if (info.type == LocationType.Member)
+		{
+			foreach (CompletionLookup item; dmlCompletions)
 			{
-				ret.error(e);
+				if (item.item.type == CompletionType.Class)
+				{
+					if (name.length == 0 || item.item.value.canFind(name))
+					{
+						suggestions ~= item.item;
+					}
+				}
+				else if (item.item.type != CompletionType.EnumDefinition)
+				{
+					if (curScope.canFind(item.requiredScope))
+					{
+						if (name.length == 0 || item.item.value.canFind(name))
+						{
+							suggestions ~= item.item;
+						}
+					}
+				}
 			}
-		});
-		return ret;
+		}
+		else if (info.type == LocationType.PropertyValue)
+		{
+			foreach (CompletionLookup item; dmlCompletions)
+			{
+				if (item.item.type == CompletionType.EnumValue)
+				{
+					if (curScope.canFind(item.requiredScope))
+					{
+						if (item.item.value == name)
+						{
+							foreach (CompletionLookup enumdef; dmlCompletions)
+							{
+								if (enumdef.item.type == CompletionType.EnumDefinition)
+								{
+									if (enumdef.item.enumName == item.item.enumName)
+										suggestions ~= enumdef.item;
+								}
+							}
+							break;
+						}
+					}
+				}
+				else if (item.item.type == CompletionType.Boolean)
+				{
+					if (curScope.canFind(item.requiredScope))
+					{
+						if (item.item.value == name)
+						{
+							suggestions ~= CompletionItem(CompletionType.Keyword, "true");
+							suggestions ~= CompletionItem(CompletionType.Keyword, "false");
+							break;
+						}
+					}
+				}
+			}
+		}
+		return suggestions;
 	}
 }
 

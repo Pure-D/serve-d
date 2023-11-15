@@ -43,8 +43,7 @@ AsyncReceiver!Location findReferences(ReferenceParams params)
 						resolveLocation(ret, r.file, r.location);
 					}
 					receiver.put(ret);
-				})
-				.getYield();
+				});
 		}
 		catch (Exception e)
 		{

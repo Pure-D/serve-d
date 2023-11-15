@@ -24,7 +24,7 @@ struct DeclarationInfo
 DeclarationInfo findDeclarationImpl(WorkspaceD.Instance instance, scope ref Document doc,
 	int bytes, bool includeDefinition)
 {
-	auto result = instance.get!DCDComponent.findDeclaration(doc.rawText, bytes).getYield;
+	auto result = instance.get!DCDComponent.findDeclaration(doc.rawText, bytes);
 	if (result == DCDDeclaration.init)
 		return DeclarationInfo.init;
 
@@ -68,7 +68,7 @@ DeclarationInfo findDeclarationImpl(WorkspaceD.Instance instance, scope ref Docu
 			{
 				trace("Formatting declaration ", [ret.declaration]);
 
-				ret.declaration = instance.get!DfmtComponent.formatSync(ret.declaration,
+				ret.declaration = instance.get!DfmtComponent.format(ret.declaration,
 					[
 						"--keep_line_breaks=false",
 						"--single_indent=true",
@@ -131,7 +131,7 @@ Hover provideHover(TextDocumentPositionParams params)
 	DCDComponent dcd = instance.get!DCDComponent();
 
 	auto docs = dcd.getDocumentation(document.rawText,
-			cast(int) document.positionToBytes(params.position)).getYield;
+			cast(int) document.positionToBytes(params.position));
 	auto marked = docs.ddocToMarked;
 
 	try

@@ -252,9 +252,16 @@ version (Posix) class PosixFileReader : FileReader
 	}
 }
 
+interface IFileReader
+{
+	ubyte[] yieldLine(bool* whileThisIs = null, bool equalToThis = true) return;
+	ubyte[] yieldData(size_t length, bool* whileThisIs = null, bool equalToThis = true) return;
+	bool isReading();
+}
+
 /// Base class for file readers which can read a file or standard handle line
 /// by line in a Fiber context, yielding until a line is available.
-abstract class FileReader : Thread
+abstract class FileReader : Thread, IFileReader
 {
 	this()
 	{
@@ -263,10 +270,10 @@ abstract class FileReader : Thread
 		mutex = new Mutex();
 	}
 
-	string yieldLine(bool* whileThisIs = null, bool equalToThis = true)
+	override ubyte[] yieldLine(bool* whileThisIs = null, bool equalToThis = true) return
 	{
 		ptrdiff_t index;
-		string ret;
+		ubyte[] ret;
 		while (whileThisIs is null || *whileThisIs == equalToThis)
 		{
 			bool hasData;
@@ -275,7 +282,7 @@ abstract class FileReader : Thread
 				index = data.countUntil([cast(ubyte) '\r', cast(ubyte) '\n']);
 				if (index != -1)
 				{
-					ret = cast(string) data[0 .. index].dup;
+					ret = data[0 .. index].dup;
 					data = data[index + 2 .. $];
 					break;
 				}
@@ -295,7 +302,7 @@ abstract class FileReader : Thread
 	/// data from the incoming data stream atomically and returns a duplicate of
 	/// it.
 	/// Returns null if the file reader stops while reading.
-	ubyte[] yieldData(size_t length, bool* whileThisIs = null, bool equalToThis = true)
+	override ubyte[] yieldData(size_t length, bool* whileThisIs = null, bool equalToThis = true) return
 	{
 		while (whileThisIs is null || *whileThisIs == equalToThis)
 		{

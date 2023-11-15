@@ -23,6 +23,9 @@ void backgroundIndex()
 @protocolNotification("served/reindexAll")
 void reindexAll()
 {
+	import std.algorithm : map;
+	import std.datetime.stopwatch;
+
 	foreach (workspace; workspaces)
 	{
 		if (!workspace.config.d.enableIndex)
@@ -32,7 +35,17 @@ void reindexAll()
 		if (backend.has!IndexComponent(folderPath))
 		{
 			auto indexer = backend.get!IndexComponent(folderPath);
-			indexer.autoIndexSources(stdlib, true).getYield();
+			auto sources = indexer.getIndexSources(stdlib);
+
+			StopWatch sw;
+			sw.start();
+
+			trace("Indexing ", sources.length, " files inside workspace ", indexer.cwd, "...");
+			joinAll(sources.map!(s => () {
+				indexer.reindexFromDisk(s);
+			}));
+			trace("Done indexing ", sources.length, " files in ", sw.peek);
+			indexer.saveIndex();
 		}
 	}
 
@@ -49,7 +62,7 @@ void reindexAll()
 		if (backend.hasBest!IndexComponent(filePath))
 		{
 			auto indexer = backend.best!IndexComponent(filePath);
-			indexer.reindex(filePath, now, doc.rawText.length, doc.rawText, true).getYield();
+			indexer.reindex(filePath, now, doc.rawText.length, doc.rawText, true);
 		}
 	}
 
@@ -68,7 +81,7 @@ void reindexAll()
 	}
 }
 
-int reindexChangeTimeout;
+TimerID reindexChangeTimeout;
 @protocolNotification("textDocument/didChange")
 void reindexOnChange(DidChangeTextDocumentParams params)
 {
@@ -87,7 +100,7 @@ void reindexOnChange(DidChangeTextDocumentParams params)
 			auto now = Clock.currTime;
 			document = documents[params.textDocument.uri];
 			auto indexer = backend.best!IndexComponent(filePath);
-			indexer.reindex(filePath, now, document.rawText.length, document.rawText, false).getYield();
+			indexer.reindex(filePath, now, document.rawText.length, document.rawText, false);
 			delayedSaveIndex(indexer);
 		}
 	}, delay);
@@ -108,12 +121,12 @@ void reindexOnSave(DidSaveTextDocumentParams params)
 	if (backend.hasBest!IndexComponent(filePath))
 	{
 		auto indexer = backend.best!IndexComponent(filePath);
-		indexer.reindexSaved(filePath, document.rawText).getYield();
+		indexer.reindexSaved(filePath, document.rawText);
 		delayedSaveIndex(indexer);
 	}
 }
 
-int reindexSaveTimeout;
+TimerID reindexSaveTimeout;
 private void delayedSaveIndex(IndexComponent index)
 {
 	clearTimeout(reindexSaveTimeout);

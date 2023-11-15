@@ -65,8 +65,7 @@ CodeAction[] provideCodeActions(CodeActionParams params)
 			if (codeText[idx] == ':')
 			{
 				// probably extends
-				if (instance.get!DCDExtComponent.implementAll(codeText,
-						cast(int) startBytes).getYield.length > 0)
+				if (instance.get!DCDExtComponent.implementAll(codeText, cast(int) startBytes).length > 0)
 				{
 					Command cmd = {
 						title: "Implement base classes/interfaces",
@@ -384,7 +383,7 @@ void addDScannerDiagnostics(const ref UserConfiguration config,
 				auto codeReplacementsList = instance.get!DscannerComponent.resolveAutoFixes(
 					checkName, resolveContexts, document.uri.uriToFile, "dscanner.ini",
 					generateDfmtArgs(config, document.eolAt(0)), document.rawText, false,
-					servedDefaultDscannerConfig).getYield;
+					servedDefaultDscannerConfig);
 
 				foreach (i, codeReplacements; codeReplacementsList)
 				{
@@ -489,8 +488,7 @@ TextEdit[] implementMethods(ImplementMethodsParams params)
 	auto eol = document.eolAt(0);
 	auto eolStr = eol.toString;
 	auto toImplement = backend.best!DCDExtComponent(file).implementAll(codeText, cast(int) location,
-			config.d.enableFormatting, generateDfmtArgs(config, eol), implementInterfaceSnippets)
-		.getYield;
+			config.d.enableFormatting, generateDfmtArgs(config, eol), implementInterfaceSnippets);
 	if (!toImplement.length)
 		return ret;
 

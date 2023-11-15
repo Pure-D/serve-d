@@ -142,7 +142,8 @@ void lint(Document document)
 		StopWatch sw;
 		sw.start();
 		auto imports = instance.get!DubComponent.stringImports;
-		auto issues = instance.get!DubComponent.build.getYield;
+		BuildIssue[] issues;
+		runThreaded({ issues = instance.get!DubComponent.build(); }).await;
 		sw.stop();
 		lastDubDuration = sw.peek;
 		trace("dub build finished in ", sw.peek, " with ", issues.length, " issues");

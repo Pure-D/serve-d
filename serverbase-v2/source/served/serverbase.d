@@ -5,6 +5,8 @@ module served.serverbase;
 
 import served.utils.events : EventProcessorConfig;
 
+import eventcore.core;
+
 import io = std.stdio;
 
 /// Actual stdin/stdio as used for RPC communication.
@@ -59,9 +61,6 @@ struct LanguageServerConfig
 ///   - `@protocolMethod("shutdown") JsonValue shutdown()`: the method called
 ///     when the client wants to shutdown the server. Can return anything,
 ///     recommended return value is `JsonValue(null)`.
-///   - `parallelMain`: an optional method which is run alongside everything
-///     else in parallel using fibers. Should yield as much as possible when
-///     there is nothing to do.
 mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig serverConfig = LanguageServerConfig.init)
 {
 	static assert(is(typeof(ExtensionModule.initialize)), "Missing initialize function in ExtensionModule " ~ ExtensionModule.stringof);
@@ -77,6 +76,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 	import served.utils.async;
 	import served.utils.events;
 	import served.utils.fibermanager;
+	import served.utils.filereader_async;
 
 	import std.datetime.stopwatch;
 	import std.experimental.logger;
@@ -93,20 +93,13 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 
 	__gshared bool serverInitializeCalled = false;
 
-	static if (__traits(hasMember, ExtensionModule, "members"))
-		pragma(msg, "\n--------------------------------\n"
-			~ "\x1B[1;34mAPI Change Notice: \x1B[mDeprecation: change " ~ ExtensionModule.stringof
-			~ "'s \x1B[1m`members`\x1B[m field to\n\n\talias memberModules = AliasSeq!(mod1, mod2, ...);\n\t"
-			~ "(excluding the extension module itself)\n\n\t`members` support will be "
-			~ "dropped due to problems with parallel compilation units\n"
-			~ "--------------------------------\n\n");
-	else static if (__traits(hasMember, ExtensionModule, "memberModules"))
+	static if (__traits(hasMember, ExtensionModule, "memberModules"))
 	{ /* ok */ }
 	else
 		static assert(false, "Missing members field in ExtensionModule " ~ ExtensionModule.stringof);
 	mixin EventProcessor!(ExtensionModule, serverConfig.eventConfig) eventProcessor;
 
-	/// Calls a method associated with the given request type in the 
+	/// Calls a method associated with the given request type in the
 	ResponseMessageRaw processRequest(RequestMessageRaw msg)
 	{
 		debug(PerfTraceLog) mixin(traceStatistics(__FUNCTION__));
@@ -127,8 +120,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			res.resultJson = initResult.serializeJson;
 			trace("Initialized");
 			serverInitializeCalled = true;
-			pushFiber({
-				Fiber.yield();
+			setImmediate({
 				processRequestObservers(msg, initResult);
 			});
 			return res;
@@ -152,7 +144,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		}
 
 		size_t numHandlers;
-		eventProcessor.emitProtocol!(protocolMethod, (name, callSymbol, uda) {
+		eventProcessor.emitProtocol!(protocolMethod, (name, call, arguments, uda) {
 			numHandlers++;
 		}, false)(msg.method, msg.paramsJson);
 
@@ -173,11 +165,12 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		}
 
 		int working = 0;
+		void delegate()[] fibers;
 		string[] partialResults;
 		void handlePartialWork(Symbol, Arguments)(Symbol fn, Arguments args)
 		{
 			working++;
-			pushFiber({
+			fibers ~= {
 				scope (exit)
 					working--;
 				auto thisId = working;
@@ -190,13 +183,13 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				else
 					rpc.notifyProgressRaw(partialResultToken, json);
 				processRequestObservers(msg, result);
-			});
+			};
 		}
 
 		void handlePartialIterator(Symbol, Arguments)(Symbol fn, Arguments args)
 		{
 			working++;
-			pushFiber({
+			fibers ~= {
 				scope (exit)
 					working--;
 				auto thisId = working;
@@ -222,13 +215,13 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 					processRequestObservers(msg, partialResult);
 				}
 				trace("Partial iterator as ", thisId, " done");
-			});
+			};
 		}
 
 		bool done, found;
 		try
 		{
-			found = eventProcessor.emitProtocolRaw!(protocolMethod, (name, symbol, arguments, uda) {
+			found = eventProcessor.emitProtocol!(protocolMethod, (name, symbol, arguments, uda) {
 				if (done)
 					return;
 
@@ -279,8 +272,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 
 		if (!done)
 		{
-			while (working > 0)
-				Fiber.yield();
+			joinAll(fibers);
 
 			if (!partialResultToken.length)
 			{
@@ -326,11 +318,11 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 	// calls @postProcotolMethod methods for the given request
 	private void processRequestObservers(T)(RequestMessageRaw msg, T result)
 	{
-		eventProcessor.emitProtocol!(postProtocolMethod, (name, callSymbol, uda) {
+		eventProcessor.emitProtocol!(postProtocolMethod, (name, call, arguments, uda) {
 			trace("Calling post-request method ", name);
 			try
 			{
-				callSymbol();
+				call(arguments.expand);
 			}
 			catch (MethodException e)
 			{
@@ -347,6 +339,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		// this also makes sure we don't operate on invalid states and segfault.
 		if (msg.method == "exit" || shutdownRequested)
 		{
+			fiberManager.stop();
 			rpc.stop();
 			if (!shutdownRequested)
 			{
@@ -364,11 +357,11 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		}
 		documents.process(msg);
 
-		bool gotAny = eventProcessor.emitProtocol!(protocolNotification, (name, callSymbol, uda) {
+		bool gotAny = eventProcessor.emitProtocol!(protocolNotification, (name, call, arguments, uda) {
 			trace("Calling notification method ", name);
 			try
 			{
-				callSymbol();
+				call(arguments.expand);
 			}
 			catch (MethodException e)
 			{
@@ -436,15 +429,6 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		};
 	}
 
-	__gshared FiberManager fibers;
-	__gshared Mutex fibersMutex;
-
-	void pushFiber(T)(T callback, int pages = serverConfig.defaultPages, string file = __FILE__, int line = __LINE__)
-	{
-		synchronized (fibersMutex)
-			fibers.put(new Fiber(callback, serverConfig.fiberPageSize * pages), file, line);
-	}
-
 	RPCProcessor rpc;
 	TextDocumentManager documents;
 
@@ -452,30 +436,60 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 	/// false if it didn't exit gracefully.
 	bool run()
 	{
-		auto input = newStdinReader();
-		input.start();
-		scope (exit)
-			input.stop();
-		for (int timeout = 10; timeout >= 0 && !input.isRunning; timeout--)
-			Thread.sleep(1.msecs);
-		trace("Started reading from stdin");
-
+		auto input = asyncStdinReader();
 		rpc = new RPCProcessor(input, stdout);
-		rpc.call();
-		trace("RPC started");
+		rpc.fibers = fiberManager;
 		return runImpl();
 	}
 
 	/// Same as `run`, assumes `rpc` is initialized and ready
 	bool runImpl()
 	{
-		fibersMutex = new Mutex();
+		fibersMutex = new shared Mutex();
+
+		scope (exit)
+		{
+			debug(PerfTraceLog)
+			{
+				import core.memory : GC;
+				import std.stdio : File;
+
+				auto traceLog = File("served_trace.log", "w");
+
+				auto totalAllocated = GC.stats().allocatedInCurrentThread;
+				auto profileStats = GC.profileStats();
+
+				traceLog.writeln("manually collected GC ", totalGcCollects, " times");
+				traceLog.writeln("total ", profileStats.numCollections, " collections");
+				traceLog.writeln("total collection time: ", profileStats.totalCollectionTime);
+				traceLog.writeln("total pause time: ", profileStats.totalPauseTime);
+				traceLog.writeln("max collection time: ", profileStats.maxCollectionTime);
+				traceLog.writeln("max pause time: ", profileStats.maxPauseTime);
+				traceLog.writeln("total allocated in main thread: ", totalAllocated);
+				traceLog.writeln();
+
+				dumpTraceInfos(traceLog);
+			}
+		}
+
+		fiberManager.put(rpc);
+
+		defaultFiberPages = serverConfig.defaultPages;
+		defaultPageSize = serverConfig.fiberPageSize;
+
+		rpc.onDataCallback = (scope _) {
+			auto msg = rpc.poll;
+			// Log on client side instead! (vscode setting: "serve-d.trace.server": "verbose")
+			//trace("Message: ", msg);
+			if (!msg.id.isNone)
+				spawnFiber(gotRequest(msg));
+			else
+				spawnFiber(gotNotify(msg));
+		};
 
 		static if (serverConfig.gcCollectSeconds > 0)
 		{
 			int gcCollects, totalGcCollects;
-			StopWatch gcInterval;
-			gcInterval.start();
 
 			void collectGC()
 			{
@@ -506,73 +520,18 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 							cast(long) before.usedSize - cast(long) after.usedSize, after.usedSize, after.freeSize);
 				else
 					trace("GC run in ", gcSpeed.peek);
-
-				gcInterval.reset();
 			}
+
+			setInterval(&collectGC, serverConfig.gcCollectSeconds.seconds);
 		}
 
-		scope (exit)
-		{
-			debug(PerfTraceLog)
-			{
-				import core.memory : GC;
-				import std.stdio : File;
-
-				auto traceLog = File("served_trace.log", "w");
-
-				auto totalAllocated = GC.stats().allocatedInCurrentThread;
-				auto profileStats = GC.profileStats();
-
-				traceLog.writeln("manually collected GC ", totalGcCollects, " times");
-				traceLog.writeln("total ", profileStats.numCollections, " collections");
-				traceLog.writeln("total collection time: ", profileStats.totalCollectionTime);
-				traceLog.writeln("total pause time: ", profileStats.totalPauseTime);
-				traceLog.writeln("max collection time: ", profileStats.maxCollectionTime);
-				traceLog.writeln("max pause time: ", profileStats.maxPauseTime);
-				traceLog.writeln("total allocated in main thread: ", totalAllocated);
-				traceLog.writeln();
-
-				dumpTraceInfos(traceLog);
-			}
-		}
-
-		fibers ~= rpc;
-
-		spawnFiberImpl = (&pushFiber!(void delegate())).toDelegate;
-		defaultFiberPages = serverConfig.defaultPages;
-
-		static if (is(typeof(ExtensionModule.parallelMain)))
-			pushFiber(&ExtensionModule.parallelMain);
-
-		while (rpc.state != Fiber.State.TERM)
-		{
-			while (rpc.hasData)
-			{
-				auto msg = rpc.poll;
-				// Log on client side instead! (vscode setting: "serve-d.trace.server": "verbose")
-				//trace("Message: ", msg);
-				if (!msg.id.isNone)
-					pushFiber(gotRequest(msg));
-				else
-					pushFiber(gotNotify(msg));
-			}
-			Thread.sleep(10.msecs);
-			synchronized (fibersMutex)
-				fibers.call();
-
-			static if (serverConfig.gcCollectSeconds > 0)
-			{
-				if (gcInterval.peek > serverConfig.gcCollectSeconds.seconds)
-				{
-					collectGC();
-				}
-			}
-		}
+		fiberManager.run();
 
 		return shutdownRequested;
 	}
 }
 
+version (none)
 unittest
 {
 	import core.thread;
@@ -583,6 +542,7 @@ unittest
 	import std.stdio;
 	import std.meta;
 
+	import served.lsp.async_mockrpc;
 	import served.lsp.jsonrpc;
 	import served.lsp.protocol;
 	import served.utils.events;
@@ -657,7 +617,7 @@ unittest
 	else
 		sharedLog = (() @trusted => cast(shared) new FileLogger(io.stderr))();
 
-	MockRPC mockRPC;
+	AsyncMockRPC mockRPC;
 	mockRPC.testRPC((rpc) {
 		server.rpc = rpc;
 		bool started;
@@ -677,14 +637,14 @@ unittest
 		});
 		t.start();
 		do {
-			Thread.sleep(10.msecs);
+			await(10.msecs);
 		} while (!started);
 		// give it a little more time
-		Thread.sleep(200.msecs);
+		await(200.msecs);
 
 		trace("Started mock RPC");
 		mockRPC.writePacket(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"processId":null,"rootUri":"file:///","capabilities":{}}}`);
-		Thread.sleep(200.msecs);
+		await(200.msecs);
 		assert(server.serverInitializeCalled);
 		trace("Initialized");
 
@@ -705,7 +665,7 @@ unittest
 
 		assert(!calledCustomNotify);
 		mockRPC.writePacket(`{"jsonrpc":"2.0","method":"custom/notify","params":{"i":4}}`);
-		Thread.sleep(200.msecs);
+		await(200.msecs);
 		assert(calledCustomNotify == 8,
 			text("calledCustomNotify = ", calledCustomNotify, " - ptr: ", &calledCustomNotify));
 

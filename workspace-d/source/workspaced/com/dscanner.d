@@ -45,116 +45,100 @@ class DscannerComponent : ComponentWrapper
 {
 	mixin DefaultComponentWrapper;
 
-	/// Asynchronously lints the file passed.
+	/// Lints the file passed.
 	/// If you provide code then the code will be used and file will be ignored.
 	/// See_Also: $(LREF getConfig)
-	Future!(DScannerIssue[]) lint(string file = "", string ini = "dscanner.ini",
+	DScannerIssue[] lint(string file = "", string ini = "dscanner.ini",
 			scope const(char)[] code = "", bool skipWorkspacedPaths = false,
 			const StaticAnalysisConfig defaultConfig = StaticAnalysisConfig.init,
 			bool resolveRanges = true)
 	{
-		auto ret = new typeof(return);
-		gthreads.create({
-			mixin(traceTask);
-			try
+		if (code.length && !file.length)
+			file = "stdin";
+		auto config = getConfig(ini, skipWorkspacedPaths, defaultConfig);
+		if (!code.length)
+			code = readText(file);
+		DScannerIssue[] issues;
+		if (!code.length)
+			return issues;
+
+		RollbackAllocator r;
+		const(Token)[] tokens;
+		StringCache cache = StringCache(StringCache.defaultBucketCount);
+		const Module m = parseModule(file, cast(ubyte[]) code, &r, cache, tokens, issues);
+		if (!m)
+			throw new Exception(text("parseModule returned null?! - file: '",
+				file, "', code: '", code, "'"));
+
+		// resolve syntax errors (immediately set by parseModule)
+		if (resolveRanges)
+		{
+			foreach_reverse (i, ref issue; issues)
 			{
-				if (code.length && !file.length)
-					file = "stdin";
-				auto config = getConfig(ini, skipWorkspacedPaths, defaultConfig);
-				if (!code.length)
-					code = readText(file);
-				DScannerIssue[] issues;
-				if (!code.length)
-				{
-					ret.finish(issues);
-					return;
-				}
-				RollbackAllocator r;
-				const(Token)[] tokens;
-				StringCache cache = StringCache(StringCache.defaultBucketCount);
-				const Module m = parseModule(file, cast(ubyte[]) code, &r, cache, tokens, issues);
-				if (!m)
-					throw new Exception(text("parseModule returned null?! - file: '",
-						file, "', code: '", code, "'"));
+				if (!resolveRange(tokens, issue))
+					issues = issues.remove(i);
+			}
+		}
 
-				// resolve syntax errors (immediately set by parseModule)
-				if (resolveRanges)
-				{
-					foreach_reverse (i, ref issue; issues)
-					{
-						if (!resolveRange(tokens, issue))
-							issues = issues.remove(i);
-					}
-				}
+		MessageSet results;
+		ModuleCache moduleCache;
+		results = analyze(file, m, config, moduleCache, tokens, true);
+		if (results is null)
+			return issues;
 
-				MessageSet results;
-				ModuleCache moduleCache;
-				results = analyze(file, m, config, moduleCache, tokens, true);
-				if (results is null)
-				{
-					ret.finish(issues);
-					return;
-				}
-				foreach (Message msg; results)
-				{
-					DScannerIssue issue;
-					issue.file = msg.fileName;
-					issue.range = [
+		foreach (Message msg; results)
+		{
+			DScannerIssue issue;
+			issue.file = msg.fileName;
+			issue.range = [
+				ResolvedLocation(
+					msg.diagnostic.startIndex,
+					cast(uint) msg.diagnostic.startLine,
+					cast(uint) msg.diagnostic.startColumn
+				),
+				ResolvedLocation(
+					msg.diagnostic.endIndex,
+					cast(uint) msg.diagnostic.endLine,
+					cast(uint) msg.diagnostic.endColumn
+				)
+			];
+			issue.type = typeForWarning(msg.key);
+			issue.description = msg.message;
+			issue.key = msg.key;
+			issue.checkName = msg.checkName;
+			issue.autofixes = msg.autofixes.map!(f => DScannerAutoFix(f)).array;
+			if (resolveRanges)
+			{
+				if (!this.resolveRange(tokens, issue))
+					continue;
+			}
+
+			foreach (suppl; msg.supplemental)
+			{
+				issue.supplemental ~= DScannerIssue.Supplemental(
+					/* file: */ suppl.fileName,
+					/* range: */ [
 						ResolvedLocation(
-							msg.diagnostic.startIndex,
-							cast(uint) msg.diagnostic.startLine,
-							cast(uint) msg.diagnostic.startColumn
+							suppl.startIndex,
+							cast(uint) suppl.startLine,
+							cast(uint) suppl.startColumn
 						),
 						ResolvedLocation(
-							msg.diagnostic.endIndex,
-							cast(uint) msg.diagnostic.endLine,
-							cast(uint) msg.diagnostic.endColumn
+							suppl.endIndex,
+							cast(uint) suppl.endLine,
+							cast(uint) suppl.endColumn
 						)
-					];
-					issue.type = typeForWarning(msg.key);
-					issue.description = msg.message;
-					issue.key = msg.key;
-					issue.checkName = msg.checkName;
-					issue.autofixes = msg.autofixes.map!(f => DScannerAutoFix(f)).array;
-					if (resolveRanges)
-					{
-						if (!this.resolveRange(tokens, issue))
-							continue;
-					}
-
-					foreach (suppl; msg.supplemental)
-					{
-						issue.supplemental ~= DScannerIssue.Supplemental(
-							/* file: */ suppl.fileName,
-							/* range: */ [
-								ResolvedLocation(
-									suppl.startIndex,
-									cast(uint) suppl.startLine,
-									cast(uint) suppl.startColumn
-								),
-								ResolvedLocation(
-									suppl.endIndex,
-									cast(uint) suppl.endLine,
-									cast(uint) suppl.endColumn
-								)
-							],
-							/* description: */ suppl.message
-						);
-					}
-
-					issues ~= issue;
-				}
-				ret.finish(issues);
+					],
+					/* description: */ suppl.message
+				);
 			}
-			catch (Throwable e)
-			{
-				ret.error(e);
-			}
-		});
-		return ret;
+
+			issues ~= issue;
+		}
+		return issues;
 	}
 
-	Future!(DScannerAutoFix.CodeReplacement[][]) resolveAutoFixes(
+	DScannerAutoFix.CodeReplacement[][] resolveAutoFixes(
 			string messageCheckName,
 			DScannerAutoFix.ResolveContext[] contexts,
 			string file = "", string ini = "dscanner.ini",
@@ -164,49 +148,35 @@ class DscannerComponent : ComponentWrapper
 	{
 		import dscanner.analysis.run : resolveAutoFix;
 
-		auto ret = new typeof(return);
-		gthreads.create({
-			mixin(traceTask);
-			try
-			{
-				if (code.length && !file.length)
-					file = "stdin";
-				auto config = getConfig(ini, skipWorkspacedPaths, defaultConfig);
-				if (!code.length)
-					code = readText(file);
-				if (!code.length)
-				{
-					ret.finish(null);
-					return;
-				}
-				RollbackAllocator r;
-				const(Token)[] tokens;
-				StringCache cache = StringCache(StringCache.defaultBucketCount);
-				DScannerIssue[] parseIssues;
-				const Module m = parseModule(file, cast(ubyte[]) code, &r, cache, tokens, parseIssues);
-				if (!m)
-					throw new Exception(text("parseModule returned null?! - file: '",
-						file, "', code: '", code, "'"));
+		if (code.length && !file.length)
+			file = "stdin";
+		auto config = getConfig(ini, skipWorkspacedPaths, defaultConfig);
+		if (!code.length)
+			code = readText(file);
+		if (!code.length)
+			return null;
 
-				ModuleCache moduleCache;
-				AutoFixFormatting formatting = parseDfmtArgs(dfmtArgs);
-				DScannerAutoFix.CodeReplacement[][] replacementsList;
-				foreach (context; contexts)
-				{
-					// ensured by static asserts in DScannerAutoFix that these casts work
-					auto dscannerContext = *cast(AutoFix.ResolveContext*)&context;
-					auto resolved = resolveAutoFix(messageCheckName, dscannerContext, file, moduleCache, tokens, m, config, formatting);
-					replacementsList ~= *cast(DScannerAutoFix.CodeReplacement[]*)&resolved;
-				}
-				assert(replacementsList.length == contexts.length);
-				ret.finish(replacementsList);
-			}
-			catch (Throwable e)
-			{
-				ret.error(e);
-			}
-		});
-		return ret;
+		RollbackAllocator r;
+		const(Token)[] tokens;
+		StringCache cache = StringCache(StringCache.defaultBucketCount);
+		DScannerIssue[] parseIssues;
+		const Module m = parseModule(file, cast(ubyte[]) code, &r, cache, tokens, parseIssues);
+		if (!m)
+			throw new Exception(text("parseModule returned null?! - file: '",
+				file, "', code: '", code, "'"));
+
+		ModuleCache moduleCache;
+		AutoFixFormatting formatting = parseDfmtArgs(dfmtArgs);
+		DScannerAutoFix.CodeReplacement[][] replacementsList;
+		foreach (context; contexts)
+		{
+			// ensured by static asserts in DScannerAutoFix that these casts work
+			auto dscannerContext = *cast(AutoFix.ResolveContext*)&context;
+			auto resolved = resolveAutoFix(messageCheckName, dscannerContext, file, moduleCache, tokens, m, config, formatting);
+			replacementsList ~= *cast(DScannerAutoFix.CodeReplacement[]*)&resolved;
+		}
+		assert(replacementsList.length == contexts.length);
+		return replacementsList;
 	}
 
 	private static AutoFixFormatting parseDfmtArgs(string[] dfmtArgs)
@@ -504,33 +474,13 @@ class DscannerComponent : ComponentWrapper
 		return dparse.parser.parseModule(tokens, file, p, &addIssue, &err, &warn);
 	}
 
-	/// Asynchronously lists all definitions in the specified file.
+	/// Lists all definitions in the specified file.
 	///
 	/// If you provide code the file wont be manually read.
 	///
 	/// Set verbose to true if you want to receive more temporary symbols and
 	/// things that could be considered clutter as well.
-	Future!ModuleDefinition listDefinitions(string file,
-		scope const(char)[] code = "", bool verbose = false,
-		ExtraMask extraMask = ExtraMask.none)
-	{
-		auto ret = new typeof(return);
-		gthreads.create({
-			mixin(traceTask);
-			try
-			{
-				ret.finish(listDefinitionsSync(file, code, verbose, extraMask));
-			}
-			catch (Throwable e)
-			{
-				ret.error(e);
-			}
-		});
-		return ret;
-	}
-
-	/// ditto
-	ModuleDefinition listDefinitionsSync(string file,
+	ModuleDefinition listDefinitions(string file,
 		scope const(char)[] code = "", bool verbose = false,
 		ExtraMask extraMask = ExtraMask.none)
 	{
@@ -571,36 +521,24 @@ class DscannerComponent : ComponentWrapper
 		);
 	}
 
-	/// Asynchronously finds all definitions of a symbol in the import paths.
-	Future!(FileLocation[]) findSymbol(string symbol)
+	/// Finds all definitions of a symbol in the import paths.
+	FileLocation[] findSymbol(string symbol)
 	{
-		auto ret = new typeof(return);
-		gthreads.create({
-			mixin(traceTask);
-			try
-			{
-				import dscanner.utils : expandArgs;
+		import dscanner.utils : expandArgs;
 
-				string[] paths = expandArgs([""] ~ importPaths);
-				foreach_reverse (i, path; paths)
-					if (path == "stdin")
-						paths = paths.remove(i);
-				FileLocation[] files;
-				findDeclarationOf((fileName, line, column) {
-					FileLocation file;
-					file.file = fileName;
-					file.line = cast(int) line;
-					file.column = cast(int) column;
-					files ~= file;
-				}, symbol, paths);
-				ret.finish(files);
-			}
-			catch (Throwable e)
-			{
-				ret.error(e);
-			}
-		});
-		return ret;
+		string[] paths = expandArgs([""] ~ importPaths);
+		foreach_reverse (i, path; paths)
+			if (path == "stdin")
+				paths = paths.remove(i);
+		FileLocation[] files;
+		findDeclarationOf((fileName, line, column) {
+			FileLocation file;
+			file.file = fileName;
+			file.line = cast(int) line;
+			file.column = cast(int) column;
+			files ~= file;
+		}, symbol, paths);
+		return files;
 	}
 
 	/// Returns: all keys & documentation that can be used in a dscanner.ini
@@ -1648,7 +1586,7 @@ unittest
 			expectedDefinitions ~= expected;
 		},
 		(code) {
-			auto defs = dscanner.listDefinitions("stdin", code, verbose).getBlocking()
+			auto defs = dscanner.listDefinitions("stdin", code, verbose)
 				.definitions;
 			highlightDiff(defs, expectedDefinitions);
 		});

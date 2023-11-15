@@ -92,43 +92,42 @@ class DependencyBasedSnippetProvider : SnippetProvider
 			snippets[set] = [snippet];
 	}
 
-	Future!(Snippet[]) provideSnippets(scope const WorkspaceD.Instance instance,
+	Snippet[] provideSnippets(scope const WorkspaceD.Instance instance,
 			scope const(char)[] file, scope const(char)[] code, int position, const SnippetInfo info)
 	{
 		if (!instance.has!DubComponent)
-			return typeof(return).fromResult(null);
+			return null;
 		else
 		{
 			string id = typeid(this).name;
 			auto dub = instance.get!DubComponent;
-			return typeof(return).async(delegate() {
-				string[] deps;
-				foreach (dep; dub.dependencies)
+
+			string[] deps;
+			foreach (dep; dub.dependencies)
+			{
+				deps ~= dep.name;
+				deps ~= dep.dependencies.keys;
+			}
+			Snippet[] ret;
+			foreach (k, v; snippets)
+			{
+				if (k.hasAll(deps))
 				{
-					deps ~= dep.name;
-					deps ~= dep.dependencies.keys;
+					foreach (snip; v)
+						if (snip.levels.canFind(info.level))
+							ret ~= snip.buildSnippet(id);
 				}
-				Snippet[] ret;
-				foreach (k, v; snippets)
-				{
-					if (k.hasAll(deps))
-					{
-						foreach (snip; v)
-							if (snip.levels.canFind(info.level))
-								ret ~= snip.buildSnippet(id);
-					}
-				}
-				return ret;
-			});
+			}
+			return ret;
 		}
 	}
 
-	Future!Snippet resolveSnippet(scope const WorkspaceD.Instance instance,
+	Snippet resolveSnippet(scope const WorkspaceD.Instance instance,
 			scope const(char)[] file, scope const(char)[] code, int position,
 			const SnippetInfo info, Snippet snippet)
 	{
 		snippet.resolved = true;
-		return typeof(return).fromResult(snippet);
+		return snippet;
 	}
 }
 

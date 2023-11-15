@@ -219,7 +219,7 @@ bool updateImports(UpdateImportsParams params)
 
 	if (instance.has!DubComponent)
 	{
-		success = instance.get!DubComponent.update.getYield;
+		success = instance.get!DubComponent.update;
 		if (success)
 			rpc.notifyMethod("coded/updateDubTree");
 	}

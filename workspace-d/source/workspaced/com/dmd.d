@@ -18,7 +18,6 @@ class DMDComponent : ComponentWrapper
 	mixin DefaultComponentWrapper;
 
 	/// Tries to compile a snippet of code with the import paths in the current directory. The arguments `-c -o-` are implicit.
-	/// The sync function may be used to prevent other measures from running while this is running.
 	/// Params:
 	///   cb = async callback
 	///   code = small code snippet to try to compile
@@ -26,14 +25,7 @@ class DMDComponent : ComponentWrapper
 	///   count = how often to compile (duration is divided by either this or less in case timeout is reached)
 	///   timeoutMsecs = when to abort compilation after, note that this will not abort mid-compilation but not do another iteration if this timeout has been reached.
 	/// Returns: [DMDMeasureReturn] containing logs from only the first compilation pass
-	Future!DMDMeasureReturn measure(scope const(char)[] code,
-			string[] dmdArguments = [], int count = 1, int timeoutMsecs = 5000)
-	{
-		return typeof(return).async(() => measureSync(code, dmdArguments, count, timeoutMsecs));
-	}
-
-	/// ditto
-	DMDMeasureReturn measureSync(scope const(char)[] code,
+	DMDMeasureReturn measure(scope const(char)[] code,
 			string[] dmdArguments = [], int count = 1, int timeoutMsecs = 5000)
 	{
 		dmdArguments ~= ["-c", "-o-"];
@@ -106,7 +98,7 @@ version (DigitalMars) unittest
 	auto instance = backend.addInstance(workspace.directory);
 	backend.register!DMDComponent;
 	auto measure = backend.get!DMDComponent(workspace.directory)
-		.measure("import std.stdio;", null, 100).getBlocking;
+		.measure("import std.stdio;", null, 100);
 	assert(measure.success);
 	assert(measure.duration < 5.seconds);
 }

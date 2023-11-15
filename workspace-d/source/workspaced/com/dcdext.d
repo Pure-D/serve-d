@@ -525,42 +525,28 @@ class DCDExtComponent : ComponentWrapper
 
 	/// Implements the interfaces or abstract classes of a specified class/interface.
 	/// Helper function which returns all functions as one block for most primitive use.
-	Future!string implement(scope const(char)[] code, int position,
+	string implement(scope const(char)[] code, int position,
 			bool formatCode = true, string[] formatArgs = [])
 	{
-		auto ret = new typeof(return);
-		gthreads.create({
-			mixin(traceTask);
-			try
-			{
-				auto impl = implementAllSync(code, position, formatCode, formatArgs);
+		auto impl = implementAll(code, position, formatCode, formatArgs);
 
-				auto buf = appender!string;
-				string lastBaseClass;
-				foreach (ref func; impl)
-				{
-					if (func.baseClass != lastBaseClass)
-					{
-						buf.put("// implement " ~ func.baseClass ~ "\n\n");
-						lastBaseClass = func.baseClass;
-					}
-
-					buf.put(func.code);
-					buf.put("\n\n");
-				}
-				ret.finish(buf.data.length > 2 ? buf.data[0 .. $ - 2] : buf.data);
-			}
-			catch (Throwable t)
+		auto buf = appender!string;
+		string lastBaseClass;
+		foreach (ref func; impl)
+		{
+			if (func.baseClass != lastBaseClass)
 			{
-				ret.error(t);
+				buf.put("// implement " ~ func.baseClass ~ "\n\n");
+				lastBaseClass = func.baseClass;
 			}
-		});
-		return ret;
+
+			buf.put(func.code);
+			buf.put("\n\n");
+		}
+		return buf.data.length > 2 ? buf.data[0 .. $ - 2] : buf.data;
 	}
 
 	/// Implements the interfaces or abstract classes of a specified class/interface.
-	/// The async implementation is preferred when used in background tasks to prevent disruption
-	/// of other services as a lot of code is parsed and processed multiple times for this function.
 	/// Params:
 	/// 	code = input file to parse and edit.
 	/// 	position = position of the superclass or interface to implement after the colon in a class definition.
@@ -568,18 +554,10 @@ class DCDExtComponent : ComponentWrapper
 	/// 	formatArgs = sets the formatter arguments to pass to dfmt if formatCode is true.
 	/// 	snippetExtensions = if true, snippets according to the vscode documentation will be inserted in place of method content. See https://code.visualstudio.com/docs/editor/userdefinedsnippets#_creating-your-own-snippets
 	/// Returns: a list of newly implemented methods
-	Future!(ImplementedMethod[]) implementAll(scope const(char)[] code, int position,
+	ImplementedMethod[] implementAll(scope const(char)[] code, int position,
 			bool formatCode = true, string[] formatArgs = [], bool snippetExtensions = false)
 	{
-		mixin(
-				gthreadsAsyncProxy!`implementAllSync(code, position, formatCode, formatArgs, snippetExtensions)`);
-	}
-
-	/// ditto
-	ImplementedMethod[] implementAllSync(scope const(char)[] code, int position,
-			bool formatCode = true, string[] formatArgs = [], bool snippetExtensions = false)
-	{
-		auto tree = describeInterfaceRecursiveSync(code, position);
+		auto tree = describeInterfaceRecursive(code, position);
 		auto availableVariables = tree.availableVariables;
 
 		string[] implementedMethods = tree.details
@@ -787,7 +765,7 @@ class DCDExtComponent : ComponentWrapper
 		if (formatCode && has!DfmtComponent)
 		{
 			foreach (ref method; methods.data)
-				method.code = get!DfmtComponent.formatSync(method.code, formatArgs).strip;
+				method.code = get!DfmtComponent.format(method.code, formatArgs).strip;
 		}
 
 		foreach (ref method; methods.data)
@@ -805,7 +783,7 @@ class DCDExtComponent : ComponentWrapper
 	/// Looks up a declaration of a type and then extracts information about it as class or interface.
 	InterfaceDetails lookupInterface(scope const(char)[] code, int position)
 	{
-		auto data = get!DCDComponent.findDeclaration(code, position).getBlocking;
+		auto data = get!DCDComponent.findDeclaration(code, position);
 		string file = data.file;
 		int newPosition = data.position;
 
@@ -830,12 +808,7 @@ class DCDExtComponent : ComponentWrapper
 		return reader.details;
 	}
 
-	Future!InterfaceTree describeInterfaceRecursive(scope const(char)[] code, int position)
-	{
-		mixin(gthreadsAsyncProxy!`describeInterfaceRecursiveSync(code, position)`);
-	}
-
-	InterfaceTree describeInterfaceRecursiveSync(scope const(char)[] code, int position)
+	InterfaceTree describeInterfaceRecursive(scope const(char)[] code, int position)
 	{
 		auto baseInterface = getInterfaceDetails("stdin", code, position);
 
@@ -1894,7 +1867,7 @@ unittest
 	backend.register!DCDExtComponent;
 	DCDExtComponent dcdext = instance.get!DCDExtComponent;
 
-	auto info = dcdext.describeInterfaceRecursiveSync(SimpleClassTestCode, 23);
+	auto info = dcdext.describeInterfaceRecursive(SimpleClassTestCode, 23);
 	assert(info.details.name == "FooBar");
 	assert(info.details.blockRange == [27, 554]);
 	assert(info.details.referencedTypes.length == 2);
@@ -2008,7 +1981,7 @@ private:
 	backend.register!DCDExtComponent;
 	DCDExtComponent dcdext = instance.get!DCDExtComponent;
 
-	auto info = dcdext.describeInterfaceRecursiveSync(testCode, 20);
+	auto info = dcdext.describeInterfaceRecursive(testCode, 20);
 	assert(info.details.name == "Foo0");
 	assert(info.details.blockRange == [23, 523]);
 	assert(info.details.referencedTypes.length == 3);

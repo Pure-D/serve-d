@@ -38,7 +38,7 @@ static immutable sortPrefixDCD = "2_";
 // additional sorting inside with already imported values = 0_, std.* = 1_, core.* & etc.* = 2_
 static immutable sortPrefixAutoImport = "3_";
 
-CompletionItemKind convertFromDCDType(string type)
+CompletionItemKind convertFromDCDType(string type) pure
 {
 	if (type.length != 1)
 		return CompletionItemKind.text;
@@ -84,7 +84,7 @@ CompletionItemKind convertFromDCDType(string type)
 	}
 }
 
-string sortFromDCDType(string type)
+string sortFromDCDType(string type) pure
 {
 	if (type.length != 1)
 		return "9_";
@@ -121,7 +121,7 @@ string sortFromDCDType(string type)
 	}
 }
 
-SymbolKind convertFromDCDSearchType(string type)
+SymbolKind convertFromDCDSearchType(string type) pure
 {
 	if (type.length != 1)
 		return cast(SymbolKind) 0;
@@ -160,7 +160,7 @@ SymbolKind convertFromDCDSearchType(string type)
 	}
 }
 
-SymbolKind convertFromDscannerType(char type, string name = null)
+SymbolKind convertFromDscannerType(char type, string name = null) pure
 {
 	switch (type)
 	{
@@ -204,7 +204,7 @@ SymbolKind convertFromDscannerType(char type, string name = null)
 	}
 }
 
-SymbolKindEx convertExtendedFromDscannerType(char type)
+SymbolKindEx convertExtendedFromDscannerType(char type) pure
 {
 	switch (type)
 	{
@@ -229,7 +229,7 @@ SymbolKindEx convertExtendedFromDscannerType(char type)
 	}
 }
 
-CompletionItemKind convertCompletionFromDScannerType(char type)
+CompletionItemKind convertCompletionFromDScannerType(char type) pure
 {
 	switch (type)
 	{
@@ -268,7 +268,7 @@ CompletionItemKind convertCompletionFromDScannerType(char type)
 	}
 }
 
-C[] substr(C, T)(C[] s, T start, T end)
+C[] substr(C, T)(return C[] s, T start, T end) pure nothrow @nogc @safe
 {
 	if (!s.length)
 		return s;
@@ -403,7 +403,7 @@ CompletionList provideDMLSourceComplete(TextDocumentPositionParams params,
 	CompletionList ret;
 
 	auto items = backend.get!DlanguiComponent.complete(document.rawText,
-			cast(int) document.positionToBytes(params.position)).getYield();
+			cast(int) document.positionToBytes(params.position));
 	ret.items.length = items.length;
 	foreach (i, item; items)
 	{
@@ -510,7 +510,7 @@ CompletionList provideDietSourceComplete(TextDocumentPositionParams params,
 		if (offset <= code.length && instance.has!DCDComponent)
 		{
 			info("DCD Completing Diet for ", code, " at ", offset);
-			auto dcd = instance.get!DCDComponent.listCompletion(code, cast(int) offset).getYield;
+			auto dcd = instance.get!DCDComponent.listCompletion(code, cast(int) offset);
 			if (dcd.type == DCDCompletions.Type.identifiers)
 			{
 				ret = dcd.identifiers.convertDCDIdentifiers(d.argumentSnippets, dcdext);
@@ -612,9 +612,9 @@ CompletionList provideDSourceComplete(TextDocumentPositionParams params,
 	const config = workspace(params.textDocument.uri).config;
 	DCDCompletions result = DCDCompletions.empty;
 	SnippetInfo snippetInfo;
-	joinAll({
+	joinAllThreaded({
 		if (completeDCD)
-			result = instance.get!DCDComponent.listCompletion(document.rawText, byteOff).getYield;
+			result = instance.get!DCDComponent.listCompletion(document.rawText, byteOff);
 	}, {
 		if (completeDoc)
 			provideDocComplete(params, instance, document, completion, line, lineRange);
@@ -650,7 +650,7 @@ private void provideDocComplete(TextDocumentPositionParams params, WorkspaceD.In
 	if (lineStripped.among!("", "/", "/*", "/+", "//", "///", "/**", "/++"))
 	{
 		auto defs = instance.get!DscannerComponent.listDefinitions(uriToFile(
-				params.textDocument.uri), document.rawText[lineRange[1] .. $]).getYield
+				params.textDocument.uri), document.rawText[lineRange[1] .. $])
 				.definitions;
 		ptrdiff_t di = -1;
 		FuncFinder: foreach (i, def; defs)
@@ -846,7 +846,7 @@ private SnippetInfo provideSnippetComplete(TextDocumentPositionParams params, Wo
 		return SnippetInfo.init; // no snippets after '.' character
 
 	auto snippets = instance.get!SnippetsComponent;
-	auto ret = snippets.getSnippetsYield(document.uri.uriToFile, document.rawText, byteOff);
+	auto ret = snippets.getSnippets!joinAllThreaded(document.uri.uriToFile, document.rawText, byteOff);
 	trace("got ", ret.snippets.length, " snippets fitting in this context: ",
 			ret.snippets.map!"a.shortcut");
 	auto eol = document.eolAt(0);
@@ -967,7 +967,7 @@ CompletionItem resolveCompletionItem(CompletionItem item)
 					auto snippets = instance.get!SnippetsComponent;
 					auto snippet = snippetFromCompletionItem(item);
 					snippet = snippets.resolveSnippet(f, document.rawText,
-							cast(int) document.positionToBytes(Position(line, column)), snippet).getYield;
+							cast(int) document.positionToBytes(Position(line, column)), snippet);
 					item = snippetToCompletionItem(snippet);
 				}
 			}
@@ -1376,11 +1376,9 @@ private void migrateLabelDetailsSupport(ref CompletionItem item)
 @protocolMethod("served/restartServer")
 bool restartServer()
 {
-	Future!void[] fut;
-	foreach (instance; backend.instances)
+	foreach (instance; fiberManager.parallel(backend.instances))
 		if (instance.has!DCDComponent)
-			fut ~= instance.get!DCDComponent.restartServer();
-	joinAll(fut);
+			instance.get!DCDComponent.restartServer();
 	return true;
 }
 

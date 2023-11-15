@@ -1,0 +1,5 @@
+name "serverbase-v2"
+
+dependency "serve-d:lsp" path=".."
+dependency "eventcore" path="../../eventcore" # version="~>0.9.25"
+// dependency "concurrency" version="~>5.0.3"

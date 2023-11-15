@@ -62,15 +62,17 @@ void parallelMain()
 	}
 }
 
+alias TimerID = int;
+
 struct Timeout
 {
 	StopWatch sw;
 	Duration timeout;
 	void delegate() callback;
-	int id;
+	TimerID id;
 }
 
-int setTimeout(void delegate() callback, int ms)
+TimerID setTimeout(void delegate() callback, int ms)
 {
 	return setTimeout(callback, ms.msecs);
 }
@@ -80,7 +82,7 @@ void setImmediate(void delegate() callback)
 	setTimeout(callback, 0);
 }
 
-int setTimeout(void delegate() callback, Duration timeout)
+TimerID setTimeout(void delegate() callback, Duration timeout)
 {
 	trace("Setting timeout for ", timeout);
 	Timeout to;
@@ -95,7 +97,7 @@ int setTimeout(void delegate() callback, Duration timeout)
 	return to.id;
 }
 
-void clearTimeout(int id)
+void clearTimeout(TimerID id)
 {
 	synchronized (timeoutsMutex)
 		foreach_reverse (i, ref timeout; timeouts)

@@ -40,7 +40,7 @@ void main()
 			|| dub.path.toString.endsWith("tc_fsworkspace\\"));
 	try
 	{
-		auto result = dub.build.getBlocking;
+		auto result = dub.build;
 		assert(result.count!(a => a.type == ErrorType.Warning || a.type == ErrorType.Error) == 0,
 			"got unexpected warnings/errors: " ~ result.to!string);
 	}

@@ -2,5 +2,5 @@ name "index-utils"
 sourceFiles "source/app.d" \
 	"../workspace-d/source/workspaced/index_format.d" \
 	"../workspace-d/source/workspaced/helpers.d"
-dependency "msgpack-d" version="~>1.0.4"
+dependency "msgpack-d" version="~>1.0.5"
 dependency "standardpaths" version="~>0.8.2"

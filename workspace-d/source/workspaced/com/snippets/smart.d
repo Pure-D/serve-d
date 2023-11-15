@@ -11,7 +11,7 @@ import std.string;
 
 class SmartSnippetProvider : SnippetProvider
 {
-	Future!(Snippet[]) provideSnippets(scope const WorkspaceD.Instance instance,
+	Snippet[] provideSnippets(scope const WorkspaceD.Instance instance,
 			scope const(char)[] file, scope const(char)[] code, int position, const SnippetInfo info)
 	{
 		Snippet[] res;
@@ -122,14 +122,14 @@ class SmartSnippetProvider : SnippetProvider
 			res ~= ret;
 		}
 
-		return typeof(return).fromResult(res.length ? res : null);
+		return res.length ? res : null;
 	}
 
-	Future!Snippet resolveSnippet(scope const WorkspaceD.Instance instance,
+	Snippet resolveSnippet(scope const WorkspaceD.Instance instance,
 			scope const(char)[] file, scope const(char)[] code, int position,
 			const SnippetInfo info, Snippet snippet)
 	{
-		return typeof(return).fromResult(snippet);
+		return snippet;
 	}
 
 	Snippet ndForeach(int n, string name = null)

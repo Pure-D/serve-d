@@ -49,7 +49,7 @@ void lint(Document document)
 
 	auto ini = getDscannerIniForDocument(document.uri, instance);
 	auto issues = instance.get!DscannerComponent.lint(document.uri.uriToFile,
-			ini, document.rawText, false, servedDefaultDscannerConfig, true).getYield;
+			ini, document.rawText, false, servedDefaultDscannerConfig, true);
 	Diagnostic[] result;
 
 	foreach (issue; issues)
@@ -278,7 +278,7 @@ version (unittest)
 		DScannerIssue[] lint(scope const(char)[] code)
 		{
 			return dscanner.lint("", dscannerIni, code, false,
-				servedDefaultDscannerConfig, true).getBlocking();
+				servedDefaultDscannerConfig, true);
 		}
 
 		auto diagnosticsAt(Position location)

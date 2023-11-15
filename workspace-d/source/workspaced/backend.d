@@ -339,8 +339,6 @@ class WorkspaceD
 	ComponentFactoryInstance[] components;
 	StringCache stringCache;
 
-	TaskPool _gthreads;
-
 	this()
 	{
 		stringCache = StringCache(StringCache.defaultBucketCount * 4);
@@ -360,9 +358,6 @@ class WorkspaceD
 			com.wrapper.shutdown(dtor);
 		globalComponents = null;
 		components = null;
-		if (_gthreads)
-			_gthreads.finish(true);
-		_gthreads = null;
 	}
 
 	Instance getInstance(string cwd) nothrow
@@ -700,18 +695,6 @@ class WorkspaceD
 			}
 		}
 		return false;
-	}
-
-	TaskPool gthreads()
-	{
-		if (!_gthreads)
-			synchronized (this)
-				if (!_gthreads)
-				{
-					_gthreads = new TaskPool(max(2, min(6, defaultPoolThreads)));
-					_gthreads.isDaemon = true;
-				}
-		return _gthreads;
 	}
 }
 

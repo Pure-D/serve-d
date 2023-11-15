@@ -86,7 +86,7 @@ static immutable PlainSnippet[] builtinMirSerdeSnippets = [
 			~ "need to use this unless you have very specific needs. You can "
 			~ "probably use a proxy instead.",
 		snippet: "@safe pure scope\n"
-			~ "IonException deserializeFromIon(scope const char[][] symbolTable, IonDescribedValue value) {\n"
+			~ "IonException deserializeFromIon(scope const char[][] symbolTable, scope IonDescribedValue value) {\n"
 			~ "\timport mir.deser.ion : deserializeIon;\n"
 			~ "\timport mir.ion.type_code : IonTypeCode;\n"
 			~ "\n"

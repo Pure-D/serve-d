@@ -17,9 +17,9 @@ void main()
 	auto dscanner = backend.get!DscannerComponent(dir);
 
 	auto issues = dscanner.lint("", "dscanner.ini",
-			"void main() { int unused = 0; } void undocumented() { }").getBlocking;
+			"void main() { int unused = 0; } void undocumented() { }");
 	assert(issues.length >= 3);
-	auto defs = dscanner.listDefinitions("app.d", import("app.d")).getBlocking
+	auto defs = dscanner.listDefinitions("app.d", import("app.d"))
 		.definitions;
 	assert(defs.length == 2);
 	assert(defs[0].name == "mainLine");
@@ -36,6 +36,5 @@ void main()
 	auto fsworkspace = backend.get!FSWorkspaceComponent(dir);
 
 	fsworkspace.addImports(["source"]);
-	assert(dscanner.findSymbol("main")
-			.getBlocking[0] == FileLocation(buildNormalizedPath(dir, "source/app.d"), mainLine, 6));
+	assert(dscanner.findSymbol("main")[0] == FileLocation(buildNormalizedPath(dir, "source/app.d"), mainLine, 6));
 }

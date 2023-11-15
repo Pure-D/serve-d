@@ -136,9 +136,9 @@ bool tryDub(string path, bool clean = true)
 			tryRun!"setCompiler"(path, "dmd");
 		tryRun!"name"(path);
 		tryRun!"path"(path);
-		tryRun!"build.getBlocking"(path);
+		tryRun!"build"(path);
 		// restart
-		tryRun!"update.getBlocking"(path);
+		tryRun!"update"(path);
 	}
 
 	return true;

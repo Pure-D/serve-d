@@ -23,76 +23,53 @@ class ReferencesComponent : ComponentWrapper
 	}
 
 	/// Basic text-search-based references lookup.
-	/// Be careful with the delegate, as it is being called from another thread.
-	/// Do NOT call any other async workspace-d APIs from this callback as it
-	/// could result in a deadlock.
-	Future!References findReferences(string file, scope const(char)[] code, int pos,
+	References findReferences(string file, scope const(char)[] code, int pos,
 		void delegate(References) asyncFoundPart)
 	{
-		auto future = new typeof(return);
-		auto declTask = get!DCDComponent.findDeclaration(code, pos);
-		declTask.onDone({
-			try
-			{
-				References ret;
+		auto decl = get!DCDComponent.findDeclaration(code, pos);
+		References ret;
 
-				auto decl = declTask.getImmediately;
-				if (decl is DCDDeclaration.init)
-					return future.finish(References.init);
+		if (decl is DCDDeclaration.init)
+			return References.init;
 
-				if (decl.file == "stdin")
-					decl.file = file;
+		if (decl.file == "stdin")
+			decl.file = file;
 
-				ret.definitionFile = decl.file;
-				ret.definitionLocation = cast(int)decl.position;
+		ret.definitionFile = decl.file;
+		ret.definitionLocation = cast(int)decl.position;
 
-				scope definitionCode = readText(decl.file);
-				string identifier = getIdentifierAt(definitionCode, decl.position).idup;
-				string startModule = get!ModulemanComponent.moduleName(definitionCode);
+		scope definitionCode = readText(decl.file);
+		string identifier = getIdentifierAt(definitionCode, decl.position).idup;
+		string startModule = get!ModulemanComponent.moduleName(definitionCode);
 
-				auto localUseTask = get!DCDComponent.findLocalUse(
-					definitionCode, ret.definitionLocation);
-				localUseTask.onDone({
-					try
-					{
-						auto localUse = localUseTask.getImmediately;
-						if (localUse.declarationFilePath == "stdin")
-							localUse.declarationFilePath = ret.definitionFile;
+		auto localUse = get!DCDComponent.findLocalUse(
+			definitionCode, ret.definitionLocation);
 
-						foreach (use; localUse.uses)
-							ret.references ~= References.Reference(
-								localUse.declarationFilePath, cast(int)use);
+		if (localUse.declarationFilePath == "stdin")
+			localUse.declarationFilePath = ret.definitionFile;
 
-						asyncFoundPart(ret);
+		foreach (use; localUse.uses)
+			ret.references ~= References.Reference(
+				localUse.declarationFilePath, cast(int)use);
 
-						if (identifier.length)
-						{
-							bool[ModuleRef] visited;
-							visited[startModule] = true;
-							grepRecursive(ret,
-								startModule,
-								identifier,
-								visited,
-								asyncFoundPart);
-							grepIncomplete(ret,
-								identifier,
-								visited,
-								asyncFoundPart);
-						}
-						future.finish(ret);
-					}
-					catch (Throwable t)
-					{
-						future.error(t);
-					}
-				});
-			}
-			catch (Throwable t)
-			{
-				future.error(t);
-			}
-		});
-		return future;
+		asyncFoundPart(ret);
+
+		if (identifier.length)
+		{
+			bool[ModuleRef] visited;
+			visited[startModule] = true;
+			grepRecursive(ret,
+				startModule,
+				identifier,
+				visited,
+				asyncFoundPart);
+			grepIncomplete(ret,
+				identifier,
+				visited,
+				asyncFoundPart);
+		}
+
+		return ret;
 	}
 
 private:

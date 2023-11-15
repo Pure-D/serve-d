@@ -80,7 +80,7 @@ SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParamsEx params)
 		return null;
 
 	auto result = backend.best!DscannerComponent(params.textDocument.uri.uriToFile)
-		.listDefinitions(uriToFile(params.textDocument.uri), document.rawText, true).getYield
+		.listDefinitions(uriToFile(params.textDocument.uri), document.rawText, true)
 		.definitions;
 	auto ret = appender!(SymbolInformationEx[]);
 	auto retVerbose = appender!(SymbolInformationEx[]);

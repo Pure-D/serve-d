@@ -14,7 +14,6 @@ import std.string : indexOf, indexOfAny, strip;
 import std.traits;
 
 public import workspaced.backend;
-public import workspaced.future;
 
 debug
 {
@@ -99,31 +98,12 @@ mixin template DefaultGlobalComponentWrapper(bool withDtor = true)
 
 		WorkspaceD workspaced;
 
-		TaskPool _threads;
-
 		static if (withDtor)
 		{
 			~this()
 			{
 				shutdown(true);
 			}
-		}
-
-		TaskPool gthreads()
-		{
-			return workspaced.gthreads;
-		}
-
-		TaskPool threads(int minSize, int maxSize)
-		{
-			if (!_threads)
-				synchronized (this)
-					if (!_threads)
-					{
-						_threads = new TaskPool(max(minSize, min(maxSize, defaultPoolThreads)));
-						_threads.isDaemon = true;
-					}
-			return _threads;
 		}
 
 		bool has(T)()
@@ -154,8 +134,6 @@ mixin template DefaultGlobalComponentWrapper(bool withDtor = true)
 
 		override void shutdown(bool dtor = false)
 		{
-			if (!dtor && _threads)
-				_threads.finish();
 		}
 
 		override void bind(WorkspaceD workspaced, WorkspaceD.Instance instance)

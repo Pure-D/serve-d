@@ -107,9 +107,9 @@ void changedConfig(ConfigWorkspace target, string[] paths, served.types.Configur
 				backend.get!DCDComponent(workspaceFs).addImports(config.stdlibPath(workspaceFs));
 			break;
 		case "d.projectImportPaths":
-			if (backend.has!DCDComponent(workspaceFs))
-				backend.get!DCDComponent(workspaceFs)
-					.addImports(config.d.projectImportPaths.map!(a => a.userPath).array);
+			if (backend.has!FSWorkspaceComponent(workspaceFs))
+				backend.get!FSWorkspaceComponent(workspaceFs)
+					.addImports(getPossibleSourceRoots(workspaceFs, config.d.projectImportPaths));
 			break;
 		case "d.dubConfiguration":
 			if (backend.has!DubComponent(workspaceFs))
@@ -208,12 +208,16 @@ void configFinished(size_t num)
 
 mixin ConfigHandler!(served.types.Configuration);
 
-string[] getPossibleSourceRoots(string workspaceFolder)
+private string[] getPossibleSourceRoots(string workspaceFolder, string[] overrideProjectImportPaths = null)
 {
 	import std.path : isAbsolute;
 	import std.file;
 
-	auto confPaths = config(workspaceFolder.uriFromFile, false).d.projectImportPaths.map!(
+	auto confPaths = (
+			overrideProjectImportPaths.length
+				? overrideProjectImportPaths
+				: config(workspaceFolder.uriFromFile, false).d.projectImportPaths
+		).map!(
 			a => a.isAbsolute ? a : buildNormalizedPath(workspaceRoot, a));
 	if (!confPaths.empty)
 		return confPaths.array;
@@ -448,7 +452,7 @@ void doGlobalStartup(UserConfiguration config)
 			}
 		}
 
-		cast(void)emitExtensionEvent!onRegisteredComponents;
+		emitExtensionEvent!onRegisteredComponents;
 	}
 	catch (Exception e)
 	{
@@ -827,7 +831,7 @@ void delayedProjectActivation(WorkspaceD.Instance instance, string workspaceRoot
 
 void notifySkippedRoots()
 {
-	static int timer;
+	static TimerID timer;
 	clearTimeout(timer);
 	timer = setTimeout(delegate() {
 		rpc.notifyMethod("coded/skippedLoads", SkippedLoadsNotification(skippedRoots));
@@ -1049,7 +1053,7 @@ void onDidCloseDocument(DidCloseTextDocumentParams params)
 	// but keep warnings in local projects
 }
 
-int genericChangeTimeout;
+TimerID genericChangeTimeout;
 @protocolNotification("textDocument/didChange")
 void onDidChangeDocument(DidChangeTextDocumentParams params)
 {
@@ -1069,7 +1073,7 @@ void onDidChangeDocument(DidChangeTextDocumentParams params)
 	}, delay);
 }
 
-int dscannerChangeTimeout;
+TimerID dscannerChangeTimeout;
 @protocolNotification("coded/doDscanner")  // deprecated alias
 @protocolNotification("served/doDscanner")
 void doDscanner(@nonStandard DidChangeTextDocumentParams params)

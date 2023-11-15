@@ -11,5 +11,5 @@ void main()
 	backend.register!DfmtComponent;
 
 	auto dfmt = backend.get!DfmtComponent;
-	assert(dfmt.format("void main(){}").getBlocking.splitLines.length > 1);
+	assert(dfmt.format("void main(){}").splitLines.length > 1);
 }

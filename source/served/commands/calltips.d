@@ -147,7 +147,7 @@ SignatureHelp provideDSignatureHelp(TextDocumentPositionParams params,
 		return SignatureHelp.init;
 
 	DCDCompletions result = backend.best!DCDComponent(file)
-		.listCompletion(codeText, callParams.functionParensRange[0] + 1).getYield;
+		.listCompletion(codeText, callParams.functionParensRange[0] + 1);
 
 	if (result == DCDCompletions.init)
 		return SignatureHelp.init;
@@ -191,7 +191,7 @@ SignatureHelp provideDietSignatureHelp(TextDocumentPositionParams params,
 				return SignatureHelp.init;
 
 			auto dcd = backend.best!DCDComponent(file).listCompletion(code,
-					callParams.functionParensRange[0] + 1).getYield;
+					callParams.functionParensRange[0] + 1);
 			if (dcd.type == DCDCompletions.Type.calltips)
 				return convertDCDCalltips(dcdext, dcd.calltips, dcd.symbols, callParams);
 		}

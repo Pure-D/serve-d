@@ -156,7 +156,7 @@ if (AllowedTypes.length > 0)
 	Returns: error msg if any
 	*/
 	@safe pure scope
-	IonException deserializeFromIon(scope const char[][] symbolTable, IonDescribedValue value)
+	IonException deserializeFromIon(scope const char[][] symbolTable, scope IonDescribedValue value)
 	{
 		import mir.deser.ion : deserializeIon;
 		import mir.ion.type_code : IonTypeCode;
@@ -202,8 +202,8 @@ if (AllowedTypes.length > 0)
 
 		static foreach (T; AllowedTypes)
 			if (valueMatchesType!T(struct_))
-				{
-				this.value = deserializeIon!T(symbolTable, value);
+			{
+				this.value = (() @trusted => deserializeIon!T(symbolTable, value))();
 				return null;
 			}
 
@@ -449,7 +449,7 @@ struct NullableOptional(T)
 	}
 
 	@trusted pure scope
-	IonException deserializeFromIon(scope const char[][] symbolTable, IonDescribedValue value)
+	IonException deserializeFromIon(scope const char[][] symbolTable, scope IonDescribedValue value)
 	{
 		import mir.deser.ion: deserializeIon;
 		import mir.ion.type_code : IonTypeCode;
@@ -2727,7 +2727,7 @@ struct MarkedString
 		string language;
 	}
 
-	void serialize(S)(scope ref S serializer) const
+	void serialize(S)(scope ref S serializer) const scope
 	{
 		import mir.ser : serializeValue;
 
@@ -2744,7 +2744,7 @@ struct MarkedString
 	Returns: error msg if any
 	*/
 	@safe pure scope
-	IonException deserializeFromIon(scope const char[][] symbolTable, IonDescribedValue value)
+	IonException deserializeFromIon(scope const char[][] symbolTable, scope IonDescribedValue value)
 	{
 		import mir.deser.ion : deserializeIon;
 		import mir.ion.type_code : IonTypeCode;

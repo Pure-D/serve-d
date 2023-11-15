@@ -129,8 +129,9 @@ int getImportCompilationTime(string code, string module_, string file)
 	importCompilationTimeRunning = true;
 	scope (exit)
 		importCompilationTimeRunning = false;
-	// run blocking so we don't compute multiple in parallel
-	auto ret = backend.best!DMDComponent(file).measureSync(code, null, 20, 500);
+
+	// TODO: synchronize this part so we don't run multiple at once
+	auto ret = backend.best!DMDComponent(file).measure(code, null, 20, 500);
 	if (!ret.success)
 		throw new Exception("Compilation failed");
 	auto msecs = cast(int) round(ret.duration.total!"msecs" / 5.0) * 5;

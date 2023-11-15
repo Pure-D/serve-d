@@ -35,7 +35,7 @@ package DocumentHighlight[] documentHighlightImpl(scope ref immutable(Document) 
 	Position cachePos;
 	size_t cacheBytes;
 
-	auto localUse = backend.best!DCDComponent(file).findLocalUse(codeText, currOffset).getYield;
+	auto localUse = backend.best!DCDComponent(file).findLocalUse(codeText, currOffset);
 	trace("localUse: ", localUse);
 	if (localUse.declarationFilePath == "stdin")
 	{

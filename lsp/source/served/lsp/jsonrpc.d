@@ -1,6 +1,7 @@
 module served.lsp.jsonrpc;
 
 // version = TracePackets;
+// version = TracePacketsVerbose;
 
 import core.exception;
 import core.thread;
@@ -15,12 +16,23 @@ import std.string;
 import served.lsp.filereader;
 import served.lsp.protocol;
 
-/// Fiber which runs in the background, reading from a FileReader, and calling methods when requested over the RPC interface.
+interface IFiberManager
+{
+	void resumeListeners() shared;
+	void setCurrentAsListener() shared;
+	/// Call fiber once after this duration
+	void* resumeCurrentAfter(Duration time) shared;
+	/// Don't call fiber after previous resumeCurrentAfter after all
+	void cancelResumeAfter(void* handle) shared;
+	void wakeFiber(Fiber fiber) shared;
+}
+
+/// Fiber which runs in the background, reading from a IFileReader, and calling methods when requested over the RPC interface.
 class RPCProcessor : Fiber
 {
-	/// Constructs this RPC processor using a FileReader to read RPC commands from and a std.stdio.File to write RPC commands to.
+	/// Constructs this RPC processor using a IFileReader to read RPC commands from and a std.stdio.File to write RPC commands to.
 	/// Creates this fiber with a reasonable fiber size.
-	this(FileReader reader, File writer)
+	this(IFileReader reader, File writer)
 	{
 		super(&run, 4096 * 32);
 		this.reader = reader;
@@ -37,6 +49,8 @@ class RPCProcessor : Fiber
 	void stop()
 	{
 		stopped = true;
+		if (fibers)
+			fibers.wakeFiber(this);
 	}
 
 	/// Sends an RPC response or error.
@@ -123,7 +137,7 @@ class RPCProcessor : Fiber
 		sendRawPacket(buffer[0 .. i]);
 	}
 
-	/// Sends a raw JSON object to the other RPC side. 
+	/// Sends a raw JSON object to the other RPC side.
 	deprecated void send(JSONValue raw)
 	{
 		if (!("jsonrpc" in raw))
@@ -386,7 +400,7 @@ class RPCProcessor : Fiber
 	/// Registers a wait handler for the given request token. When the other RPC
 	/// side sends a response to this token, the value will be saved, before it
 	/// is being awaited.
-	private size_t prepareWait(RequestToken tok)
+	package(served.lsp) size_t prepareWait(RequestToken tok)
 	{
 		size_t i;
 		bool found = false;
@@ -408,12 +422,21 @@ class RPCProcessor : Fiber
 
 	/// Waits until the given responseToken wait handler is resolved, then
 	/// return its result and makes the memory reusable.
-	private ResponseMessageRaw resolveWait(size_t i, Duration timeout = Duration.max)
+	package(served.lsp) ResponseMessageRaw resolveWait(size_t i, Duration timeout = Duration.max)
 	{
 		import std.datetime.stopwatch;
 
 		StopWatch sw;
 		sw.start();
+
+		void* resumeHandle;
+		if (fibers)
+		{
+			fibers.setCurrentAsListener();
+			if (timeout != Duration.max)
+				resumeHandle = fibers.resumeCurrentAfter(timeout);
+		}
+
 		while (!responseTokens[i].got)
 		{
 			if (timeout != Duration.max
@@ -422,11 +445,13 @@ class RPCProcessor : Fiber
 			yield(); // yield until main loop placed a response
 		}
 		auto res = responseTokens[i].ret;
+		if (resumeHandle)
+			fibers.cancelResumeAfter(resumeHandle);
 		responseTokens[i].handled = true; // make memory reusable
 		return res;
 	}
 
-	private bool hasResponse(size_t handle)
+	package(served.lsp) bool hasResponse(size_t handle)
 	{
 		return responseTokens[handle].got;
 	}
@@ -447,6 +472,14 @@ class RPCProcessor : Fiber
 		return resolveWait(i, timeout);
 	}
 
+	/// Called whenever a message is received that can be retreived using `poll`
+	/// Since this is a callback on the reading fiber, work inside this delegate
+	/// should be minimal to avoid RPC I/O delays.
+	void delegate(scope RequestMessageRaw) onDataCallback;
+
+	/// Can be set to implement more efficient yielding
+	shared IFiberManager fibers;
+
 private:
 	void onData(RequestMessageRaw req)
 	{
@@ -458,9 +491,11 @@ private:
 		}
 
 		messageQueue.insertBack(req);
+		if (onDataCallback)
+			onDataCallback(req);
 	}
 
-	FileReader reader;
+	IFileReader reader;
 	File writer;
 	bool stopped;
 	DList!RequestMessageRaw messageQueue;
@@ -485,9 +520,16 @@ private:
 			size_t contentLength = 0;
 			do // dmd -O has an issue on mscoff where it forgets to emit a cmp here so this would break with while (inHeader)
 			{
-				string line = reader.yieldLine(&stopped, false);
+				scope line = reader.yieldLine(&stopped, false);
 				if (!reader.isReading)
 					stop(); // abort in header
+
+				version (TracePacketsVerbose)
+				{
+					trace("[RPC] Header: ", cast(const(char)[]) line);
+					if (stopped)
+						trace("[RPC] (force stopped early)");
+				}
 
 				if (line.length)
 					gotAnyHeader = true;
@@ -495,7 +537,15 @@ private:
 				if (!line.length && gotAnyHeader)
 					inHeader = false;
 				else if (line.startsWith("Content-Length:"))
-					contentLength = line["Content-Length:".length .. $].strip.to!size_t;
+				{
+					import std.algorithm : all;
+					import std.ascii : isDigit;
+					import std.exception : enforce;
+
+					auto lengthStr = (cast(const(char)[]) line["Content-Length:".length .. $]).strip;
+					enforce!ConvException(lengthStr.all!isDigit, "String " ~ [lengthStr].to!string[1 .. $ - 1] ~ " is not a number!");
+					contentLength = lengthStr.to!size_t;
+				}
 			}
 			while (inHeader && !stopped);
 
@@ -508,7 +558,14 @@ private:
 				continue;
 			}
 
-			auto content = cast(const(char)[]) reader.yieldData(contentLength, &stopped, false);
+			version (TracePacketsVerbose)
+				trace("[RPC] Reading length: ", contentLength);
+
+			scope content = cast(const(char)[]) reader.yieldData(contentLength, &stopped, false);
+
+			version (TracePacketsVerbose)
+				trace("[RPC] chunk: ", cast(const(char)[]) content);
+
 			if (stopped || content is null)
 				break;
 			assert(content.length == contentLength);
@@ -563,16 +620,10 @@ private:
 			}
 
 			if (request != RequestMessageRaw.init)
-			{
 				onData(request);
-				Fiber.yield();
-			}
 
 			foreach (req; extraRequests)
-			{
 				onData(request);
-				Fiber.yield();
-			}
 		}
 	}
 
@@ -618,6 +669,8 @@ private:
 						waiting.ret.resultJson = res.idup;
 					if (err.length)
 						waiting.ret.error = err.deserializeJson!ResponseError;
+					if (fibers)
+						fibers.resumeListeners();
 					isResponse = true;
 					break;
 				}

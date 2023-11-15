@@ -159,17 +159,10 @@ class DCDComponent : ComponentWrapper
 		return installedVersion;
 	}
 
-	private auto serverThreads()
-	{
-		return threads(1, 2);
-	}
-
 	/// This stops the dcd-server instance safely and waits for it to exit
 	override void shutdown(bool dtor = false)
 	{
-		stopServerSync();
-		if (!dtor && _threads)
-			serverThreads.finish();
+		stopServer();
 	}
 
 	/// This will start the dcd-server and load import paths from the current provider
@@ -193,6 +186,9 @@ class DCDComponent : ComponentWrapper
 	///                instead of throwing an exception.
 	void startServer(string[] additionalImports = [], bool quietServer = false, bool selectPort = false)
 	{
+		if (running)
+			throw new Exception("server instance already running!");
+
 		ushort port = this.port;
 		while (port + 1 < ushort.max && isPortRunning(port))
 		{
@@ -227,8 +223,10 @@ class DCDComponent : ComponentWrapper
 			if (line.canFind("Startup completed in "))
 				break;
 		}
+
+		// TODO: replace thread with eventcore based PID waiting
 		running = true;
-		serverThreads.create({
+		auto t = new Thread({
 			mixin(traceTask);
 			scope (exit)
 				running = false;
@@ -262,9 +260,12 @@ class DCDComponent : ComponentWrapper
 				workspaced.messageHandler.handleCrash(refInstance, "dcd", this);
 			}
 		});
+		t.isDaemon = true;
+		t.start();
 	}
 
-	void stopServerSync()
+	/// Stops the server
+	void stopServer()
 	{
 		if (!running)
 			return;
@@ -282,26 +283,6 @@ class DCDComponent : ComponentWrapper
 		}
 	}
 
-	/// This stops the dcd-server asynchronously
-	/// Returns: null
-	Future!void stopServer()
-	{
-		auto ret = new typeof(return)();
-		gthreads.create({
-			mixin(traceTask);
-			try
-			{
-				stopServerSync();
-				ret.finish();
-			}
-			catch (Throwable t)
-			{
-				ret.error(t);
-			}
-		});
-		return ret;
-	}
-
 	/// This will kill the process associated with the dcd-server instance
 	void killServer()
 	{
@@ -309,25 +290,11 @@ class DCDComponent : ComponentWrapper
 			serverPipes.pid.kill();
 	}
 
-	/// This will stop the dcd-server safely and restart it again using setup-server asynchronously
-	/// Returns: null
-	Future!void restartServer(bool quiet = false)
+	/// This will stop the dcd-server safely and restart it again using setup-server
+	void restartServer(bool quiet = false)
 	{
-		auto ret = new typeof(return);
-		gthreads.create({
-			mixin(traceTask);
-			try
-			{
-				stopServerSync();
-				setupServer([], quiet);
-				ret.finish();
-			}
-			catch (Throwable t)
-			{
-				ret.error(t);
-			}
-		});
-		return ret;
+		stopServer();
+		setupServer([], quiet);
 	}
 
 	/// This will query the current dcd-server status
@@ -347,29 +314,17 @@ class DCDComponent : ComponentWrapper
 	}
 
 	/// Searches for a symbol across all files using `dcd-client --search`
-	Future!(DCDSearchResult[]) searchSymbol(string query)
+	DCDSearchResult[] searchSymbol(string query)
 	{
-		auto ret = new typeof(return);
-		gthreads.create({
-			mixin(traceTask);
-			try
-			{
-				if (!running)
-				{
-					ret.finish(null);
-					return;
-				}
+		if (!running)
+			return null;
 
-				ret.finish(client.requestSymbolSearch(query)
-					.map!(a => DCDSearchResult(a.symbolFilePath,
-					cast(int)a.symbolLocation, [cast(char) a.kind].idup)).array);
-			}
-			catch (Throwable t)
-			{
-				ret.error(t);
-			}
-		});
-		return ret;
+		return client.requestSymbolSearch(query)
+			.map!(a => DCDSearchResult(
+				a.symbolFilePath,
+				cast(int)a.symbolLocation,
+				[cast(char) a.kind].idup
+			)).array;
 	}
 
 	/// Reloads import paths from the current provider. Call reload there before calling it here.
@@ -412,116 +367,59 @@ class DCDComponent : ComponentWrapper
 
 	/// Searches for an open port to spawn dcd-server in asynchronously starting with `port`, always increasing by one.
 	/// Returns: 0 if not available, otherwise the port as number
-	Future!ushort findAndSelectPort(ushort port = 9166)
+	ushort findAndSelectPort(ushort port = 9166)
 	{
 		if (client.usingUnixDomainSockets)
-		{
-			return typeof(return).fromResult(0);
-		}
-		auto ret = new typeof(return);
-		gthreads.create({
-			mixin(traceTask);
-			try
-			{
-				auto newPort = findOpen(port);
-				port = newPort;
-				ret.finish(port);
-			}
-			catch (Throwable t)
-			{
-				ret.error(t);
-			}
-		});
-		return ret;
+			return 0;
+		auto newPort = findOpen(port);
+		port = newPort;
+		return port;
 	}
 
 	/// Finds the declaration of the symbol at position `pos` in the code
-	Future!DCDDeclaration findDeclaration(scope const(char)[] code, int pos)
+	DCDDeclaration findDeclaration(scope const(char)[] code, int pos)
 	{
-		auto ret = new typeof(return);
-		gthreads.create({
-			mixin(traceTask);
-			try
-			{
-				if (!running || pos >= code.length)
-				{
-					ret.finish(DCDDeclaration.init);
-					return;
-				}
+		if (!running || pos >= code.length)
+			return DCDDeclaration.init;
 
-				// We need to move by one character on identifier characters to ensure the start character fits.
-				if (!isDIdentifierSeparatingChar(code[pos]))
-					pos++;
+		// We need to move by one character on identifier characters to ensure the start character fits.
+		if (!isDIdentifierSeparatingChar(code[pos]))
+			pos++;
 
-				auto info = client.requestSymbolInfo(CodeRequest("stdin", code, pos));
-				ret.finish(DCDDeclaration(info.declarationFilePath,
-					cast(int) info.declarationLocation));
-			}
-			catch (Throwable t)
-			{
-				ret.error(t);
-			}
-		});
-		return ret;
+		auto info = client.requestSymbolInfo(CodeRequest("stdin", code, pos));
+		return DCDDeclaration(
+			info.declarationFilePath,
+			cast(int) info.declarationLocation
+		);
 	}
 
 	/// Finds the documentation of the symbol at position `pos` in the code
-	Future!string getDocumentation(scope const(char)[] code, int pos)
+	string getDocumentation(scope const(char)[] code, int pos)
 	{
-		auto ret = new typeof(return);
-		gthreads.create({
-			mixin(traceTask);
-			try
-			{
-				if (!running || pos >= code.length)
-				{
-					ret.finish("");
-					return;
-				}
+		if (!running || pos >= code.length)
+			return "";
 
-				// We need to move by one character on identifier characters to ensure the start character fits.
-				if (!isDIdentifierSeparatingChar(code[pos]))
-					pos++;
+		// We need to move by one character on identifier characters to ensure the start character fits.
+		if (!isDIdentifierSeparatingChar(code[pos]))
+			pos++;
 
-				auto doc = client.requestDocumentation(CodeRequest("stdin", code, pos));
-				ret.finish(doc.join("\n"));
-			}
-			catch (Throwable t)
-			{
-				ret.error(t);
-			}
-		});
-		return ret;
+		auto doc = client.requestDocumentation(CodeRequest("stdin", code, pos));
+		return doc.join("\n");
 	}
 
 	/// Finds declaration and usage of the token at position `pos` within the
 	/// current document.
-	Future!DCDLocalUse findLocalUse(scope const(char)[] code, int pos)
+	DCDLocalUse findLocalUse(scope const(char)[] code, int pos)
 	{
-		auto ret = new typeof(return);
-		gthreads.create({
-			mixin(traceTask);
-			try
-			{
-				if (!running || pos >= code.length)
-				{
-					ret.finish(DCDLocalUse.init);
-					return;
-				}
+		if (!running || pos >= code.length)
+			return DCDLocalUse.init;
 
-				// We need to move by one character on identifier characters to ensure the start character fits.
-				if (!isDIdentifierSeparatingChar(code[pos]))
-					pos++;
+		// We need to move by one character on identifier characters to ensure the start character fits.
+		if (!isDIdentifierSeparatingChar(code[pos]))
+			pos++;
 
-				auto localUse = client.requestLocalUse(CodeRequest("stdin", code, pos));
-				ret.finish(DCDLocalUse(localUse));
-			}
-			catch (Throwable t)
-			{
-				ret.error(t);
-			}
-		});
-		return ret;
+		auto localUse = client.requestLocalUse(CodeRequest("stdin", code, pos));
+		return DCDLocalUse(localUse);
 	}
 
 	/// Returns the used socket file. Only available on OSX, linux and BSD with DCD >= 0.8.0
@@ -544,65 +442,52 @@ class DCDComponent : ComponentWrapper
 	/// Queries for code completion at position `pos` in code
 	/// Raw is anything else than identifiers and calltips which might not be implemented by this point.
 	/// calltips.symbols and identifiers.definition, identifiers.file, identifiers.location and identifiers.documentation are only available with dcd ~master as of now.
-	Future!DCDCompletions listCompletion(scope const(char)[] code, int pos)
+	DCDCompletions listCompletion(scope const(char)[] code, int pos)
 	{
-		auto ret = new typeof(return);
-		gthreads.create({
-			mixin(traceTask);
-			try
-			{
-				DCDCompletions completions;
-				if (!running)
-				{
-					trace("DCD not yet running!");
-					ret.finish(completions);
-					return;
-				}
+		DCDCompletions completions;
+		if (!running)
+		{
+			trace("DCD not yet running!");
+			return completions;
+		}
 
-				auto c = client.requestAutocomplete(CodeRequest("stdin", code, pos));
-				if (c.type == DCDCompletionType.calltips)
-				{
-					completions.type = DCDCompletions.Type.calltips;
-					auto calltips = appender!(string[]);
-					auto symbols = appender!(DCDCompletions.Symbol[]);
-					foreach (item; c.completions)
-					{
-						calltips ~= item.definition;
-						symbols ~= DCDCompletions.Symbol(item.symbolFilePath,
-							cast(int)item.symbolLocation, item.documentation);
-					}
-					completions._calltips = calltips.data;
-					completions._symbols = symbols.data;
-				}
-				else if (c.type == DCDCompletionType.identifiers)
-				{
-					completions.type = DCDCompletions.Type.identifiers;
-					auto identifiers = appender!(DCDIdentifier[]);
-					foreach (item; c.completions)
-					{
-						identifiers ~= DCDIdentifier(item.identifier,
-							item.kind == char.init ? "" : [cast(char)item.kind].idup,
-							item.definition, item.symbolFilePath,
-							cast(int)item.symbolLocation, item.documentation,
-							item.typeOf);
-					}
-					completions._identifiers = identifiers.data;
-				}
-				else
-				{
-					completions.type = DCDCompletions.Type.raw;
-					workspaced.messageHandler.warn(refInstance, "dcd",
-						WarningId.unimplemented,
-						"Unknown DCD completion type: " ~ c.type.to!string);
-				}
-				ret.finish(completions);
-			}
-			catch (Throwable e)
+		auto c = client.requestAutocomplete(CodeRequest("stdin", code, pos));
+		if (c.type == DCDCompletionType.calltips)
+		{
+			completions.type = DCDCompletions.Type.calltips;
+			auto calltips = appender!(string[]);
+			auto symbols = appender!(DCDCompletions.Symbol[]);
+			foreach (item; c.completions)
 			{
-				ret.error(e);
+				calltips ~= item.definition;
+				symbols ~= DCDCompletions.Symbol(item.symbolFilePath,
+					cast(int)item.symbolLocation, item.documentation);
 			}
-		});
-		return ret;
+			completions._calltips = calltips.data;
+			completions._symbols = symbols.data;
+		}
+		else if (c.type == DCDCompletionType.identifiers)
+		{
+			completions.type = DCDCompletions.Type.identifiers;
+			auto identifiers = appender!(DCDIdentifier[]);
+			foreach (item; c.completions)
+			{
+				identifiers ~= DCDIdentifier(item.identifier,
+					item.kind == char.init ? "" : [cast(char)item.kind].idup,
+					item.definition, item.symbolFilePath,
+					cast(int)item.symbolLocation, item.documentation,
+					item.typeOf);
+			}
+			completions._identifiers = identifiers.data;
+		}
+		else
+		{
+			completions.type = DCDCompletions.Type.raw;
+			workspaced.messageHandler.warn(refInstance, "dcd",
+				WarningId.unimplemented,
+				"Unknown DCD completion type: " ~ c.type.to!string);
+		}
+		return completions;
 	}
 
 	void updateImports()

@@ -283,32 +283,23 @@ class SnippetsComponent : ComponentWrapper
 		return gen.value;
 	}
 
-	Future!SnippetList getSnippets(scope const(char)[] file, scope const(char)[] code, int position)
+	SnippetList getSnippets(alias joinFn)(scope const(char)[] file, scope const(char)[] code, int position)
 	{
-		mixin(gthreadsAsyncProxy!`getSnippetsBlocking(file, code, position)`);
-	}
-
-	SnippetList getSnippetsBlocking(scope const(char)[] file, scope const(char)[] code, int position)
-	{
-		auto futures = collectSnippets(file, code, position);
-
+		const inst = instance;
+		auto info = determineSnippetInfo(file, code, position);
 		auto ret = appender!(Snippet[]);
-		foreach (fut; futures[1])
-			ret.put(fut.getBlocking());
-		return SnippetList(futures[0], ret.data);
+		void delegate()[] tasks;
+
+		foreach (provider; providers)
+			tasks ~= () {
+				ret.put(provider.provideSnippets(inst, file, code, position, info));
+			};
+		joinFn(tasks);
+
+		return SnippetList(info, ret.data);
 	}
 
-	SnippetList getSnippetsYield(scope const(char)[] file, scope const(char)[] code, int position)
-	{
-		auto futures = collectSnippets(file, code, position);
-
-		auto ret = appender!(Snippet[]);
-		foreach (fut; futures[1])
-			ret.put(fut.getYield());
-		return SnippetList(futures[0], ret.data);
-	}
-
-	Future!Snippet resolveSnippet(scope const(char)[] file, scope const(char)[] code,
+	Snippet resolveSnippet(scope const(char)[] file, scope const(char)[] code,
 			int position, Snippet snippet)
 	{
 		foreach (provider; providers)
@@ -320,18 +311,12 @@ class SnippetsComponent : ComponentWrapper
 			}
 		}
 
-		return typeof(return).fromResult(snippet);
+		return snippet;
 	}
 
-	Future!string format(scope const(char)[] snippet, string[] arguments = [],
-			SnippetLevel level = SnippetLevel.global)
-	{
-		mixin(gthreadsAsyncProxy!`formatSync(snippet, arguments, level)`);
-	}
-
-	/// Will format the code passed in synchronously using dfmt. Might take a short moment on larger documents.
+	/// Will format the code passed in using dfmt. Might take a short moment on larger documents.
 	/// Returns: the formatted code as string or unchanged if dfmt is not active
-	string formatSync(scope const(char)[] snippet, string[] arguments = [],
+	string format(scope const(char)[] snippet, string[] arguments = [],
 			SnippetLevel level = SnippetLevel.global)
 	{
 		if (!has!DfmtComponent)
@@ -520,7 +505,7 @@ class SnippetsComponent : ComponentWrapper
 			break;
 		}
 
-		auto res = dfmt.formatSync(tmp.data, arguments);
+		auto res = dfmt.format(tmp.data, arguments);
 
 		string chompStr;
 		char del;
@@ -619,17 +604,6 @@ class SnippetsComponent : ComponentWrapper
 	}
 
 private:
-	Tuple!(SnippetInfo, Future!(Snippet[])[]) collectSnippets(scope const(char)[] file,
-			scope const(char)[] code, int position)
-	{
-		const inst = instance;
-		auto info = determineSnippetInfo(file, code, position);
-		auto futures = appender!(Future!(Snippet[])[]);
-		foreach (provider; providers)
-			futures.put(provider.provideSnippets(inst, file, code, position, info));
-		return tuple(info, futures.data);
-	}
-
 	LexerConfig config;
 }
 
@@ -739,10 +713,10 @@ struct SnippetList
 ///
 interface SnippetProvider
 {
-	Future!(Snippet[]) provideSnippets(scope const WorkspaceD.Instance instance,
+	Snippet[] provideSnippets(scope const WorkspaceD.Instance instance,
 			scope const(char)[] file, scope const(char)[] code, int position, const SnippetInfo info);
 
-	Future!Snippet resolveSnippet(scope const WorkspaceD.Instance instance,
+	Snippet resolveSnippet(scope const WorkspaceD.Instance instance,
 			scope const(char)[] file, scope const(char)[] code, int position,
 			const SnippetInfo info, Snippet snippet);
 }

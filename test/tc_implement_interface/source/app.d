@@ -44,7 +44,7 @@ int main(string[] args)
 
 	fsworkspace.addImports(["source"]);
 
-	auto port = dcd.findAndSelectPort(cast(ushort) 9166).getBlocking;
+	auto port = dcd.findAndSelectPort(cast(ushort) 9166);
 	instance.config.set("dcd", "port", cast(int) port);
 
 	dcd.setupServer([], true);
@@ -81,7 +81,7 @@ int main(string[] args)
 
 			cmd.popFront;
 			auto cmdLine = cmd.front;
-			code = dcdext.implement(source, cmdLine.parse!uint, false).getBlocking;
+			code = dcdext.implement(source, cmdLine.parse!uint, false);
 			reader.popFront;
 
 			writer.writeln(code);
@@ -166,7 +166,7 @@ int main(string[] args)
 
 			cmd.popFront;
 			auto cmdLine = cmd.front;
-			code = dcdext.implement(source, cmdLine.parse!uint, false).getBlocking;
+			code = dcdext.implement(source, cmdLine.parse!uint, false);
 			if (code.length != 0)
 			{
 				writer.writeln("unexpected: ", code);

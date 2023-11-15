@@ -930,20 +930,20 @@ class PlainSnippetProvider : SnippetProvider
 		}
 	}
 
-	Future!(Snippet[]) provideSnippets(scope const WorkspaceD.Instance instance,
+	Snippet[] provideSnippets(scope const WorkspaceD.Instance instance,
 			scope const(char)[] file, scope const(char)[] code, int position, const SnippetInfo info)
 	{
 		Snippet[] ret;
 		if (auto p = info.level in prebuilt)
 			ret = *p;
-		return typeof(return).fromResult(ret);
+		return ret;
 	}
 
-	Future!Snippet resolveSnippet(scope const WorkspaceD.Instance instance,
+	Snippet resolveSnippet(scope const WorkspaceD.Instance instance,
 			scope const(char)[] file, scope const(char)[] code, int position,
 			const SnippetInfo info, Snippet snippet)
 	{
 		snippet.resolved = true;
-		return typeof(return).fromResult(snippet);
+		return snippet;
 	}
 }

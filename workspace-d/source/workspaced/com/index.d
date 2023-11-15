@@ -55,7 +55,7 @@ class IndexComponent : ComponentWrapper
 		config.stringBehavior = StringBehavior.source;
 	}
 
-	Future!ModuleRef reindexFromDisk(string file)
+	ModuleRef reindexFromDisk(string file)
 	{
 		import std.file : readText;
 
@@ -70,7 +70,7 @@ class IndexComponent : ComponentWrapper
 					cache.fileSize,
 					cache.modName,
 					cache.moduleDefinition);
-				return typeof(return).fromResult(modName);
+				return modName;
 			}
 			else
 			{
@@ -84,12 +84,12 @@ class IndexComponent : ComponentWrapper
 		catch (Exception e)
 		{
 			trace("Index error in ", file, ": ", e);
-			
-			return typeof(return).fromError(e);
+
+			throw e;
 		}
 	}
 
-	Future!ModuleRef reindexSaved(string file, scope const(char)[] code)
+	ModuleRef reindexSaved(string file, scope const(char)[] code)
 	{
 		auto meta = IndexCache.getFileMeta(file);
 		if (meta is typeof(meta).init)
@@ -97,14 +97,14 @@ class IndexComponent : ComponentWrapper
 		return reindex(meta.expand, code, true);
 	}
 
-	Future!ModuleRef reindex(string file, SysTime lastWrite, ulong fileSize, scope const(char)[] code, bool force)
+	ModuleRef reindex(string file, SysTime lastWrite, ulong fileSize, scope const(char)[] code, bool force)
 	{
 		auto mod = get!ModulemanComponent.moduleName(code);
 
 		if (mod is null)
 		{
 			if (!force)
-				return typeof(return).fromResult(null);
+				return null;
 
 			ImportCacheEntry entry;
 			entry.success = false;
@@ -114,34 +114,22 @@ class IndexComponent : ComponentWrapper
 			{
 				cache.require(mod, ImportCacheEntry(true, file)).replaceFrom(mod, entry, this);
 			}
-			return typeof(return).fromResult(mod);
+			return mod;
 		}
 		else
 		{
-			auto ret = new typeof(return);
-			auto entryTask = generateCacheEntry(file, lastWrite, fileSize, code);
-			entryTask.onDone(delegate() {
-				try
-				{
-					auto entry = entryTask.moveImmediately;
-					if (entry == ImportCacheEntry.init && !force)
-						return ret.finish(null);
+			auto entry = generateCacheEntry(file, lastWrite, fileSize, code);
+			if (entry == ImportCacheEntry.init && !force)
+				return null;
 
-					synchronized (cachesMutex)
-					{
-						cache
-							.require(mod, ImportCacheEntry(true, file, lastWrite, fileSize))
-							.replaceFrom(mod, entry, this);
-					}
+			synchronized (cachesMutex)
+			{
+				cache
+					.require(mod, ImportCacheEntry(true, file, lastWrite, fileSize))
+					.replaceFrom(mod, entry, this);
+			}
 
-					ret.finish(mod);
-				}
-				catch (Throwable t)
-				{
-					ret.error(t);
-				}
-			});
-			return ret;
+			return mod;
 		}
 	}
 
@@ -319,42 +307,17 @@ class IndexComponent : ComponentWrapper
 		return null;
 	}
 
-	Future!void autoIndexSources(string[] stdlib, bool save)
+	string[] getIndexSources(string[] stdlib)
 	{
-		auto ret = new typeof(return)();
-		gthreads.create({
-			mixin(traceTask);
-			try
-			{
-				auto files = appender!(string[]);
-				foreach (path; stdlib)
-					appendSourceFiles(files, path);
-				foreach (path; importPaths())
-					appendSourceFiles(files, path);
-				foreach (file; importFiles())
-					if (existsAndIsFile(file))
-						files ~= file;
-
-				StopWatch sw;
-				sw.start();
-
-				trace("Indexing ", files.data.length, " files inside workspace ", cwd, "...");
-
-				auto tasks = files.data.map!(f => reindexFromDisk(f)).array;
-
-				whenAllDone(tasks, {
-					trace("Done indexing ", files.data.length, " files in ", sw.peek);
-					if (save)
-						saveIndex();
-					ret.finish();
-				});
-			}
-			catch (Throwable t)
-			{
-				ret.error(t);
-			}
-		});
-		return ret;
+		auto files = appender!(string[]);
+		foreach (path; stdlib)
+			appendSourceFiles(files, path);
+		foreach (path; importPaths())
+			appendSourceFiles(files, path);
+		foreach (file; importFiles())
+			if (existsAndIsFile(file))
+				files ~= file;
+		return files.data;
 	}
 
 	IndexHealthReport getHealth()
@@ -529,28 +492,16 @@ private:
 
 	static __gshared IndexCache fileIndex;
 
-	Future!ImportCacheEntry generateCacheEntry(string file, SysTime writeTime, ulong fileSize, scope const(char)[] code)
+	ImportCacheEntry generateCacheEntry(string file, SysTime writeTime, ulong fileSize, scope const(char)[] code)
 	{
 		scope tokens = getTokensForParser(cast(ubyte[]) code, config, &workspaced.stringCache);
 		if (!tokens.length)
-			return typeof(return).fromResult(ImportCacheEntry.init);
+			return ImportCacheEntry.init;
 
-		auto ret = new typeof(return);
-		auto definitions = get!DscannerComponent.listDefinitions(file, code, true,
+		auto modDef = get!DscannerComponent.listDefinitions(file, code, true,
 			ExtraMask.nullOnError | ExtraMask.imports | ExtraMask.includeFunctionMembers);
-		definitions.onDone(delegate() {
-			try
-			{
-				auto modDef = definitions.getImmediately;
-				modDef.definitions.sort!"a.cmpTypeAndName(b) < 0";
-				ret.finish(generateCacheEntry(file, writeTime, fileSize, modDef));
-			}
-			catch (Throwable t)
-			{
-				ret.error(t);
-			}
-		});
-		return ret;
+		modDef.definitions.sort!"a.cmpTypeAndName(b) < 0";
+		return generateCacheEntry(file, writeTime, fileSize, modDef);
 	}
 
 	ImportCacheEntry generateCacheEntry(string file, SysTime writeTime, ulong fileSize, ModuleDefinition elems)
@@ -852,6 +803,7 @@ struct OrderedKeyedList(T, alias key = "a.name")
 }
 
 version (BenchmarkLocalCachedIndexing)
+version (none) // TODO: autoIndexSources replaced with getIndexSources + running all tasks as caller & saving if needed (second argument)
 unittest
 {
 	import std.stdio;
@@ -880,7 +832,7 @@ unittest
 			sw.start();
 		index.autoIndexSources([
 			"/usr/include/dlang/dmd"
-		], i == 0).getBlocking();
+		], i == 0);
 		if (i != 0)
 			sw.stop();
 		writeln("all globals: ", index.allGlobals.totalCount);

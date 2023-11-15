@@ -4,6 +4,8 @@
 	"license": "MIT",
 	"copyright": "Copyright © 2017-2023, webfreak",
 	"dflags": ["-lowmem"],
+	"dflags-dmd": ["-allinst"],
+	"dflags-ldc": ["--allinst"],
 	"dependencies": {
 		"libddoc": "0.8.0",
 		"rm-rf": "~>0.1.0",
@@ -11,7 +13,7 @@
 		"emsi_containers": "0.9.0",
 		"serve-d:http": "*",
 		"serve-d:lsp": "*",
-		"serve-d:serverbase": "*",
+		"serve-d:serverbase-v2": "*",
 		"serve-d:workspace-d": "*",
 		"fuzzymatch": "~>1.0.0",
 		"sdlfmt": "~>0.1.1"
@@ -24,6 +26,7 @@
 		"protocol",
 		"lsp",
 		"serverbase",
+		"serverbase-v2",
 		"dcd",
 		"workspace-d"
 	],

@@ -139,7 +139,7 @@ TextEdit[] provideFormatting(DocumentFormattingParams params)
 		gFormattingOptionsApplyOn = params.textDocument.uri;
 		gFormattingOptions = ResolvedFormattingOptions(params.options);
 		result = backend.get!DfmtComponent.format(document.rawText,
-				generateDfmtArgs(config, document.eolAt(0))).getYield;
+				generateDfmtArgs(config, document.eolAt(0)));
 	}
 	else if (document.languageId == "sdl")
 	{
@@ -171,12 +171,12 @@ TextEdit[] provideFormatting(DocumentFormattingParams params)
 
 string formatCode(string code, string[] dfmtArgs)
 {
-	return backend.get!DfmtComponent.format(code, dfmtArgs).getYield;
+	return backend.get!DfmtComponent.format(code, dfmtArgs);
 }
 
 string formatSnippet(string code, string[] dfmtArgs, SnippetLevel level = SnippetLevel.global)
 {
-	return backend.get!SnippetsComponent.format(code, dfmtArgs, level).getYield;
+	return backend.get!SnippetsComponent.format(code, dfmtArgs, level);
 }
 
 @protocolMethod("textDocument/rangeFormatting")

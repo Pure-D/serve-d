@@ -404,8 +404,8 @@ if (!is(T == struct) && !is(T == Dummy[string], Dummy))
 
 	mixin("alias " ~ valueName ~ " = _implicitValue;");
 
-	@safe pure scope
-	IonException deserializeFromIon(scope const char[][] symbolTable, IonDescribedValue fullValue)
+	@trusted pure scope
+	IonException deserializeFromIon(scope const char[][] symbolTable, scope IonDescribedValue fullValue)
 	{
 		import mir.deser.ion : deserializeIon;
 		import mir.ion.type_code : IonTypeCode;

@@ -204,10 +204,10 @@ class DubComponent : ComponentWrapper
 
 	/// Reloads the dub.json or dub.sdl file from the cwd
 	/// Returns: `false` if there are no import paths available
-	Future!bool update()
+	bool update()
 	{
 		restart();
-		mixin(gthreadsAsyncProxy!`updateImportPaths(false)`);
+		return updateImportPaths(false);
 	}
 
 	bool updateImportPaths(bool restartDub = true)
@@ -694,7 +694,7 @@ class DubComponent : ComponentWrapper
 	}
 
 	/// Asynchroniously builds the project WITHOUT OUTPUT. This is intended for linting code and showing build errors quickly inside the IDE.
-	Future!(BuildIssue[]) build()
+	BuildIssue[] build()
 	{
 		import std.process : thisProcessID;
 		import std.file : tempDir;
@@ -716,64 +716,53 @@ class DubComponent : ComponentWrapper
 		static if (is(typeof(settings.overrideToolWorkingDirectory)))
 			settings.overrideToolWorkingDirectory = NativePath(cwd);
 
-		auto ret = new typeof(return);
-		new Thread({
-			try
-			{
-				auto issues = appender!(BuildIssue[]);
+		auto issues = appender!(BuildIssue[]);
 
-				settings.compileCallback = (status, output) {
-					trace(status, " ", output);
-					string[] lines = output.splitLines;
-					foreach (line; lines)
+		settings.compileCallback = (status, output) {
+			trace(status, " ", output);
+			string[] lines = output.splitLines;
+			foreach (line; lines)
+			{
+				auto match = line.matchFirst(errorFormat);
+				if (match)
+				{
+					issues ~= BuildIssue(match[2].to!int, match[3].toOr!int(0),
+						match[1], match[4].to!ErrorType, match[5]);
+				}
+				else
+				{
+					auto contMatch = line.matchFirst(errorFormatCont);
+					if (issues.data.length && contMatch)
 					{
-						auto match = line.matchFirst(errorFormat);
-						if (match)
+						issues ~= BuildIssue(contMatch[2].to!int,
+							contMatch[3].toOr!int(1), contMatch[1],
+							issues.data[$ - 1].type, contMatch[4], true);
+					}
+					else if (line.canFind("is deprecated"))
+					{
+						auto deprMatch = line.matchFirst(deprecationFormat);
+						if (deprMatch)
 						{
-							issues ~= BuildIssue(match[2].to!int, match[3].toOr!int(0),
-								match[1], match[4].to!ErrorType, match[5]);
-						}
-						else
-						{
-							auto contMatch = line.matchFirst(errorFormatCont);
-							if (issues.data.length && contMatch)
-							{
-								issues ~= BuildIssue(contMatch[2].to!int,
-									contMatch[3].toOr!int(1), contMatch[1],
-									issues.data[$ - 1].type, contMatch[4], true);
-							}
-							else if (line.canFind("is deprecated"))
-							{
-								auto deprMatch = line.matchFirst(deprecationFormat);
-								if (deprMatch)
-								{
-									issues ~= BuildIssue(deprMatch[2].to!int, deprMatch[3].toOr!int(1),
-										deprMatch[1], ErrorType.Deprecation,
-										deprMatch[4] ~ " is deprecated" ~ deprMatch[5]);
-								}
-							}
+							issues ~= BuildIssue(deprMatch[2].to!int, deprMatch[3].toOr!int(1),
+								deprMatch[1], ErrorType.Deprecation,
+								deprMatch[4] ~ " is deprecated" ~ deprMatch[5]);
 						}
 					}
-				};
-				try
-				{
-					import workspaced.dub.lintgenerator : DubLintGenerator;
-					import std.file : chdir;
+				}
+			}
+		};
+		try
+		{
+			import workspaced.dub.lintgenerator : DubLintGenerator;
+			import std.file : chdir;
 
-					new DubLintGenerator(_dub.project, NativePath(cwd)).generate(settings);
-				}
-				catch (CompilerInvocationException e)
-				{
-					// ignore compiler exiting with error
-				}
-				ret.finish(issues.data);
-			}
-			catch (Throwable t)
-			{
-				ret.error(t);
-			}
-		}).start();
-		return ret;
+			new DubLintGenerator(_dub.project, NativePath(cwd)).generate(settings);
+		}
+		catch (CompilerInvocationException e)
+		{
+			// ignore compiler exiting with error
+		}
+		return issues.data;
 	}
 
 	/// Converts the root package recipe to another format.

@@ -6,7 +6,6 @@ import std.json;
 import std.string;
 import std.utf : codeLength, decode, UseReplacementDchar;
 
-import served.lsp.jsonrpc;
 import served.lsp.protocol;
 
 /// in-memory representation of a file at any given URI. Not thread-safe.
@@ -26,7 +25,7 @@ struct Document
 	/// Guessing Map:
 	/// * `.d|.di` = `"d"`
 	/// * `.dpp` = `"dpp"`
-	/// * `.c` = `"c"`
+	/// * `.c|.h` = `"c"`
 	/// * `.cpp` = `"cpp"`
 	/// * `.ds|.dscript` = `"dscript"`
 	/// * `.dml` = `"dml"`
@@ -45,7 +44,7 @@ struct Document
 				return "d";
 			else if (ext.sicmp(".dpp") == 0)
 				return "dpp";
-			else if (ext.sicmp(".c") == 0)
+			else if (ext.sicmp(".c") == 0 || ext.sicmp(".h") == 0)
 				return "c";
 			else if (ext.sicmp(".cpp") == 0)
 				return "cpp";
