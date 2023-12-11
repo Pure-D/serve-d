@@ -13,10 +13,11 @@ DocumentHighlight[] provideDocumentHighlight(DocumentHighlightParams params)
 {
 	scope document = cast(immutable)documents[params.textDocument.uri].clone();
 	auto currOffset = cast(int) document.positionToBytes(params.position);
+	auto fileConfig = config(document.uri);
 
-	auto result = documentHighlightImpl(document, currOffset);
+	auto result = fileConfig.d.enableDCDHighlight ? documentHighlightImpl(document, currOffset) : null;
 
-	if (!result.length)
+	if (!result.length && fileConfig.d.enableFallbackHighlight)
 		return fallbackDocumentHighlight(document, currOffset);
 
 	return result;

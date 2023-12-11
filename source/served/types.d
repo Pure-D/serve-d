@@ -87,6 +87,8 @@ struct Configuration
 		bool enableDMDImportTiming = false;
 		bool enableCoverageDecoration = true;
 		bool enableGCProfilerDecorations = true;
+		bool enableDCDHighlight = true;
+		bool enableFallbackHighlight = true;
 		bool neverUseDub = false;
 		string[] projectImportPaths;
 		string dubConfiguration;
