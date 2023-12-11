@@ -428,10 +428,10 @@ void doGlobalStartup(UserConfiguration config)
 			dcdUpdateReason = format!"DCD is outdated. Expected: %(%s.%), got %s"(
 					DCDComponent.latestKnownVersion, installed);
 			if (config.d.aggressiveUpdate)
-				spawnFiber((&updateDCD).toDelegate);
+				spawnFiber("updateDCD", (&updateDCD).toDelegate);
 			else
 			{
-				spawnFiber({
+				spawnFiber("Request DCD update", {
 					string action;
 					if (isDCDFromSource)
 						action = translate!"d.ext.compileProgram"("DCD");
@@ -443,7 +443,7 @@ void doGlobalStartup(UserConfiguration config)
 						]);
 
 					if (res == action)
-						spawnFiber((&updateDCD).toDelegate);
+						spawnFiber("updateDCD", (&updateDCD).toDelegate);
 				});
 			}
 		}
@@ -876,7 +876,7 @@ class MessageHandler : IMessageHandler
 	{
 		if (component == "dcd")
 		{
-			spawnFiber(() {
+			spawnFiber("Restart crashed DCD server", () {
 				startDCDServer(instance, instance.cwd.uriFromFile);
 			});
 		}
@@ -1164,6 +1164,44 @@ ServedInfoResponse getServedInfo(ServedInfoParams params)
 
 		if (found)
 			response.moduleIndex = index;
+	}
+
+	if (params.includeTasks)
+	{
+		import core.thread;
+		import core.time;
+
+		static double toSeconds(Duration d)
+		{
+			return d.total!"hnsecs" / 10_000_000.0;
+		}
+
+		response.runningTasks.reserve(lspRouter.fibers.fiberInfos.length);
+
+		auto now = MonoTime.currTime;
+		void addTasks(ref const FiberManager fiberManager, string prefix = null)
+		{
+			foreach (info; fiberManager.fiberInfos ~ fiberManager.recentlyEnded)
+			{
+				if (info is typeof(info).init)
+					continue;
+
+				ServedInfoResponse.Task task;
+				task.name = prefix.length ? prefix ~ info.name : info.name;
+				task.queued = toSeconds(now - info.queueTime);
+				task.started = info.startTime is MonoTime.init ? 0 : toSeconds(now - info.startTime);
+				task.ended = info.endTime is MonoTime.init ? 0 : toSeconds(now - info.endTime);
+				task.timeSpent = toSeconds(info.timeSpent);
+				task.numSteps = info.numSteps;
+				task.running = info.fiber.state != Fiber.State.TERM;
+				response.runningTasks ~= task;
+
+				if (info.nested)
+					addTasks(*info.nested, info.name ~ " > ");
+			}
+		}
+
+		addTasks(lspRouter.fibers);
 	}
 
 	response.globalWorkspace = fallbackWorkspace.describeState;

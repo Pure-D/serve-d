@@ -127,7 +127,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			res.resultJson = initResult.serializeJson;
 			trace("Initialized");
 			serverInitializeCalled = true;
-			pushFiber({
+			pushFiber("Request: initialize", {
 				Fiber.yield();
 				processRequestObservers(msg, initResult);
 			});
@@ -172,12 +172,14 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			partialResultToken = v.partialResultToken;
 		}
 
+		string fiberName = msg.fiberName;
+
 		int working = 0;
 		string[] partialResults;
 		void handlePartialWork(Symbol, Arguments)(Symbol fn, Arguments args)
 		{
 			working++;
-			pushFiber({
+			pushFiber(fiberName ~ " (partial)", {
 				scope (exit)
 					working--;
 				auto thisId = working;
@@ -196,7 +198,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		void handlePartialIterator(Symbol, Arguments)(Symbol fn, Arguments args)
 		{
 			working++;
-			pushFiber({
+			pushFiber(fiberName ~ " (iterator)", {
 				scope (exit)
 					working--;
 				auto thisId = working;
@@ -439,10 +441,10 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 	__gshared FiberManager fibers;
 	__gshared Mutex fibersMutex;
 
-	void pushFiber(T)(T callback, int pages = serverConfig.defaultPages, string file = __FILE__, int line = __LINE__)
+	void pushFiber(T)(string name, T callback, int pages = serverConfig.defaultPages, string file = __FILE__, int line = __LINE__)
 	{
 		synchronized (fibersMutex)
-			fibers.put(new Fiber(callback, serverConfig.fiberPageSize * pages), file, line);
+			fibers.put(name, new Fiber(callback, serverConfig.fiberPageSize * pages), file, line);
 	}
 
 	RPCProcessor rpc;
@@ -536,13 +538,13 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			}
 		}
 
-		fibers ~= rpc;
+		fibers.put("RPC manager", rpc);
 
 		spawnFiberImpl = (&pushFiber!(void delegate())).toDelegate;
 		defaultFiberPages = serverConfig.defaultPages;
 
 		static if (is(typeof(ExtensionModule.parallelMain)))
-			pushFiber(&ExtensionModule.parallelMain);
+			pushFiber("parallelMain", &ExtensionModule.parallelMain);
 
 		while (rpc.state != Fiber.State.TERM)
 		{
@@ -552,9 +554,9 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				// Log on client side instead! (vscode setting: "serve-d.trace.server": "verbose")
 				//trace("Message: ", msg);
 				if (!msg.id.isNone)
-					pushFiber(gotRequest(msg));
+					pushFiber(msg.fiberName, gotRequest(msg));
 				else
-					pushFiber(gotNotify(msg));
+					pushFiber(msg.fiberName, gotNotify(msg));
 			}
 			Thread.sleep(10.msecs);
 			synchronized (fibersMutex)

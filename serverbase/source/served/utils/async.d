@@ -8,21 +8,21 @@ import served.utils.fibermanager;
 import std.datetime.stopwatch : msecs, StopWatch;
 import std.experimental.logger;
 
-__gshared void delegate(void delegate(), int pages, string file, int line) spawnFiberImpl;
+__gshared void delegate(string name, void delegate(), int pages, string file, int line) spawnFiberImpl;
 __gshared int defaultFiberPages = 20;
 __gshared int timeoutID;
 __gshared Timeout[] timeouts;
 __gshared Mutex timeoutsMutex;
 
-void spawnFiber(void delegate() cb, string file = __FILE__, int line = __LINE__)
+void spawnFiber(string name, void delegate() cb, string file = __FILE__, int line = __LINE__)
 {
-	spawnFiber(cb, defaultFiberPages, file, line);
+	spawnFiber(name, cb, defaultFiberPages, file, line);
 }
 
-void spawnFiber(void delegate() cb, int pages, string file = __FILE__, int line = __LINE__)
+void spawnFiber(string name, void delegate() cb, int pages, string file = __FILE__, int line = __LINE__)
 {
 	if (spawnFiberImpl)
-		spawnFiberImpl(cb, pages, file, line);
+		spawnFiberImpl(name, cb, pages, file, line);
 	else
 		setImmediate(cb);
 }

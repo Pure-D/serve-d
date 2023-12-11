@@ -641,6 +641,7 @@ interface ServedInfoParams
 {
 	includeConfig?: boolean;
 	includeIndex?: boolean;
+	includeTasks?: boolean;
 }
 
 interface ServedInfoResponse
@@ -650,7 +651,7 @@ interface ServedInfoResponse
 
 	/**
 	 * Only included if `ServedInfoParams.includeConfig` is true.
-	 * 
+	 *
 	 * Contains the entire config object, e.g. `{"d":{...}, ...}`
 	 */
 	currentConfiguration?: Configuration;
@@ -676,6 +677,28 @@ interface ServedInfoResponse
 	 * `selected` is set to true, or -1 for global workspace.
 	 */
 	selectedWorkspaceIndex: number;
+
+	/**
+	 * Only included if `ServedInfoParams.includeTasks` is true.
+	 *
+	 * List of currently running and recently done LSP requests and tasks
+	 */
+	runningTasks: {
+		/** task name (in most cases function name or LSP request name) */
+		name: string,
+		/** Number of seconds before now (float) when the task was queued */
+		queued: number,
+		/** Number of seconds before now (float) when the task was first started */
+		started: number,
+		/** Number of seconds before now (float) when the task ended - 0 for running tasks */
+		ended: number,
+		/** true if currently ongoing (e.g. yielding) */
+		running: boolean,
+		/** Number of (re)entries */
+		numSteps: number,
+		/** Number of seconds that this fiber was running in total */
+		timeSpent: number,
+	}[]
 }
 ```
 

@@ -355,6 +355,7 @@ struct ServedInfoParams
 @serdeOptional:
 	bool includeConfig;
 	bool includeIndex;
+	bool includeTasks;
 }
 
 ///
@@ -362,6 +363,23 @@ struct ServedInfoParams
 struct ServedInfoResponse
 {
 	import served.types;
+
+	static struct Task
+	{
+		/** task name (in most cases function name or LSP request name) */
+		string name;
+		/**
+		 * Number of seconds before now (float) when the task was queued, first
+		 * started or when it ended (0 for running tasks there), respectively.
+		 */
+		double queued, started, ended;
+		/** true if currently ongoing (e.g. yielding) */
+		bool running;
+		/** Number of (re)entries */
+		int numSteps;
+		/** Number of seconds that this fiber was running in total */
+		double timeSpent;
+	}
 
 	/// Same as in the initialized response.
 	ServerInfo serverInfo;
@@ -383,6 +401,13 @@ struct ServedInfoResponse
 	/// First index inside the `workspaces` array sent along this value, where
 	/// `selected` is set to true, or -1 for global workspace.
 	int selectedWorkspaceIndex;
+
+	/**
+	 * Only included if `ServedInfoParams.includeTasks` is true.
+	 *
+	 * List of currently running and recently done LSP requests and tasks
+	 */
+	Task[] runningTasks;
 }
 
 /// Mixin template that puts in a value called "value" of type `T`. Puts in a

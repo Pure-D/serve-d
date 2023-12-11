@@ -37,7 +37,7 @@ void onDidAddProjectForUnittest(WorkspaceD.Instance instance, string dir, string
 	if (!doTrackTests)
 		return;
 
-	spawnFiber({
+	spawnFiber("Scan DUB project for unittests", {
 		if (!instance.has!DubComponent)
 			return;
 
@@ -58,7 +58,7 @@ void onDidSaveCheckForUnittest(DidSaveTextDocumentParams params)
 	if (!instance)
 		return;
 
-	spawnFiber({
+	spawnFiber("Run didSave processors", {
 		auto projectUri = workspace(params.textDocument.uri).folder.uri;
 
 		auto project = &projectTests.require(projectUri, UnittestProject(projectUri));

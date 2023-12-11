@@ -763,6 +763,14 @@ struct RequestMessageRaw
 	{
 		return text("RequestMessage(", method, ": ", paramsJson, ")");
 	}
+
+	/// Descriptive name for this request/notification
+	string fiberName() const @safe pure
+	{
+		return id.isNone
+			? "Notification: " ~ method
+			: "Request#" ~ id.deref.toString ~ ": " ~ method;
+	}
 }
 
 ///
