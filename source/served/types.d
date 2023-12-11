@@ -61,6 +61,13 @@ enum ManyProjectsAction : string
 	load = "load"
 }
 
+enum DubUpgradeAction : string
+{
+	ask = "ask",
+	always = "always",
+	never = "never"
+}
+
 // alias to avoid name clashing
 alias UserConfiguration = Configuration;
 @serdeIgnoreUnexpectedKeys
@@ -97,6 +104,7 @@ struct Configuration
 		string dubCompiler;
 		bool overrideDfmtEditorconfig = true;
 		bool aggressiveUpdate = false; // differs from default code-d settings on purpose!
+		DubUpgradeAction forceDownloadDependencies = DubUpgradeAction.ask;
 		bool argumentSnippets = false;
 		bool scanAllFolders = true;
 		string[] disabledRootGlobs;

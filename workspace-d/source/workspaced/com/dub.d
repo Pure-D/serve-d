@@ -124,25 +124,8 @@ class DubComponent : ComponentWrapper
 		_dub.packageManager.getOrLoadPackage(NativePath(instance.cwd));
 		_dub.loadPackage();
 		_dub.project.validate();
-
-		selectAndDownloadMissing();
-
-		// mark all packages as optional so we don't crash
-		int missingPackages;
-		auto optionalified = optionalifyPackages;
-		foreach (ref pkg; _dub.project.getTopologicalPackageList())
-		{
-			optionalifyRecipe(pkg);
-			foreach (dep; pkg.getAllDependencies()
-				.filter!(a => optionalified.canFind(a.name)))
-			{
-				auto d = _dub.project.getDependency(dep.name, true);
-				if (!d)
-					missingPackages++;
-				else
-					optionalifyRecipe(d);
-			}
-		}
+		_dub.project.reinit();
+		optionalifyRoot();
 
 		if (!_compilerBinaryName.length)
 			_compilerBinaryName = config.get("dub", "defaultCompiler", _dub.defaultCompiler);
@@ -153,9 +136,25 @@ class DubComponent : ComponentWrapper
 		_dubRunning = true;
 	}
 
+	private void optionalifyRoot()
+	{
+		// mark all packages as optional so we don't crash
+		auto optionalified = optionalifyPackages;
+		foreach (ref pkg; _dub.project.getTopologicalPackageList())
+		{
+			optionalifyRecipe(pkg);
+			foreach (dep; pkg.getAllDependencies()
+				.filter!(a => optionalified.canFind(a.name)))
+			{
+				auto d = _dub.project.getDependency(dep.name, true);
+				if (d)
+					optionalifyRecipe(d);
+			}
+		}
+	}
+
 	private string[] optionalifyPackages()
 	{
-		bool[Package] visited;
 		string[] optionalified;
 		foreach (pkg; _dub.project.dependencies)
 			optionalified ~= optionalifyRecipe(cast() pkg);
@@ -320,6 +319,7 @@ class DubComponent : ComponentWrapper
 	void upgrade(UpgradeOptions options)
 	{
 		_dub.upgrade(options);
+		optionalifyRoot();
 	}
 
 	/// Equivalent of `upgrade(select | noSaveSelection)`
@@ -331,8 +331,6 @@ class DubComponent : ComponentWrapper
 	}
 
 	/// Equivalent of `upgrade(select | upgrade)`
-	/// Updates internal dub.selections.json, does not save what has been changed.
-	/// Keeps existing selections, selects missing dependencies.
 	void upgradeAndSelectAll()
 	{
 		upgrade(UpgradeOptions.select | UpgradeOptions.upgrade);
@@ -379,6 +377,12 @@ class DubComponent : ComponentWrapper
 			~ "Try selecting a different configuration.")(
 			_configuration, _settings.targetType, _dub.project.configurations
 		));
+	}
+
+	/// Lists missing dependencies
+	const(string[]) missingDependencies() @property const
+	{
+		return (cast() _dub.project).missingDependencies;
 	}
 
 	/// Lists all dependencies. This will go through all dependencies and contain the dependencies of dependencies. You need to create a tree structure from this yourself.

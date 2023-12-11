@@ -774,7 +774,54 @@ void delayedProjectActivation(WorkspaceD.Instance instance, string workspaceRoot
 				scope (failure)
 					instance.detach!DubComponent;
 
-				instance.get!DubComponent.validateConfiguration();
+				auto dub = instance.get!DubComponent;
+
+				dub.validateConfiguration();
+
+				if (dub.missingDependencies.length)
+				{
+					auto downloadNow = proj.config.d.forceDownloadDependencies;
+
+					switch (downloadNow)
+					{
+					case DubUpgradeAction.ask:
+					default:
+						auto upgrade = translate!"d.dub.downloadMissingUpgrade";
+						auto always = translate!"d.dub.downloadMissingAlways";
+						auto never = translate!"d.dub.downloadMissingNever";
+						auto res = rpc.window.requestMessage(MessageType.info, translate!"d.dub.downloadMissingMsg", [upgrade, always, never]);
+						if (res == always)
+						{
+							rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("forceDownloadDependencies", JsonValue("always"), true));
+							goto case DubUpgradeAction.always;
+						}
+						else if (res == never)
+						{
+							rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("forceDownloadDependencies", JsonValue("never"), true));
+						}
+						else if (res == upgrade)
+						{
+							goto case DubUpgradeAction.always;
+						}
+						break;
+					case DubUpgradeAction.always:
+						reportProgress(ProgressType.importUpgrades, 0, 1, workspaceUri);
+						scope (exit)
+							reportProgress(ProgressType.importUpgrades, 1, 1, workspaceUri);
+						dub.selectAndDownloadMissing(); // TODO: async this call
+						dub.validateConfiguration();
+						break;
+					case DubUpgradeAction.never:
+						break;
+					}
+				}
+
+				if (dub.missingDependencies.length)
+				{
+					error("Missing DUB dependencies, auto complete unavailable for packages: ",
+						dub.missingDependencies);
+				}
+
 				loadedDub = true;
 			}
 		}
