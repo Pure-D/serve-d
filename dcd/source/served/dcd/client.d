@@ -690,6 +690,7 @@ private string unescapeTabs(string val)
 
 unittest
 {
+	import unit_threaded.assertions;
 	shouldEqual("hello world", "hello world".unescapeTabs);
 	shouldEqual("hello\nworld", "hello\\nworld".unescapeTabs);
 	shouldEqual("hello\\nworld", "hello\\\\nworld".unescapeTabs);
