@@ -28,7 +28,7 @@
 		"msgpack-d": "1.0.4",
 		"openssl": "3.3.0",
 		"openssl-static": "1.0.2+3.0.8",
-		"requests": "2.1.1",
+		"requests": "2.1.2",
 		"rm-rf": "0.1.0",
 		"sdlfmt": "0.1.1",
 		"sdlite": "1.1.2",
