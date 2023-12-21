@@ -19,7 +19,7 @@
 		"msgpack-d": "1.0.1",
 		"painlessjson": "1.4.0",
 		"painlesstraits": "0.3.0",
-		"requests": "2.1.1",
+		"requests": "2.1.2",
 		"rm-rf": "0.1.0",
 		"silly": "1.1.1",
 		"standardpaths": "0.8.1",
