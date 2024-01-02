@@ -162,7 +162,7 @@ d.dub.updateFail: Failed to update dub.json
 d.dub.override: Override without Backup
 d.dub.notRecipeFile: Dub format conversion only works with package recipes named dub.json, dub.sdl, package.json
 d.dub.convertFailed: The dub conversion command has failed
-d.dub.downloadMissingMsg: Some DUB packages could not be found locally, should they be downloaded through `dub upgrade --missing-only`?
+d.dub.downloadMissingMsg: Some DUB packages could not be found locally, should they be downloaded through `dub upgrade --missing-only`?\n\n({0})
 d.dub.downloadMissingUpgrade: Upgrade
 d.dub.downloadMissingAlways: Always
 d.dub.downloadMissingNever: Never

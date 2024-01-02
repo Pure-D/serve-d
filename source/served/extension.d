@@ -22,7 +22,7 @@ import std.functional : toDelegate;
 import std.meta : AliasSeq;
 import std.path : baseName, buildNormalizedPath, buildPath, chainPath, dirName,
 	globMatch, relativePath;
-import std.string : join;
+import std.string : indexOf, join;
 
 import io = std.stdio;
 
@@ -777,8 +777,9 @@ void delayedProjectActivation(WorkspaceD.Instance instance, string workspaceRoot
 				auto dub = instance.get!DubComponent;
 
 				dub.validateConfiguration();
+				auto missingDeps = dub.missingDependencies;
 
-				if (dub.missingDependencies.length)
+				if (missingDeps.length)
 				{
 					auto downloadNow = proj.config.d.forceDownloadDependencies;
 
@@ -789,7 +790,19 @@ void delayedProjectActivation(WorkspaceD.Instance instance, string workspaceRoot
 						auto upgrade = translate!"d.dub.downloadMissingUpgrade";
 						auto always = translate!"d.dub.downloadMissingAlways";
 						auto never = translate!"d.dub.downloadMissingNever";
-						auto res = rpc.window.requestMessage(MessageType.info, translate!"d.dub.downloadMissingMsg", [upgrade, always, never]);
+						string missingList = missingDeps.join(", ");
+						if (missingList.length > 40)
+						{
+							auto comma = missingList.indexOf(',', 40);
+							if (comma != -1)
+								missingList = missingList[0 .. comma + 1] ~ " ...";
+						}
+
+						auto res = rpc.window.requestMessage(
+							MessageType.info,
+							translate!"d.dub.downloadMissingMsg"(missingList),
+							[upgrade, always, never]
+						);
 						if (res == always)
 						{
 							rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("forceDownloadDependencies", JsonValue("always"), true));
