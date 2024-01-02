@@ -453,7 +453,7 @@ TextEdit[] sortImports(SortImportsParams params)
 	auto document = documents[params.textDocument.uri];
 	TextEdit[] ret;
 	auto sorted = backend.get!ImporterComponent.sortImports(document.rawText,
-			cast(int) document.offsetToBytes(params.location));
+			cast(int) document.offsetToBytes(params.location), true);
 	if (sorted == ImportBlock.init)
 		return ret;
 	auto start = document.bytesToPosition(sorted.start);

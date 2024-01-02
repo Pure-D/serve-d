@@ -89,7 +89,12 @@ class ImporterComponent : ComponentWrapper
 
 	/// Sorts the imports in a whitespace separated group of code
 	/// Returns `ImportBlock.init` if no changes would be done.
-	ImportBlock sortImports(scope const(char)[] code, int pos)
+	///
+	/// Params:
+	///   code = UTF-8 encoded code text
+	///   pos = byte offset where to sort
+	///   organizeSelective = true to merge same import names and deduplicate symbols.
+	ImportBlock sortImports(scope const(char)[] code, int pos, bool organizeSelective = false)
 	{
 		auto blocks = findImportCodeSlices(code);
 		ImportCodeSlice target;
@@ -120,15 +125,62 @@ class ImporterComponent : ComponentWrapper
 			imp.start += target.start;
 
 		target.start = cast(int)imports.front.start;
-		target.end = cast(int)code.indexOf(';', imports.back.start) + 1;
+		target.end = cast(int) code.indexOf(';', imports.back.start) + 1;
 
 		auto sorted = imports.map!(a => ImportInfo(a.name, a.rename,
 				a.selectives.dup.sort!((c, d) => sicmp(c.effectiveName,
-				d.effectiveName) < 0).array, a.isPublic, a.isStatic, a.start)).array;
-		sorted.sort!((a, b) => ImportInfo.cmp(a, b) < 0);
+				d.effectiveName) < 0).release, a.isPublic, a.isStatic, a.start))
+			.array
+			.sort!((a, b) => ImportInfo.cmp(a, b) < 0)
+			.release;
+		if (organizeSelective)
+			this.organizeSelective(sorted);
 		if (sorted == imports)
 			return ImportBlock.init;
 		return ImportBlock(target.start, target.end, sorted, indentation.idup);
+	}
+
+	/// Merges duplicate imports into single ones, removes duplicate selective
+	/// import symbols.
+	void organizeSelective(ref ImportInfo[] imports)
+	{
+		if (!imports.length)
+			return;
+		for (size_t i = imports.length - 1; i >= 1; i--)
+		{
+			auto before = &imports[i - 1];
+			auto imp = &imports[i];
+
+			if (before.name == imp.name
+				&& before.isPublic == imp.isPublic
+				&& before.isStatic == imp.isStatic
+				&& before.rename == imp.rename)
+			{
+				if (before.selectives.length > 0 && imp.selectives.length > 0)
+				{
+					// import foo : bar; import foo : baz;
+					// -> import foo : bar, baz;
+					before.selectives ~= imp.selectives;
+					before.selectives.sort!((c, d) => sicmp(c.effectiveName,
+							d.effectiveName) < 0);
+					imports = imports.remove(i);
+				}
+				else if (!before.selectives.length && !imp.selectives.length)
+				{
+					// import foo; import foo;
+					// -> import foo;
+					imports = imports.remove(i);
+				}
+				// else == `import foo; import foo : bar;` - keep as is
+			}
+		}
+
+		foreach (ref imp; imports)
+		{
+			auto deduped = imp.selectives.uniq;
+			if (count(deduped) != imp.selectives.length)
+				imp.selectives = deduped.array;
+		}
 	}
 
 	ImportCodeSlice[] findImportCodeSlices(scope const(char)[] code)
@@ -456,6 +508,30 @@ import std.algorithm;
 		ImportInfo(["std", "file"]),
 		ImportInfo(["std", "path"])
 	], "\t"));
+
+	code = `void foo()
+{
+	import std.file : foo;
+	import std.path;
+	import std.file;
+	import std.file : bar;
+	import std.math : min;
+	import std.path;
+	import std.math : max;
+}`.normLF;
+
+	assertEqual(importer.sortImports(code, 25, true), ImportBlock(14, 162, [
+		ImportInfo(["std", "file"]),
+		ImportInfo(["std", "file"], "", [
+			SelectiveImport("bar"),
+			SelectiveImport("foo"),
+		]),
+		ImportInfo(["std", "math"], "", [
+			SelectiveImport("max"),
+			SelectiveImport("min"),
+		]),
+		ImportInfo(["std", "path"])
+	], "\t"));
 	//dfmt on
 }
 
@@ -546,7 +622,14 @@ struct ImportInfo
 		if (x != 0)
 			return -x;
 
-		return sicmp(a.effectiveName, b.effectiveName);
+		auto ret = sicmp(a.effectiveName, b.effectiveName);
+		if (ret != 0)
+			return ret;
+		if (a.selectives.length && !b.selectives.length)
+			return 1;
+		if (!a.selectives.length && b.selectives.length)
+			return -1;
+		return 0;
 	}
 }
 
