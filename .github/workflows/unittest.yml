@@ -42,6 +42,13 @@ jobs:
           # shouldn't break other OSes
           MACOSX_DEPLOYMENT_TARGET: '10.12'
 
+      - name: DCD communication library tests
+        run: dub test :dcd
+        timeout-minutes: 5
+        env:
+          # shouldn't break other OSes
+          MACOSX_DEPLOYMENT_TARGET: '10.12'
+
       - name: LSP tests
         run: dub test :lsp
         timeout-minutes: 10

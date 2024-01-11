@@ -690,8 +690,8 @@ private string unescapeTabs(string val)
 
 unittest
 {
-	shouldEqual("hello world", "hello world".unescapeTabs);
-	shouldEqual("hello\nworld", "hello\\nworld".unescapeTabs);
-	shouldEqual("hello\\nworld", "hello\\\\nworld".unescapeTabs);
-	shouldEqual("hello\\\nworld", "hello\\\\\\nworld".unescapeTabs);
+	assert("hello world" == "hello world".unescapeTabs);
+	assert("hello\nworld" == "hello\\nworld".unescapeTabs);
+	assert("hello\\nworld" == "hello\\\\nworld".unescapeTabs);
+	assert("hello\\\nworld" == "hello\\\\\\nworld".unescapeTabs);
 }
