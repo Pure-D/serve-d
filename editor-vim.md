@@ -82,3 +82,23 @@ load serve-d, like the following:
 ```lua
 require'lspconfig'.serve_d.setup{}
 ```
+
+You can read more about the setup function through `:help lspconfig-setup`
+
+### User Configuration
+
+`serve-d` comes pre-packaged with some server-specific settings. You can find a description of such settings [here](https://github.com/Pure-D/code-d/blob/50ca8ca2831403d50bac10681df87a77b1af1bc4/package.json#L373).
+
+For example, let's assume that you want to change the braces style so that they are on the same line as a function definition.
+
+`dfmt` is used by `serve-d` by default; it allows the option for the `"stroustrup"` style.
+
+```lua
+require'lspconfig'.serve_d.setup({
+	settings = {
+		dfmt = {
+			braceStyle = "stroustrup",
+		},
+	},
+})
+```
