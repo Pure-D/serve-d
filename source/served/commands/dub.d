@@ -271,8 +271,11 @@ void onDidSaveDubRecipe(DidSaveTextDocumentParams params)
 				return;
 			}
 
-			rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
-					.selectAndDownloadMissing(), MessageType.warning, translate!"d.ext.dubUpgradeFail");
+			rpc.window.runOrMessage({
+				DubComponent dub = backend.get!DubComponent(workspaceRoot);
+				dub.updateImportPaths(true);
+				dub.selectAndDownloadMissing();
+			}(), MessageType.warning, translate!"d.ext.dubUpgradeFail");
 		}
 		else
 		{
@@ -285,7 +288,7 @@ void onDidSaveDubRecipe(DidSaveTextDocumentParams params)
 
 	setTimeout({
 		const successfulUpdate = rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
-			.updateImportPaths(true), MessageType.warning, translate!"d.ext.dubImportFail");
+			.updateImportPaths(false), MessageType.warning, translate!"d.ext.dubImportFail");
 		if (successfulUpdate)
 		{
 			rpc.window.runOrMessage(updateImports(UpdateImportsParams(false)),
@@ -312,7 +315,7 @@ void onDidSaveDubRecipe(DidSaveTextDocumentParams params)
 			if (backend.attach(backend.getInstance(workspaceRoot), "dub", err))
 			{
 				rpc.window.runOrMessage(backend.get!DubComponent(workspaceRoot)
-					.updateImportPaths(true), MessageType.warning,
+					.updateImportPaths(false), MessageType.warning,
 					translate!"d.ext.dubRecipeMaybeBroken");
 				error(err);
 			}
@@ -329,62 +332,49 @@ DubDependency[] listDependencies(ListDependenciesParams params)
 	if (!instance.has!DubComponent)
 		return ret;
 
-	auto allDeps = instance.get!DubComponent.dependencies;
-	auto failed = instance.get!DubComponent.failedPackages;
+	auto dub = instance.get!DubComponent;
+	auto failed = dub.failedPackages;
 	if (!params.packageName.length)
 	{
-		auto deps = instance.get!DubComponent.rootDependencies;
+		auto deps = dub.rootDependencies;
 		foreach (dep; deps)
 		{
 			DubDependency r;
 			r.name = dep;
 			r.failed = failed.canFind(dep);
 			r.root = true;
-			foreach (other; allDeps)
-				if (other.name == dep)
-				{
-					r.version_ = other.ver;
-					r.path = other.path;
-					r.description = other.description;
-					r.homepage = other.homepage;
-					r.authors = other.authors;
-					r.copyright = other.copyright;
-					r.license = other.license;
-					r.subPackages = other.subPackages.map!"a.name".array;
-					r.hasDependencies = other.dependencies.length > 0;
-					break;
-				}
+			auto other = dub.getPackageInfo(dep);
+			r.version_ = other.ver;
+			r.path = other.path;
+			r.description = other.description;
+			r.homepage = other.homepage;
+			r.authors = other.authors;
+			r.copyright = other.copyright;
+			r.license = other.license;
+			r.subPackages = other.subPackages.map!"a.name".array;
+			r.hasDependencies = other.dependencies.length > 0;
 			ret ~= r;
 		}
 	}
 	else
 	{
-		string[string] aa;
-		foreach (other; allDeps)
-			if (other.name == params.packageName)
-			{
-				aa = other.dependencies;
-				break;
-			}
+		auto info = dub.getPackageInfo(params.packageName);
+		string[string] aa = info.dependencies;
 		foreach (name, ver; aa)
 		{
 			DubDependency r;
 			r.name = name;
 			r.failed = failed.canFind(name);
 			r.version_ = ver;
-			foreach (other; allDeps)
-				if (other.name == name)
-				{
-					r.path = other.path;
-					r.description = other.description;
-					r.homepage = other.homepage;
-					r.authors = other.authors;
-					r.copyright = other.copyright;
-					r.license = other.license;
-					r.subPackages = other.subPackages.map!"a.name".array;
-					r.hasDependencies = other.dependencies.length > 0;
-					break;
-				}
+			auto other = dub.getPackageInfo(name);
+			r.path = other.path;
+			r.description = other.description;
+			r.homepage = other.homepage;
+			r.authors = other.authors;
+			r.copyright = other.copyright;
+			r.license = other.license;
+			r.subPackages = other.subPackages.map!"a.name".array;
+			r.hasDependencies = other.dependencies.length > 0;
 			ret ~= r;
 		}
 	}

@@ -47,10 +47,7 @@ class DubComponent : ComponentWrapper
 
 	static void registered()
 	{
-		static if (__traits(compiles, { import dub.internal.logging; }))
-			import dub.internal.logging;
-		else
-			import dub.internal.vibecompat.core.log;
+		import dub.internal.logging;
 
 		setLogLevel(LogLevel.none);
 	}
@@ -319,6 +316,9 @@ class DubComponent : ComponentWrapper
 	void upgrade(UpgradeOptions options)
 	{
 		_dub.upgrade(options);
+		trace("dependencies after upgrade(", options,
+			"): found: ", rootDependencies,
+			"\nmissing:", missingDependencies);
 		optionalifyRoot();
 	}
 
@@ -387,11 +387,33 @@ class DubComponent : ComponentWrapper
 
 	/// Lists all dependencies. This will go through all dependencies and contain the dependencies of dependencies. You need to create a tree structure from this yourself.
 	/// Returns: `[{dependencies: string[string], ver: string, name: string}]`
+	deprecated("this API is broken without dub.selections.json - use rootDependencies, selectedVersions and getPackageInfo instead to operate on IDE selections")
 	auto dependencies() @property const
 	{
 		validateConfiguration();
 
 		return listDependencies(_dub.project);
+	}
+
+	/// Lists all selected dependencies.
+	Dependency[string] selectedVersions() @property const
+	{
+		validateConfiguration();
+
+		Dependency[string] ret;
+		foreach (key; _dub.project.selections.selectedPackages)
+			ret[key] = _dub.project.selections.getSelectedVersion(key);
+		return ret;
+	}
+
+	/// Gets the dependency information about a package.
+	/// Returns `DubPackageInfo.init` if it's not found.
+	DubPackageInfo getPackageInfo(string pkgName) @property const
+	{
+		auto pkg = _dub.project.getDependency(pkgName, true);
+		if (!pkg)
+			return DubPackageInfo.init;
+		return getInfo(pkg);
 	}
 
 	/// Lists dependencies of the root package. This can be used as a base to create a tree structure.
@@ -996,6 +1018,7 @@ DubPackageInfo getInfo(in Package dep)
 	return info;
 }
 
+deprecated("This API doesn't take into account local / IDE selections")
 auto listDependencies(scope const Project project)
 {
 	auto deps = project.dependencies;
