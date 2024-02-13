@@ -14,22 +14,21 @@ private void assertEquals(T)(T a, T b)
 
 DocumentUri uriFromFile(scope const(char)[] file)
 {
+	import std.ascii : isAlpha, toLower;
 	import std.uri : encodeComponent;
 
 	if ((!isAbsolute(file) && !file.startsWith("/"))
 		|| !file.length)
 		throw new Exception(text("Tried to pass relative path '", file, "' to uriFromFile"));
-	file = file.buildNormalizedPath();
-	version(Windows)
-	{
-		file = file.replace("\\", "/");
-		file = driveName(file).toLower() ~ stripDrive(file);
-	}
+	file = file.buildNormalizedPath().replace("\\", "/");
 	assert(file.length);
-	if (file.ptr[0] != '/')
-		file = '/' ~ file; // always triple slash at start but never quad slash
-	if (file.length >= 2 && file[0 .. 2] == "//") // Shares (\\share\bob) are different somehow
+	if (file.length >= 2 && file[0].isAlpha && file[1] == ':')
+		file = file[0].toLower ~ file[1 .. $];
+	else if (file.length >= 2 && file[0 .. 2] == "//") // Shares (\\share\bob) are different somehow
 		file = file[2 .. $];
+	else if (file.ptr[0] != '/')
+		file = '/' ~ file; // always triple slash at start but never quad slash
+
 	return text("file://", file.encodeComponent.replace("%2F", "/"));
 }
 
