@@ -746,36 +746,8 @@ class DubComponent : ComponentWrapper
 
 				settings.compileCallback = (status, output) {
 					trace(status, " ", output);
-					string[] lines = output.splitLines;
-					foreach (line; lines)
-					{
-						auto match = line.matchFirst(errorFormat);
-						if (match)
-						{
-							issues ~= BuildIssue(match[2].to!int, match[3].toOr!int(0),
-								match[1], match[4].to!ErrorType, match[5]);
-						}
-						else
-						{
-							auto contMatch = line.matchFirst(errorFormatCont);
-							if (issues.data.length && contMatch)
-							{
-								issues ~= BuildIssue(contMatch[2].to!int,
-									contMatch[3].toOr!int(1), contMatch[1],
-									issues.data[$ - 1].type, contMatch[4], true);
-							}
-							else if (line.canFind("is deprecated"))
-							{
-								auto deprMatch = line.matchFirst(deprecationFormat);
-								if (deprMatch)
-								{
-									issues ~= BuildIssue(deprMatch[2].to!int, deprMatch[3].toOr!int(1),
-										deprMatch[1], ErrorType.Deprecation,
-										deprMatch[4] ~ " is deprecated" ~ deprMatch[5]);
-								}
-							}
-						}
-					}
+
+					appendBuildIssues(output, issues);
 				};
 				try
 				{
@@ -844,6 +816,47 @@ private:
 	BuildPlatform _platform;
 	string[] _importPaths, _stringImportPaths, _importFiles, _versions, _debugVersions;
 	string[] _failedPackages;
+}
+
+BuildIssue[] parseBuildIssues(string buildOutput)
+{
+	auto issues = appender!(BuildIssue[]);
+	appendBuildIssues(buildOutput, issues);
+	return issues.data;
+}
+
+void appendBuildIssues(string buildOutput, ref Appender!(BuildIssue[]) issues)
+{
+	string[] lines = buildOutput.splitLines;
+	foreach (line; lines)
+	{
+		auto match = line.matchFirst(errorFormat);
+		if (match)
+		{
+			issues ~= BuildIssue(match[2].to!int, match[3].toOr!int(0),
+			match[1], match[4].to!ErrorType, match[5]);
+		}
+		else
+		{
+			auto contMatch = line.matchFirst(errorFormatCont);
+			if (issues.data.length && contMatch)
+			{
+				issues ~= BuildIssue(contMatch[2].to!int,
+				contMatch[3].toOr!int(1), contMatch[1],
+				issues.data[$ - 1].type, contMatch[4], true);
+			}
+			else if (line.canFind("is deprecated"))
+			{
+				auto deprMatch = line.matchFirst(deprecationFormat);
+				if (deprMatch)
+				{
+					issues ~= BuildIssue(deprMatch[2].to!int, deprMatch[3].toOr!int(1),
+					deprMatch[1], ErrorType.Deprecation,
+					deprMatch[4] ~ " is deprecated" ~ deprMatch[5]);
+				}
+			}
+		}
+	}
 }
 
 ///
