@@ -120,7 +120,7 @@ class DubComponent : ComponentWrapper
 	{
 		trace("Starting dub on instance ", refInstance ? refInstance.cwd : "(global)");
 		_dubRunning = false;
-		_dub = new Dub(instance.cwd, null, SkipPackageSuppliers.none);
+		_dub = new ServedDub(instance.cwd);
 		_dub.packageManager.getOrLoadPackage(NativePath(instance.cwd));
 		_dub.loadPackage();
 		_dub.project.validate();
@@ -216,7 +216,7 @@ class DubComponent : ComponentWrapper
 		if (restartDub)
 			restart();
 
-		GeneratorSettings settings;
+		GeneratorSettings settings = _dub.baseGeneratorSettings;
 		settings.platform = _platform;
 		settings.config = _configuration;
 		settings.buildType = _buildType;
@@ -712,7 +712,7 @@ class DubComponent : ComponentWrapper
 
 		string cwd = instance.cwd;
 
-		GeneratorSettings settings;
+		GeneratorSettings settings = _dub.baseGeneratorSettings;
 		settings.platform = buildPlatform;
 		settings.config = _configuration;
 		settings.buildType = _buildType;
@@ -814,7 +814,7 @@ class DubComponent : ComponentWrapper
 	}
 
 private:
-	Dub _dub;
+	ServedDub _dub;
 	bool _dubRunning = false;
 	string _configuration;
 	string _archType = "";
@@ -1027,4 +1027,19 @@ struct ArchType
 	string value;
 	/// UI label override or null if none
 	string label;
+}
+
+class ServedDub : Dub
+{
+	this(string root_path = ".")
+	{
+		super(root_path, null, SkipPackageSuppliers.none);
+	}
+
+	GeneratorSettings baseGeneratorSettings() const @safe pure nothrow @nogc
+	{
+		GeneratorSettings s;
+		s.cache = this.m_dirs.cache;
+		return s;
+	}
 }
