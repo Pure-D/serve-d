@@ -102,12 +102,9 @@ class DependencyBasedSnippetProvider : SnippetProvider
 			string id = typeid(this).name;
 			auto dub = instance.get!DubComponent;
 			return typeof(return).async(delegate() {
-				string[] deps;
-				foreach (dep; dub.dependencies)
-				{
-					deps ~= dep.name;
-					deps ~= dep.dependencies.keys;
-				}
+				// TODO: this should use dependencies, not selections, but this
+				// regressed: https://github.com/dlang/dub/issues/2853
+				string[] deps = dub.selectedVersions.keys;
 				Snippet[] ret;
 				foreach (k, v; snippets)
 				{
