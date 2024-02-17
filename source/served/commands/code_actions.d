@@ -15,7 +15,7 @@ import served.commands.format : generateDfmtArgs;
 import served.linters.dscanner : DScannerDiagnosticSource, SyntaxHintDiagnosticSource;
 import served.linters.dub : DubDiagnosticSource;
 
-import std.algorithm : canFind, endsWith, find, findSplit, map, min, sort, startsWith, uniq;
+import std.algorithm : any, canFind, endsWith, find, findSplit, map, min, sort, startsWith, uniq;
 import std.array : array;
 import std.conv : to;
 import std.experimental.logger;
@@ -54,6 +54,16 @@ CodeAction[] provideCodeActions(CodeActionParams params)
 		instance.get!DCDComponent();
 
 	auto startBytes = document.positionToBytes(params.range.start);
+
+	CodeActionKind[] filter;
+	if (!params.context.only.isNone)
+		filter = params.context.only.deref;
+	bool wantsKind(CodeActionKind kind, bool explicitOnly)
+	{
+		return explicitOnly
+			? filter.canFind(kind)
+			: filter.length == 0 || filter.canFind(kind);
+	}
 
 	CodeAction[] ret;
 	if (instance.has!DCDExtComponent) // check if extends
@@ -96,6 +106,36 @@ CodeAction[] provideCodeActions(CodeActionParams params)
 		}
 	}
 
+	// sort imports code action
+	if (instance.has!ImporterComponent)
+	{
+		import dscanner.analysis.imports_sortedness : ImportSortednessCheck;
+
+		scope codeText = document.rawText;
+		bool showAlways = wantsKind(CodeActionKind.sourceOrganizeImports, true)
+			|| params.context.diagnostics.any!(d => d.code.orDefault.match!((string s) => s, _ => cast(string)(null))
+				== ImportSortednessCheck.KEY);
+
+		auto offset = showAlways ? -1 : cast(int) document.positionToBytes(params.range.start);
+		foreach_reverse (block; instance.get!ImporterComponent.findImportCodeSlices(codeText))
+		{
+			if (offset != -1 && (!block.contains(offset) || block.column != 0))
+				continue;
+
+			auto action = CodeAction(
+				title: "Organize All Imports",
+				[
+					"id": JsonValue("sortImports"),
+					"uri": JsonValue(params.textDocument.uri)
+				]
+			);
+			if (wantsKind(CodeActionKind.sourceOrganizeImports, true))
+				action.kind = CodeActionKind.sourceOrganizeImports;
+			ret ~= action;
+			break;
+		}
+	}
+
 	addDubDiagnostics(ret, instance, document, params, startBytes);
 	foreach (diagnostic; params.context.diagnostics)
 	{
@@ -120,6 +160,15 @@ CodeAction resolveCodeAction(CodeAction action)
 
 		switch (id)
 		{
+		case "sortImports":
+			auto params = SortImportsParams(
+				textDocument: TextDocumentIdentifier(uri),
+				location: -1
+			);
+			action.edit = WorkspaceEdit([
+				params.textDocument.uri: sortImports(params)
+			]);
+			break;
 		case "implementMethods":
 			auto at = action.readData!long("at");
 			if (!at.isNone) {
@@ -491,19 +540,29 @@ TextEdit[] sortImports(SortImportsParams params)
 {
 	auto document = documents[params.textDocument.uri];
 	TextEdit[] ret;
-	auto sorted = backend.get!ImporterComponent.sortImports(document.rawText,
-			cast(int) document.offsetToBytes(params.location), true);
-	if (sorted == ImportBlock.init)
-		return ret;
-	auto start = document.bytesToPosition(sorted.start);
-	auto end = document.movePositionBytes(start, sorted.start, sorted.end);
-	auto lines = sorted.imports.to!(string[]);
-	if (!lines.length)
-		return null;
-	foreach (ref line; lines[1 .. $])
-		line = sorted.indentation ~ line;
-	string code = lines.join(document.eolAt(0).toString);
-	return [TextEdit(TextRange(start, end), code)];
+	auto offset = params.location == -1 ? -1 : cast(int) document.offsetToBytes(params.location);
+	auto importer = backend.get!ImporterComponent;
+	auto text = document.rawText;
+	foreach_reverse (block; importer.findImportCodeSlices(text))
+	{
+		if (offset != -1 && !block.contains(offset))
+			continue;
+
+		auto sorted = importer.sortImportBlock(text, block, true);
+		if (sorted == ImportBlock.init)
+			continue;
+		auto start = document.bytesToPosition(sorted.start);
+		auto end = document.movePositionBytes(start, sorted.start, sorted.end);
+		auto lines = sorted.imports.to!(string[]);
+		if (!lines.length)
+			continue;
+		foreach (ref line; lines[1 .. $])
+			line = sorted.indentation ~ line;
+		string code = lines.join(document.eolAt(0).toString);
+		ret ~= TextEdit(TextRange(start, end), code);
+	}
+
+	return ret;
 }
 
 /// Flag to make dcdext.implementAll return snippets

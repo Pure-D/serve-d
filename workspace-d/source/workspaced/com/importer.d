@@ -96,15 +96,15 @@ class ImporterComponent : ComponentWrapper
 	///   organizeSelective = true to merge same import names and deduplicate symbols.
 	ImportBlock sortImports(scope const(char)[] code, int pos, bool organizeSelective = false)
 	{
-		auto blocks = findImportCodeSlices(code);
-		ImportCodeSlice target;
-		foreach (block; blocks)
+		foreach (block; findImportCodeSlices(code))
 			if (block.contains(pos))
-			{
-				target = block;
-				break;
-			}
+				return sortImportBlock(code, block, organizeSelective);
+		return ImportBlock.init;
+	}
 
+	/// ditto
+	ImportBlock sortImportBlock(scope const(char)[] code, ImportCodeSlice target, bool organizeSelective = false)
+	{
 		// go back to start of line
 		target.start = cast(int)(code[0 .. target.start].lastIndexOf('\n', target.start) + 1);
 

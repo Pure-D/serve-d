@@ -136,7 +136,7 @@ interface SortImportsParams
 	/** Text document to look in */
 	textDocument: TextDocumentIdentifier;
 
-	/** Location of cursor as standard offset */
+	/** Location of cursor as standard offset, -1 for entire document */
 	location: number;
 }
 ```
