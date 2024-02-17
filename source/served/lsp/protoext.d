@@ -35,6 +35,8 @@ struct ImplementMethodsParams
 	TextDocumentIdentifier textDocument;
 	/// Location of cursor as standard offset
 	int location;
+	/// Override if snippets should be returned
+	@serdeOptional Optional!bool snippets;
 }
 
 struct UpdateSettingParams

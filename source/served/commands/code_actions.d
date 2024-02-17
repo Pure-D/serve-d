@@ -68,14 +68,25 @@ CodeAction[] provideCodeActions(CodeActionParams params)
 				if (instance.get!DCDExtComponent.implementAll(codeText,
 						cast(int) startBytes).getYield.length > 0)
 				{
-					Command cmd = {
-						title: "Implement base classes/interfaces",
-						command: "code-d.implementMethods",
-						arguments: [
-							JsonValue(document.positionToOffset(params.range.start))
-						]
-					};
-					ret ~= CodeAction(cmd);
+					if (implementInterfaceSnippets)
+					{
+						Command cmd = {
+							title: "Implement base classes/interfaces",
+							command: "code-d.implementMethods",
+							arguments: [
+								JsonValue(document.positionToOffset(params.range.start))
+							]
+						};
+						ret ~= CodeAction(cmd);
+					}
+					else
+					{
+						ret ~= CodeAction("Implement base classes/interfaces", [
+							"id": JsonValue("implementMethods"),
+							"uri": JsonValue(params.textDocument.uri),
+							"at": JsonValue(document.positionToOffset(params.range.start))
+						], CodeActionKind.refactor);
+					}
 				}
 				break;
 			}
@@ -98,6 +109,34 @@ CodeAction[] provideCodeActions(CodeActionParams params)
 		}
 	}
 	return ret;
+}
+
+@protocolMethod("codeAction/resolve")
+CodeAction resolveCodeAction(CodeAction action)
+{
+	if (!action.id.isNone && !action.uri.isNone) {
+		const id = action.id.deref;
+		const uri = action.uri.deref;
+
+		switch (id)
+		{
+		case "implementMethods":
+			auto at = action.readData!long("at");
+			if (!at.isNone) {
+				action.edit = WorkspaceEdit([
+					uri: implementMethods(ImplementMethodsParams(
+						TextDocumentIdentifier(uri),
+						cast(int) at.deref,
+						snippets: opt(false)
+					))
+				]);
+			}
+			break;
+		default:
+			break;
+		}
+	}
+	return action;
 }
 
 void addDubDiagnostics(ref CodeAction[] ret, WorkspaceD.Instance instance,
@@ -489,7 +528,7 @@ TextEdit[] implementMethods(ImplementMethodsParams params)
 	auto eol = document.eolAt(0);
 	auto eolStr = eol.toString;
 	auto toImplement = backend.best!DCDExtComponent(file).implementAll(codeText, cast(int) location,
-			config.d.enableFormatting, generateDfmtArgs(config, eol), implementInterfaceSnippets)
+			config.d.enableFormatting, generateDfmtArgs(config, eol), params.snippets.orDefault(implementInterfaceSnippets))
 		.getYield;
 	if (!toImplement.length)
 		return ret;

@@ -23,6 +23,7 @@ import std.meta : AliasSeq;
 import std.path : baseName, buildNormalizedPath, buildPath, chainPath, dirName,
 	globMatch, relativePath;
 import std.string : indexOf, join;
+import std.traits : EnumMembers;
 
 import io = std.stdio;
 
@@ -291,6 +292,10 @@ InitializeResult initialize(InitializeParams params)
 	RenameOptions renameProvider = {
 		prepareProvider: true
 	};
+	CodeActionOptions codeActionProvider = {
+		codeActionKinds: [EnumMembers!CodeActionKind],
+		resolveProvider: true
+	};
 	FoldingRangeOptions foldingRangeProvider;
 	ServerCapabilities serverCapabilities = {
 		textDocumentSync: textDocumentSync,
@@ -301,7 +306,7 @@ InitializeResult initialize(InitializeParams params)
 		workspaceSymbolProvider: true,
 		definitionProvider: true,
 		hoverProvider: true,
-		codeActionProvider: true,
+		codeActionProvider: codeActionProvider,
 		codeLensProvider: codeLensProvider,
 		documentSymbolProvider: true,
 		documentFormattingProvider: true,

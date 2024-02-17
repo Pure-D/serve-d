@@ -463,6 +463,7 @@ struct NullableOptional(T)
 	}
 }
 
+pragma(inline, true)
 bool isNone(T)(T v)
 if (isVariant!T)
 {
@@ -470,6 +471,7 @@ if (isVariant!T)
 }
 
 ///
+pragma(inline, true)
 auto deref(T)(scope return inout T v)
 if (isVariant!T)
 {
@@ -483,6 +485,7 @@ if (isVariant!T)
 }
 
 /// ditto
+pragma(inline, true)
 JsonValue deref(scope return inout OptionalJsonValue v)
 {
 	if (v._is!void)
@@ -492,11 +495,12 @@ JsonValue deref(scope return inout OptionalJsonValue v)
 
 /// Returns the deref value from this optional or TypeFromOptional!T.init if
 /// set to none.
-TypeFromOptional!T orDefault(T)(scope return T v)
+pragma(inline, true)
+TypeFromOptional!T orDefault(T, U)(scope return T v, lazy U defaultValue = TypeFromOptional!T.init)
 if (isVariant!T)
 {
 	if (v._is!void)
-		return TypeFromOptional!T.init;
+		return defaultValue;
 	else
 		return v.get!(TypeFromOptional!T);
 }
@@ -518,6 +522,7 @@ unittest
 }
 
 ///
+pragma(inline, true)
 T expect(T, ST)(ST v)
 if (isVariant!ST)
 {
@@ -535,6 +540,7 @@ if (isVariant!ST)
 }
 
 ///
+pragma(inline, true)
 Optional!T opt(T)(T val)
 {
 	return Optional!T(val);
@@ -3304,10 +3310,69 @@ struct CodeAction
 		this.command = command;
 	}
 
+	this(Command command, CodeActionKind kind)
+	{
+		title = command.title;
+		this.command = command;
+		this.kind = kind;
+	}
+
+	this(string title, JsonValue[string] data)
+	{
+		this.title = title;
+		this.data = JsonValue(data);
+	}
+
+	this(string title, JsonValue[string] data, CodeActionKind kind)
+	{
+		this.title = title;
+		this.data = JsonValue(data);
+		this.kind = kind;
+	}
+
 	this(string title, WorkspaceEdit edit)
 	{
 		this.title = title;
 		this.edit = edit;
+	}
+
+	this(string title, WorkspaceEdit edit, CodeActionKind kind)
+	{
+		this.title = title;
+		this.edit = edit;
+		this.kind = kind;
+	}
+
+	/// Extension that reads {"id"} from the custom JSON data.
+	Optional!string id()
+	{
+		return readData!string("id");
+	}
+
+	/// Extension that reads {"uri"} from the custom JSON data.
+	Optional!string uri()
+	{
+		return readData!string("uri");
+	}
+
+	Optional!T readData(T)(string key)
+	{
+		if (data.isNone)
+			return Optional!T.init;
+
+		auto v = data.deref;
+		return v.match!(
+			(StringMap!JsonValue s) {
+				if (auto v = key in s) {
+					return (*v).match!(
+						(T v) => Optional!T(v),
+						(_) => Optional!T.init
+					);
+				}
+				return Optional!T.init;
+			},
+			(_) => Optional!T.init
+		);
 	}
 
 	@serdeFallbackStruct
