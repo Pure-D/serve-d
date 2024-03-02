@@ -225,15 +225,9 @@ class DubComponent : ComponentWrapper
 
 		try
 		{
-			string[] failedPackages = null;
-			scope (exit)
-				_failedPackages = failedPackages;
 			string[string] configs = _dub.project.getPackageConfigs(settings.platform, settings.config);
-			foreach (pack; _dub.project.getTopologicalPackageList(true, null, configs))
-				failedPackages ~= pack.name;
-			failedPackages.sort!"a<b";
 
-			auto gen = new TargetDescriptionGenerator(_dub.project);
+			auto gen = new TargetInfoGenerator(_dub.project);
 			gen.generate(settings);
 
 			auto importPaths = appender!(string[]);
@@ -242,25 +236,25 @@ class DubComponent : ComponentWrapper
 			auto versions = appender!(string[]);
 			auto debugVersions = appender!(string[]);
 
-			foreach (target; gen.targetDescriptions)
+			bool failed;
+			foreach (pack; _dub.project.getTopologicalPackageList(true, null, configs))
 			{
-				// remove resolved dependencies from failedPackages
-				foreach (name; [target.rootPackage] ~ target.packages)
+				if (auto target = pack.name in gen.targets)
 				{
-					auto match = failedPackages.assumeSorted!"a<b".trisect(name);
-					foreach (i; 0 .. match[1].length)
-						failedPackages = failedPackages.remove(match[0].length);
+					importPaths ~= target.buildSettings.importPaths;
+					stringImportPaths ~= target.buildSettings.stringImportPaths;
+					sourceFiles ~= target.buildSettings.sourceFiles;
+					sourceFiles ~= target.buildSettings.importFiles; // what are these exactly?
+					versions ~= target.buildSettings.versions;
+					debugVersions ~= target.buildSettings.debugVersions;
 				}
-
-				importPaths ~= target.buildSettings.importPaths;
-				stringImportPaths ~= target.buildSettings.stringImportPaths;
-				sourceFiles ~= target.buildSettings.sourceFiles;
-				sourceFiles ~= target.buildSettings.importFiles; // what are these exactly?
-				versions ~= target.buildSettings.versions;
-				debugVersions ~= target.buildSettings.debugVersions;
+				else
+				{
+					failed = true;
+				}
 			}
 
-			string[] rootSourcePaths;
+			/* string[] rootSourcePaths;
 			if (auto rootTargetIndex = _dub.projectName in gen.targetDescriptionLookup)
 			{
 				auto rootTarget = gen.targetDescriptions[*rootTargetIndex];
@@ -278,14 +272,16 @@ class DubComponent : ComponentWrapper
 							rootSourcePaths ~= sourcePath;
 				}
 			}
-
 			_importPaths = rootSourcePaths ~ importPaths.data;
+			*/
+
+			_importPaths = importPaths.data;
 			_stringImportPaths = stringImportPaths.data;
 			_importFiles = sourceFiles.data;
 			_versions = versions.data;
 			_debugVersions = debugVersions.data;
 
-			return failedPackages.length == 0;
+			return !failed;
 		}
 		catch (Exception e)
 		{
@@ -1064,5 +1060,20 @@ class ServedDub : Dub
 		GeneratorSettings s;
 		s.cache = this.m_dirs.cache;
 		return s;
+	}
+}
+
+class TargetInfoGenerator : ProjectGenerator
+{
+	const(TargetInfo)[string] targets;
+
+	this(Project project)
+	{
+		super(project);
+	}
+
+	protected override void generateTargets(GeneratorSettings settings, in TargetInfo[string] targets)
+	{
+		this.targets = targets.dup;
 	}
 }
