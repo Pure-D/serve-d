@@ -10,3 +10,4 @@ else
 fi
 
 tar cfJ serve-d.tar.xz serve-d
+tar czf serve-d.tar.gz serve-d

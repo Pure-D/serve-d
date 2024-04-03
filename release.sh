@@ -5,4 +5,5 @@ VERSION=$(./serve-d --version 2>&1 | grep -oh "serve-d standalone v[0-9]*\.[0-9]
 echo $VERSION > version.txt
 echo $VERSION
 tar cfJ serve-d_$VERSION-linux-x86_64.tar.xz serve-d
+tar czf serve-d_$VERSION-linux-x86_64.tar.gz serve-d
 

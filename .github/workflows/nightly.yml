@@ -69,6 +69,18 @@ jobs:
           asset_name: serve-d_linux-nightly-${{ steps.vars.outputs.arch_short }}-$$.tar.xz
           asset_content_type: application/x-gtar
 
+      - name: Deploy Linux release (tar.gz)
+        if: matrix.os == 'ubuntu-20.04'
+        uses: WebFreak001/deploy-nightly@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
+          release_id: 20717582
+          asset_path: ./serve-d.tar.gz
+          asset_name: serve-d_linux-nightly-${{ steps.vars.outputs.arch_short }}-$$.tar.gz
+          asset_content_type: application/gzip
+
       # OSX release
       - name: Build OSX release
         run: ./ci/build.sh
@@ -91,6 +103,18 @@ jobs:
           asset_path: ./serve-d.tar.xz
           asset_name: serve-d_osx-nightly-${{ steps.vars.outputs.arch_short }}-$$.tar.xz
           asset_content_type: application/x-gtar
+
+      - name: Deploy OSX release (tar.gz)
+        if: matrix.os == 'macos-latest'
+        uses: WebFreak001/deploy-nightly@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/20717582/assets{?name,label}
+          release_id: 20717582
+          asset_path: ./serve-d.tar.gz
+          asset_name: serve-d_osx-nightly-${{ steps.vars.outputs.arch_short }}-$$.tar.gz
+          asset_content_type: application/gzip
 
       # Windows release
       - name: Build Windows release

@@ -61,6 +61,17 @@ jobs:
           mime: application/x-gtar
           name: serve-d_${TAG}-${OS}.tar.xz
 
+      - name: Deploy Linux release (tar.gz)
+        if: matrix.os == 'ubuntu-20.04'
+        uses: WebFreak001/upload-asset@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OS: linux-${{ steps.vars.outputs.arch_short }}
+        with:
+          file: ./serve-d.tar.gz
+          mime: application/gzip
+          name: serve-d_${TAG}-${OS}.tar.gz
+
       # OSX release
       - name: Build OSX release
         run: ./ci/build.sh && rdmd ci/validate_version.d
@@ -81,6 +92,17 @@ jobs:
           file: ./serve-d.tar.xz
           mime: application/x-gtar
           name: serve-d_${TAG}-${OS}.tar.xz
+
+      - name: Deploy OSX release (tar.gz)
+        if: matrix.os == 'macos-latest'
+        uses: WebFreak001/upload-asset@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OS: osx-${{ steps.vars.outputs.arch_short }}
+        with:
+          file: ./serve-d.tar.gz
+          mime: application/gzip
+          name: serve-d_${TAG}-${OS}.tar.gz
 
       # Windows release
       - name: Build Windows release
