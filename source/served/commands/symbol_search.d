@@ -76,7 +76,7 @@ SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParamsEx params)
 	if (cached.symbolsVerbose.length)
 		return params.verbose ? cached.symbolsVerbose : cached.symbols;
 	auto document = documents.tryGet(params.textDocument.uri);
-	if (document.languageId != "d")
+	if (document.getLanguageId != "d")
 		return null;
 
 	auto result = backend.best!DscannerComponent(params.textDocument.uri.uriToFile)

@@ -105,7 +105,7 @@ ArrayOrSingle!Location provideDefinition(TextDocumentPositionParams params)
 		return ArrayOrSingle!Location.init;
 
 	auto document = documents[params.textDocument.uri];
-	if (document.languageId != "d")
+	if (document.getLanguageId != "d")
 		return ArrayOrSingle!Location.init;
 
 	auto result = findDeclarationImpl(instance, document,
@@ -125,7 +125,7 @@ Hover provideHover(TextDocumentPositionParams params)
 		return Hover.init;
 
 	auto document = documents[params.textDocument.uri];
-	if (document.languageId != "d")
+	if (document.getLanguageId != "d")
 		return Hover.init;
 
 	DCDComponent dcd = instance.get!DCDComponent();

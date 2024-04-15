@@ -22,7 +22,7 @@ CodeLens[] provideCodeLens(CodeLensParams params)
 {
 	auto document = documents[params.textDocument.uri];
 	string file = document.uri.uriToFile;
-	if (document.languageId != "d")
+	if (document.getLanguageId != "d")
 		return [];
 	CodeLens[] ret;
 	if (workspace(params.textDocument.uri).config.d.enableDMDImportTiming)

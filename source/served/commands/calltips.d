@@ -123,9 +123,9 @@ SignatureHelp provideSignatureHelp(TextDocumentPositionParams params)
 {
 	auto document = documents[params.textDocument.uri];
 	string file = document.uri.uriToFile;
-	if (document.languageId == "d")
+	if (document.getLanguageId == "d")
 		return provideDSignatureHelp(params, file, document);
-	else if (document.languageId == "diet")
+	else if (document.getLanguageId == "diet")
 		return provideDietSignatureHelp(params, file, document);
 	else
 		return SignatureHelp.init;

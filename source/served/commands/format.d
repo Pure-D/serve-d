@@ -132,7 +132,7 @@ TextEdit[] provideFormatting(DocumentFormattingParams params)
 	auto config = workspace(params.textDocument.uri).config;
 	auto document = documents[params.textDocument.uri];
 	string result;
-	if (document.languageId == "d")
+	if (document.getLanguageId == "d")
 	{
 		if (!config.d.enableFormatting)
 			return [];
@@ -141,7 +141,7 @@ TextEdit[] provideFormatting(DocumentFormattingParams params)
 		result = backend.get!DfmtComponent.format(document.rawText,
 				generateDfmtArgs(config, document.eolAt(0))).getYield;
 	}
-	else if (document.languageId == "sdl")
+	else if (document.getLanguageId == "sdl")
 	{
 		if (!config.sdl.enableFormatting)
 			return [];
@@ -163,7 +163,7 @@ TextEdit[] provideFormatting(DocumentFormattingParams params)
 	}
 	else
 	{
-		trace("attemted to format code that has unsupported language: '", document.languageId, "'");
+		trace("attemted to format code that has unsupported language: '", document.getLanguageId, "'");
 		return [];
 	}
 	return diff(document, result);
