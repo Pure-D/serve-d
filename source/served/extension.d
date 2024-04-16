@@ -351,7 +351,7 @@ __gshared bool registerDefaultSnippets = false;
 
 void ensureStartedUp(UserConfiguration config)
 {
-	static __gshared bool startedUp = false;
+	__gshared bool startedUp = false;
 	if (startedUp)
 		return;
 	startedUp = true;
@@ -512,7 +512,7 @@ RootSuggestion[] rootsForProject(string root, bool recursive, string[] blocked,
 
 	if (recursive)
 	{
-		PackageDescriptorLoop: foreach (pkg; tryDirEntries(root, "dub.{json,sdl}", fs.SpanMode.breadth))
+		foreach (pkg; tryDirEntries(root, "dub.{json,sdl}", fs.SpanMode.breadth))
 		{
 			auto dir = dirName(pkg);
 			if (dir.canFind(".dub"))
@@ -705,8 +705,8 @@ bool[] forceLoadProjects(string[] rootPaths)
 __gshared bool bundleAskLoads;
 shared int totalLoadedProjects;
 string[] skippedRoots;
-void delayedProjectActivation(WorkspaceD.Instance instance, string workspaceRoot, string workspaceUri, RootSuggestion root,
-	bool skipManyProjectsAction = false)
+void delayedProjectActivation(WorkspaceD.Instance instance, string workspaceRoot, string workspaceUri,
+	RootSuggestion root, bool skipManyProjectsAction = false)
 {
 	import core.atomic;
 
@@ -810,12 +810,14 @@ void delayedProjectActivation(WorkspaceD.Instance instance, string workspaceRoot
 						);
 						if (res == always)
 						{
-							rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("forceDownloadDependencies", JsonValue("always"), true));
+							rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("forceDownloadDependencies",
+								JsonValue("always"), true));
 							goto case DubUpgradeAction.always;
 						}
 						else if (res == never)
 						{
-							rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("forceDownloadDependencies", JsonValue("never"), true));
+							rpc.notifyMethod("coded/updateSetting", UpdateSettingParams("forceDownloadDependencies",
+								JsonValue("never"), true));
 						}
 						else if (res == upgrade)
 						{
