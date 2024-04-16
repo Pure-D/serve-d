@@ -47,7 +47,7 @@ import workspaced.api;
 deprecated("import stdlib_detect directly")
 public import served.utils.stdlib_detect : parseDmdConfImports, parseDflagsImports;
 
-enum IncludedFeatures = ["d", "workspaces"];
+static immutable IncludedFeatures = ["d", "workspaces"];
 
 __gshared MonoTime startupTime;
 

@@ -119,11 +119,13 @@ int main(string[] args)
 
 	//dfmt off
 	auto argInfo = args.getopt(
-		"r|require", "Adds a feature set that is required. Unknown feature sets will intentionally crash on startup", &features,
+		"r|require", "Adds a feature set that is required. Unknown feature sets will intentionally crash on startup",
+			&features,
 		"p|provide", "Features to let the editor handle for better integration", &provides,
 		"v|version", "Print version of program", &printVer,
 		"logfile", "Output all log into the given file instead of stderr", &setLogFile,
-		"loglevel", "Change the log level for output logging (" ~ [__traits(allMembers, LogLevel)].join("|") ~ ")", &setLogLevel,
+		"loglevel", "Change the log level for output logging (" ~ [__traits(allMembers, LogLevel)].join("|") ~ ")",
+			&setLogLevel,
 		"lang", "Change the language of GUI messages", &lang,
 		"wait", "Wait for a second before starting (for debugging)", &wait);
 	//dfmt on
