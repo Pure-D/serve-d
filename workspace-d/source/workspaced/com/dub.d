@@ -1036,6 +1036,10 @@ string[] listDependencies(scope const Package pkg)
 		return dependencies;
 	foreach (dep; deps)
 		dependencies ~= dep.name;
+	dependencies.sort();
+	// filter duplicates in-place using copy.
+	// copy + this length construct allows us to `uniq` in-place
+	dependencies.length -= dependencies.uniq().copy(dependencies).length;
 	return dependencies;
 }
 
