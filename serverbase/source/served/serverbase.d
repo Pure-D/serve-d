@@ -48,7 +48,7 @@ struct LanguageServerConfig
 ///
 /// Params:
 ///   ExtensionModule = a module defining the following members:
-///   - `moduleMembers`: an AliasSeq list of all imported modules that should
+///   - `memberModules`: an AliasSeq list of all imported modules that should
 ///     be introspected to be called automatically on matching RPC commands.
 ///   - `InitializeResult initialize(InitializeParams)`: initialization method.
 ///
@@ -62,9 +62,11 @@ struct LanguageServerConfig
 ///   - `parallelMain`: an optional method which is run alongside everything
 ///     else in parallel using fibers. Should yield as much as possible when
 ///     there is nothing to do.
-mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig serverConfig = LanguageServerConfig.init)
+mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig serverConfig
+	= LanguageServerConfig.init)
 {
-	static assert(is(typeof(ExtensionModule.initialize)), "Missing initialize function in ExtensionModule " ~ ExtensionModule.stringof);
+	static assert(is(typeof(ExtensionModule.initialize)), "Missing initialize function in ExtensionModule " ~
+		ExtensionModule.stringof);
 
 	import core.sync.mutex;
 	import core.thread;
@@ -103,7 +105,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 	else static if (__traits(hasMember, ExtensionModule, "memberModules"))
 	{ /* ok */ }
 	else
-		static assert(false, "Missing members field in ExtensionModule " ~ ExtensionModule.stringof);
+		static assert(false, "Missing members or memberModules field in ExtensionModule " ~ ExtensionModule.stringof);
 	mixin EventProcessor!(ExtensionModule, serverConfig.eventConfig) eventProcessor;
 
 	/// Calls a method associated with the given request type in the 
@@ -183,7 +185,8 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				scope (exit)
 					working--;
 				auto thisId = working;
-				trace("Partial ", thisId, " / ", numHandlers, "... ", partialResultToken.length ? "(supported)" : "(no support)");
+				trace("Partial ", thisId, " / ", numHandlers, "... ", partialResultToken.length ?
+					"(supported)" : "(no support)");
 				auto result = fn(args.expand);
 				trace("Partial ", thisId, " = ", result);
 				auto json = result.serializeJson;
@@ -202,7 +205,8 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				scope (exit)
 					working--;
 				auto thisId = working;
-				trace("Partial iterator as ", thisId, " / ", numHandlers, "... ", partialResultToken.length ? "(supported)" : "(no support)");
+				trace("Partial iterator as ", thisId, " / ", numHandlers, "... ",
+					partialResultToken.length ? "(supported)" : "(no support)");
 				auto result = fn(args.expand);
 				foreach (chunk; result)
 				{
@@ -325,7 +329,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		return res;
 	}
 
-	// calls @postProcotolMethod methods for the given request
+	// calls @postProtocolMethod methods for the given request
 	private void processRequestObservers(T)(RequestMessageRaw msg, T result)
 	{
 		eventProcessor.emitProtocol!(postProtocolMethod, (name, callSymbol, uda) {
@@ -441,7 +445,8 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 	__gshared FiberManager fibers;
 	__gshared Mutex fibersMutex;
 
-	void pushFiber(T)(string name, T callback, int pages = serverConfig.defaultPages, string file = __FILE__, int line = __LINE__)
+	void pushFiber(T)(string name, T callback, int pages = serverConfig.defaultPages,
+		string file = __FILE__, int line = __LINE__)
 	{
 		synchronized (fibersMutex)
 			fibers.put(name, new Fiber(callback, serverConfig.fiberPageSize * pages), file, line);
@@ -597,7 +602,7 @@ unittest
 		bool sanityFalse;
 	}
 
-	__gshared static int calledCustomNotify;
+	__gshared int calledCustomNotify;
 
 	static struct UTServer
 	{
