@@ -61,7 +61,7 @@ void changedConfig(ConfigWorkspace target, string[] paths, served.types.Configur
 	StopWatch sw;
 	sw.start();
 
-	trace("Config for ", target, " changed: ", config);
+	trace("Config for ", target, " changed: ", config, ", paths:", paths);
 
 	reportProgress(ProgressType.configLoad, target.index, target.numWorkspaces, target.uri);
 
@@ -155,7 +155,7 @@ void changedConfig(ConfigWorkspace target, string[] paths, served.types.Configur
 		case "d.enableAutoComplete":
 			if (config.d.enableAutoComplete)
 			{
-				if (!backend.has!DCDComponent(workspaceFs))
+				if (backend.has!DCDComponent(workspaceFs))
 				{
 					auto instance = backend.getInstance(workspaceFs);
 					lazyStartDCDServer(instance, target.uri);
