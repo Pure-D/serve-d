@@ -900,7 +900,7 @@ void delayedProjectActivation(WorkspaceD.Instance instance, string workspaceRoot
 		didLoadDubProject();
 
 	string ccdbPath = proj.config.d.ccdbPath;
-	if (!ccdbPath.length && !loadedDub)
+	if (!ccdbPath.length && !loadedDub && !proj.config.d.neverUseCcdb)
 		ccdbPath = discoverCcdb(workspaceRoot);
 	bool loadedCcdb;
 	if (ccdbPath.length)

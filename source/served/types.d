@@ -98,6 +98,7 @@ struct Configuration
 		bool enableDCDHighlight = true;
 		bool enableFallbackHighlight = true;
 		bool neverUseDub = false;
+		bool neverUseCcdb = false;
 		string[] projectImportPaths;
 		string ccdbPath;
 		string dubConfiguration;
