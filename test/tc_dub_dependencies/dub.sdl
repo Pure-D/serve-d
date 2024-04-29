@@ -1,2 +1,2 @@
-name "test-dub"
+name "test-dub-dependencies"
 dependency "serve-d:workspace-d" path="../.."
