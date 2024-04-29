@@ -582,6 +582,18 @@ private:
 			throw new Exception("malformed request JSON, must be object");
 		auto slices = json.parseKeySlices!("id", "result", "error", "method", "params");
 
+		if (slices.result.length && slices.error.length)
+		{
+			// for supporting non-LSP conforming editors:
+			// if both result and error is set, do the following rules:
+			// - if error is `null`, unset `error`
+			// - otherwise if result is `null`, unset `result`
+			if (slices.error == "null")
+				slices.error = "";
+			else if (slices.result == "null")
+				slices.result = "";
+		}
+
 		auto id = slices.id;
 		if (slices.result.length && slices.method.length
 			|| !slices.result.length && !slices.method.length && !slices.error.length
