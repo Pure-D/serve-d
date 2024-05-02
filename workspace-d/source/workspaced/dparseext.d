@@ -308,7 +308,14 @@ string evaluateExpressionString(const Token token)
 			case tok!"dstringLiteral":
 				if (t.text.isStringLiteral)
 				{
-					ret ~= unescapeString(t.text);
+					import std.utf: UTFException;
+					try {
+						ret ~= unescapeString(t.text);
+					}
+					catch (UTFException e) {
+						// document has errors
+						return str;
+					}
 				}
 				else
 				{
