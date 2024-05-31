@@ -27,6 +27,7 @@ import dub.dependency;
 import dub.generators.build;
 import dub.generators.generator;
 import dub.generators.targetdescription;
+import dub.packagemanager;
 
 import dub.internal.vibecompat.inet.url;
 
@@ -143,31 +144,31 @@ class DubComponent : ComponentWrapper
 			foreach (dep; pkg.getAllDependencies()
 				.filter!(a => optionalified.canFind(a.name)))
 			{
-				auto d = _dub.project.getDependency(dep.name, true);
+				auto d = _dub.project.getDependency(dep.name.toString, true);
 				if (d)
 					optionalifyRecipe(d);
 			}
 		}
 	}
 
-	private string[] optionalifyPackages()
+	private PackageName[] optionalifyPackages()
 	{
-		string[] optionalified;
+		PackageName[] optionalified;
 		foreach (pkg; _dub.project.dependencies)
 			optionalified ~= optionalifyRecipe(cast() pkg);
 		return optionalified;
 	}
 
-	private string[] optionalifyRecipe(Package pkg)
+	private PackageName[] optionalifyRecipe(Package pkg)
 	{
-		string[] optionalified;
+		PackageName[] optionalified;
 		foreach (key, ref value; pkg.recipe.buildSettings.dependencies)
 		{
 			if (!value.optional)
 			{
 				value.optional = true;
 				value.default_ = true;
-				optionalified ~= key;
+				optionalified ~= cast(PackageName) key;
 			}
 		}
 		foreach (ref config; pkg.recipe.configurations)
@@ -177,7 +178,7 @@ class DubComponent : ComponentWrapper
 				{
 					value.optional = true;
 					value.default_ = true;
-					optionalified ~= key;
+					optionalified ~= cast(PackageName) key;
 				}
 			}
 		return optionalified;
@@ -398,7 +399,7 @@ class DubComponent : ComponentWrapper
 
 		Dependency[string] ret;
 		foreach (key; _dub.project.selections.selectedPackages)
-			ret[key] = _dub.project.selections.getSelectedVersion(key);
+			ret[key] = _dub.project.selections.getSelectedVersion(PackageName(key));
 		return ret;
 	}
 
@@ -718,8 +719,8 @@ class DubComponent : ComponentWrapper
 	/// Asynchroniously builds the project WITHOUT OUTPUT. This is intended for linting code and showing build errors quickly inside the IDE.
 	Future!(BuildIssue[]) build()
 	{
-		import std.process : thisProcessID;
 		import std.file : tempDir;
+		import std.process : thisProcessID;
 		import std.random : uniform;
 
 		validateBuildConfiguration();
@@ -779,8 +780,8 @@ class DubComponent : ComponentWrapper
 				};
 				try
 				{
-					import workspaced.dub.lintgenerator : DubLintGenerator;
 					import std.file : chdir;
+					import workspaced.dub.lintgenerator : DubLintGenerator;
 
 					new DubLintGenerator(_dub.project, NativePath(cwd)).generate(settings);
 				}
@@ -1009,7 +1010,7 @@ DubPackageInfo getInfo(in Package dep)
 	info.fill(dep.recipe);
 	foreach (subDep; dep.getAllDependencies())
 	{
-		info.dependencies[subDep.name] = subDep.spec.toString;
+		info.dependencies[subDep.name.toString] = subDep.spec.toString;
 	}
 	return info;
 }
@@ -1035,7 +1036,7 @@ string[] listDependencies(scope const Package pkg)
 	if (deps is null)
 		return dependencies;
 	foreach (dep; deps)
-		dependencies ~= dep.name;
+		dependencies ~= dep.name.toString;
 	dependencies.sort();
 	// filter duplicates in-place using copy.
 	// copy + this length construct allows us to `uniq` in-place
@@ -1064,6 +1065,46 @@ class ServedDub : Dub
 		GeneratorSettings s;
 		s.cache = this.m_dirs.cache;
 		return s;
+	}
+
+	protected override PackageManager makePackageManager()
+	{
+		return new BackwardsCompatiblePackageManager(m_rootPath, m_dirs.userPackages, m_dirs.systemSettings, false);
+	}
+}
+
+class BackwardsCompatiblePackageManager : PackageManager
+{
+	import std.file;
+	import std.path;
+
+	this(NativePath package_path, NativePath user_path, NativePath system_path, bool refresh_packages = true)
+	{
+		super(package_path, user_path, system_path, refresh_packages);
+	}
+
+	protected override Package lookup(in PackageName name, in Version vers)
+	{
+		auto pkg = super.lookup(name, vers);
+		if (pkg)
+			return pkg;
+
+		foreach (ref location; this.m_repositories)
+		{
+			auto folderName = name.main.toString ~ "-" ~ vers.toString;
+			auto path = location.packagePath ~ folderName ~ name.main.toString;
+			if (!this.existsDirectory(path))
+				continue;
+
+			auto p = this.load(path);
+			enforce(
+				p.version_ == vers,
+				format("Fallback package %s located in %s has a different version than its path: Got %s, expected %s",
+					name, path, p.version_, vers));
+			this.addPackages(location.fromPath, p);
+		}
+
+		return null;
 	}
 }
 
