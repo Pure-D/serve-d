@@ -14,16 +14,19 @@ import core.thread;
 import core.thread.fiber;
 
 import served.lsp.filereader;
-import served.lsp.jsonops;
 import served.lsp.jsonrpc;
 import served.lsp.protocol;
 import served.lsp.uri;
+import served.lsp.jsonops;
 
 version (assert)
 {
 }
 else
 	static assert(false, "Compile with asserts.");
+
+__gshared RPCProcessor rpc;
+__gshared string cwd;
 
 // https://forum.dlang.org/post/akucvkduasjlwgykkrzs@forum.dlang.org
 void copyDir(string inDir, string outDir)
@@ -88,6 +91,25 @@ void main()
 	return;
 }
 
+void delegate(RequestMessageRaw msg) gotRequest;
+void delegate(RequestMessageRaw msg) gotNotify;
+
+shared static this()
+{
+	gotRequest = toDelegate(&defaultRequestHandler);
+	gotNotify = toDelegate(&defaultNotifyHandler);
+}
+
+void defaultRequestHandler(RequestMessageRaw msg)
+{
+	assert(false, "Unexpected request " ~ msg.toString);
+}
+
+void defaultNotifyHandler(RequestMessageRaw msg)
+{
+	info("Ignoring notification " ~ msg.toString);
+}
+
 void pumpEvents()
 {
 	while (rpc.hasData)
@@ -105,13 +127,13 @@ void doTests()
 	WorkspaceClientCapabilities workspace = {
 		configuration: opt(true)
 	};
-	InitializeParams init = InitializeParams(
-		processId: typeof(InitializeParams.processId)(thisProcessID),
+	InitializeParams init = {
+		processId: thisProcessID,
 		rootUri: uriFromFile(cwd),
-		capabilities: ClientCapabilities(
+		capabilities: {
 			workspace: opt(workspace)
-		)
-	);
+		}
+	};
 	auto msg = rpc.sendRequest("initialize", init, 10.seconds);
 	info("Response: ", msg.resultJson);
 
