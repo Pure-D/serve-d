@@ -536,8 +536,8 @@ struct ModuleDefinition
 
 private static ulong hashFields(Args...)()
 {
-	import std.digest.crc : CRC64ISO;
 	import std.bitmanip;
+	import std.digest.crc : CRC64ISO;
 
 	CRC64ISO crc;
 	crc.put((cast(uint) Args.length).nativeToLittleEndian);
@@ -565,7 +565,7 @@ private static struct SumTypePackProxy
 {
 	import msgpack;
 
-	static void serialize(T)(ref Packer p, ref in T sumtype)
+	static void serialize(T)(ref Packer p, in T sumtype)
 	{
 		static assert(__traits(identifier, sumtype.tupleof[1]) == "tag");
 		p.pack(sumtype.tupleof[1]);
