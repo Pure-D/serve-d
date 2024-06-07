@@ -138,6 +138,9 @@ struct Configuration
 	{
 		@serdeOptional:
 		string[] ignoredKeys;
+
+		@serdeOptional
+		string[] excludedFiles;
 	}
 
 	struct SDL
