@@ -45,6 +45,12 @@ void lint(Document document)
 	if (!fileConfig.d.enableLinting || !fileConfig.d.enableStaticLinting)
 		return;
 
+	if (isExcludedFile(document.uri, fileConfig.dscanner.excludedFiles)) {
+		createDiagnosticsFor!DiagnosticSlot(document.uri) = [];
+		updateDiagnostics(document.uri);
+		return;
+	}
+
 	auto ignoredKeys = fileConfig.dscanner.ignoredKeys;
 
 	auto ini = getDscannerIniForDocument(document.uri, instance);
@@ -87,6 +93,23 @@ void lint(Document document)
 
 	createDiagnosticsFor!DiagnosticSlot(document.uri) = result;
 	updateDiagnostics(document.uri);
+}
+
+bool isExcludedFile(DocumentUri uri, string[] excludedFiles)
+{
+	auto workspace = workspace(uri);
+
+	if (!uri.startsWith(workspace.folder.uri))
+		return false;
+
+	auto file = uri[workspace.folder.uri.length..$].stripLeft("/");
+
+	foreach (excludedFile; excludedFiles)
+	{
+		if (globMatch(file, excludedFile))
+			return true;
+	}
+	return false;
 }
 
 void clear()
