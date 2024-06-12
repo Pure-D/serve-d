@@ -1184,8 +1184,8 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 			{
 				detailDescription = identifier.definition[0 .. definitionSpace];
 				
-				// if function, only show the parenthesis content
-				if (identifier.type == "f")
+				// if function or alias, only show the parenthesis content
+				if (identifier.type == "f" || identifier.type == "l")
 				{
 					auto paren = identifier.definition.indexOf('(');
 					if (paren != -1)
@@ -1204,7 +1204,7 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 				// enum definitions are the enum identifiers (not the type)
 				detailDescription = "enum";
 			}
-			else if (identifier.type == "f" && dcdext)
+			else if ((identifier.type == "f" || (identifier.type == "l" || identifier.definition.indexOf(" ") != -1)) && dcdext)
 			{
 				CalltipsSupport funcParams = dcdext.extractCallParameters(
 					identifier.definition, cast(int) identifier.definition.length - 1, true);
