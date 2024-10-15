@@ -153,8 +153,32 @@ struct Configuration
 	struct Editor
 	{
 		@serdeOptional:
-		int[] rulers;
+		JsonValue[] rulers;
 		int tabSize;
+
+		int[] parseRulers() const
+		{
+			int[] ret;
+			foreach (value; rulers)
+			{
+				switch (value.kind)
+				{
+				case JsonValue.Kind.object:
+					auto obj = value.get!(StringMap!JsonValue);
+					if (auto v = "column" in obj)
+					{
+						ret ~= cast(int) v.get!long;
+					}
+					break;
+				case JsonValue.Kind.integer:
+					ret ~= cast(int) value.get!long;
+					break;
+				default:
+					break;
+				}
+			}
+			return ret;
+		}
 	}
 
 	struct Git

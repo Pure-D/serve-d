@@ -60,14 +60,15 @@ string[] generateDfmtArgs(const ref UserConfiguration config, EolType overrideEo
 	{
 		int maxLineLength = 120;
 		int softMaxLineLength = 80;
-		if (config.editor.rulers.length == 1)
+		auto rulers = config.editor.parseRulers;
+		if (rulers.length == 1)
 		{
-			softMaxLineLength = maxLineLength = config.editor.rulers[0];
+			softMaxLineLength = maxLineLength = rulers[0];
 		}
-		else if (config.editor.rulers.length >= 2)
+		else if (rulers.length >= 2)
 		{
-			maxLineLength = config.editor.rulers[$ - 1];
-			softMaxLineLength = config.editor.rulers[$ - 2];
+			maxLineLength = rulers[$ - 1];
+			softMaxLineLength = rulers[$ - 2];
 		}
 		ResolvedFormattingOptions options = gFormattingOptions;
 		//dfmt off
