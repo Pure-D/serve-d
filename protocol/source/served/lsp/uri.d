@@ -48,12 +48,11 @@ unittest
 
 string uriToFile(DocumentUri uri)
 {
-	import std.uri : decodeComponent;
 	import std.string : startsWith;
-
-	if (uri.startsWith("file://"))
+	if (uri.skipOver("file://"))
 	{
-		string ret = uri["file://".length .. $].decodeComponent;
+		import std.uri : decodeComponent;
+		string ret = uri.decodeComponent;
 		if (ret.length >= 3 && ret[0] == '/' && ret[2] == ':') // file:///x: windows path
 			return ret[1 .. $].replace("/", "\\");
 		else if (ret.length >= 1 && ret[0] != '/') // file://share windows path
@@ -283,7 +282,7 @@ unittest
 {
 	assertEquals(uriNormalize(`b/../a.d`), `a.d`);
 	assertEquals(uriNormalize(`b/../../a.d`), `../a.d`);
-	
+
 	foreach (prefix; ["file:///", "file://", "", "/", "//"])
 	{
 		assertEquals(uriNormalize(prefix ~ `foo/bar/./a.d`), prefix ~ `foo/bar/a.d`);
