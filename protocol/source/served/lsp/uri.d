@@ -54,10 +54,12 @@ string uriToFile(DocumentUri uri)
 	if (uri.startsWith("file://"))
 	{
 		string ret = uri["file://".length .. $].decodeComponent;
-		if (ret.length >= 3 && ret[0] == '/' && ret[2] == ':') // file:///x: windows path
-			return ret[1 .. $].replace("/", "\\");
-		else if (ret.length >= 1 && ret[0] != '/') // file://share windows path
-			return "\\\\" ~ ret.replace("/", "\\");
+		version(Windows) {
+			if (ret.length >= 3 && ret[0] == '/' && ret[2] == ':') // file:///x: windows path
+				return ret[1 .. $].replace("/", "\\");
+			else if (ret.length >= 1 && ret[0] != '/') // file://share windows path
+				return "\\\\" ~ ret.replace("/", "\\");
+		}
 		return ret;
 	}
 	else
@@ -86,6 +88,7 @@ string uriToFile(DocumentUri uri)
 	else version (Posix)
 	{
 		testUri(`/home/pi/.bashrc`, `file:///home/pi/.bashrc`);
+		testUri(`pi/.bashrc`, `file://pi/.bashrc`);
 		testUri(`/home/pi/Development Projects/D-code`, `file:///home/pi/Development%20Projects/D-code`);
 	}
 
