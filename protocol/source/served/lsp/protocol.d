@@ -2057,6 +2057,7 @@ struct ServerCapabilities
 	@serdeOptional Variant!(void, bool, ReferenceOptions) referencesProvider;
 	@serdeOptional Variant!(void, bool, DocumentHighlightOptions) documentHighlightProvider;
 	@serdeOptional Variant!(void, bool, DocumentSymbolOptions) documentSymbolProvider;
+	@serdeOptional Variant!(void, bool, InlayHintOptions) inlayHintProvider;
 	@serdeOptional Variant!(void, bool, CodeActionOptions) codeActionProvider;
 	@serdeOptional Variant!(void, CodeLensOptions) codeLensProvider;
 	@serdeOptional Variant!(void, DocumentLinkOptions) documentLinkProvider;
@@ -3086,6 +3087,43 @@ struct ReferenceParams
 }
 
 @serdeFallbackStruct
+@allowedMethods("textDocument/inlayHint")
+struct InlayHintParams
+{
+	TextDocumentIdentifier textDocument;
+	TextRange range;
+}
+
+@serdeFallbackStruct
+struct InlayHint
+{
+    Position position;
+    Variant!(string, InlayHintLabelPart[]) label;
+    @serdeOptional Optional!InlayHintKind kind;
+    @serdeOptional Optional!(TextEdit[]) textEdits;
+    @serdeOptional Variant!(void, string, MarkupContent) tooltip;
+    @serdeOptional Optional!(bool) paddingLeft;
+    @serdeOptional Optional!(bool) paddingRight;
+	OptionalJsonValue data;
+}
+
+@serdeEnumProxy!uint
+enum InlayHintKind
+{
+    type = 1,
+    parameter = 2,
+}
+
+@serdeFallbackStruct
+struct InlayHintLabelPart
+{
+    string value;
+    @serdeOptional Variant!(void, string, MarkupContent) tooltip;
+    @serdeOptional Optional!Location location;
+    @serdeOptional Optional!Command command;
+}
+
+@serdeFallbackStruct
 struct ReferenceContext
 {
 	bool includeDeclaration;
@@ -3149,6 +3187,13 @@ struct DocumentSymbolOptions
 	mixin WorkDoneProgressOptions;
 
 	@serdeOptional Optional!string label;
+}
+
+@serdeFallbackStruct
+struct InlayHintOptions
+{
+	mixin WorkDoneProgressOptions;
+	@serdeOptional Optional!bool resolveProvider;
 }
 
 @serdeFallbackStruct
