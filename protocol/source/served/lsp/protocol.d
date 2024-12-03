@@ -3097,14 +3097,14 @@ struct InlayHintParams
 @serdeFallbackStruct
 struct InlayHint
 {
-    Position position;
-    Variant!(string, InlayHintLabelPart[]) label;
-    @serdeOptional Optional!InlayHintKind kind;
-    @serdeOptional Optional!(TextEdit[]) textEdits;
-    @serdeOptional Variant!(void, string, MarkupContent) tooltip;
-    @serdeOptional Optional!(bool) paddingLeft;
-    @serdeOptional Optional!(bool) paddingRight;
-	OptionalJsonValue data;
+	Position position;
+	Variant!(string, InlayHintLabelPart[]) label;
+	@serdeOptional Optional!InlayHintKind kind;
+	@serdeOptional Optional!(TextEdit[]) textEdits;
+	@serdeOptional Variant!(void, string, MarkupContent) tooltip;
+	@serdeOptional Optional!(bool) paddingLeft;
+	@serdeOptional Optional!(bool) paddingRight;
+	@serdeOptional OptionalJsonValue data;
 }
 
 @serdeEnumProxy!uint
