@@ -79,7 +79,7 @@ class ControlFlowSnippetProvider : SnippetProvider
 					Snippet snp;
 					snp.providerId = typeid(this).name;
 					snp.id = snp.title = snp.shortcut = "default";
-					snp.snippet = "case:\n\t$0\n\tbreak;";
+					snp.snippet = "default:\n\t$0\n\tbreak;";
 					snp.documentation = "Defines the default case in the current switch-case.\n\nReference: https://dlang.org/spec/statement.html#switch-statement";
 					snp.resolved = true;
 					snp.unformatted = true;
