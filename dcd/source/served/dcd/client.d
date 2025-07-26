@@ -2,8 +2,8 @@ module served.dcd.client;
 
 @safe:
 
-import core.time;
 import core.sync.mutex;
+import core.time;
 
 import std.algorithm;
 import std.array;
@@ -14,8 +14,8 @@ import std.socket;
 import std.stdio;
 import std.string;
 
-import dcd.common.messages;
 import dcd.common.dcd_version;
+import dcd.common.messages;
 import dcd.common.socket;
 
 version (OSX) version = haveUnixSockets;
@@ -23,10 +23,7 @@ version (linux) version = haveUnixSockets;
 version (BSD) version = haveUnixSockets;
 version (FreeBSD) version = haveUnixSockets;
 
-public import dcd.common.messages :
-	DCDResponse = AutocompleteResponse,
-	DCDCompletionType = CompletionType,
-	isDCDServerRunning = serverIsRunning;
+public import dcd.common.messages : DCDCompletionType = CompletionType, DCDResponse = AutocompleteResponse, isDCDServerRunning = serverIsRunning;
 
 version (haveUnixSockets)
 	enum platformSupportsDCDUnixSockets = true;
@@ -385,7 +382,7 @@ class BuiltinDCDClient : IDCDClient
 	{
 		socketMutex = new Mutex();
 		useTCP = false;
-		this._socketFile = _socketFile;
+		this._socketFile = socketFile;
 	}
 
 	this(ushort port)
