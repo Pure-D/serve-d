@@ -27,8 +27,7 @@ import workspaced.dparseext;
 import workspaced.visitors.classifier;
 import workspaced.visitors.methodfinder;
 
-public import workspaced.visitors.methodfinder : InterfaceDetails, FieldDetails,
-	MethodDetails, ArgumentInfo;
+public import workspaced.visitors.methodfinder : ArgumentInfo, FieldDetails, InterfaceDetails, MethodDetails;
 
 @component("dcdext")
 class DCDExtComponent : ComponentWrapper
@@ -3114,10 +3113,10 @@ class FoldingRangeGenerator : ASTVisitor
 	{
 		mixin(supressBlockMixin);
 
-		if (stmt.expression && stmt.statement)
+		if (stmt.condition.expression && stmt.statement)
 			ranges.put(FoldingRange(
 				// go 1 token over length because that's our `)` token (which should exist because stmt.statement is defined)
-				stmt.expression.tokens.via(allTokens, stmt.expression.tokens.length).tokenEnd,
+				stmt.condition.expression.tokens.via(allTokens, stmt.condition.expression.tokens.length).tokenEnd,
 				stmt.tokens.tokenEnd,
 				FoldingRangeType.region
 			));
@@ -3198,7 +3197,7 @@ class FoldingRangeGenerator : ASTVisitor
 				stmt.functionBody.tokens[$ - 1].tokenEnd,
 				FoldingRangeType.region
 			));
-		
+
 		stmt.accept(this);
 	}
 

@@ -430,7 +430,7 @@ class DubComponent : ComponentWrapper
 	/// Returns the path to the root package recipe (dub.json/dub.sdl)
 	///
 	/// Note that this can be empty if the package is not in the local file system.
-	string recipePath() @property
+	string recipePath() @property const
 	{
 		return _dub.project.rootPackage.recipePath.toString;
 	}
@@ -445,7 +445,7 @@ class DubComponent : ComponentWrapper
 
 		try
 		{
-			readPackageRecipe(p);
+			readPackageRecipe(NativePath(p));
 			return null;
 		}
 		catch (Exception e)
