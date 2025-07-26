@@ -18,7 +18,7 @@
 		"isfreedesktop": "0.1.1",
 		"libasync": "0.8.6",
 		"libddoc": "0.8.0",
-		"libdparse": "0.23.2",
+		"libdparse": "0.25.0",
 		"memutils": "1.0.10",
 		"mir-algorithm": "3.22.1",
 		"mir-core": "1.7.1",
