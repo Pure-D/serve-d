@@ -4,8 +4,8 @@ import served.io.nothrow_fs;
 import served.types;
 import served.utils.fibermanager;
 import served.utils.progress;
-import served.utils.translate;
 import served.utils.serverconfig;
+import served.utils.translate;
 
 public import served.utils.async;
 
@@ -211,8 +211,8 @@ mixin ConfigHandler!(served.types.Configuration);
 
 string[] getPossibleSourceRoots(string workspaceFolder)
 {
-	import std.path : isAbsolute;
 	import std.file;
+	import std.path : isAbsolute;
 
 	auto confPaths = config(workspaceFolder.uriFromFile, false).d.projectImportPaths.map!(
 			a => a.isAbsolute ? a : buildNormalizedPath(workspaceRoot, a));
@@ -249,8 +249,8 @@ InitializeResult initialize(InitializeParams params)
 	}
 	else
 	{
+		import std.file : exists, mkdir, tempDir;
 		import std.path : buildPath;
-		import std.file : tempDir, exists, mkdir;
 
 		auto tmpFolder = buildPath(tempDir, "serve-d-dummy-workspace");
 		if (!tmpFolder.exists)
@@ -429,6 +429,7 @@ void doGlobalStartup(UserConfiguration config)
 			string outdatedMessage = translate!"d.served.outdatedDCD"(
 					DCDComponent.latestKnownVersion.to!(string[]).join("."), installed);
 
+			trace("Needs DCD update, not starting auto-completion");
 			dcdUpdating = true;
 			dcdUpdateReason = format!"DCD is outdated. Expected: %(%s.%), got %s"(
 					DCDComponent.latestKnownVersion, installed);
@@ -952,8 +953,16 @@ class MessageHandler : IMessageHandler
 
 bool wantsDCDServer(string workspaceUri)
 {
-	if (shutdownRequested || dcdUpdating)
+	if (shutdownRequested)
+	{
+		trace("Not starting DCD in ", workspaceUri, " since shutdownRequested is true");
 		return false;
+	}
+	if (dcdUpdating)
+	{
+		trace("Not starting DCD in ", workspaceUri, " since dcdUpdating is true");
+		return false;
+	}
 	Workspace* proj = &workspace(workspaceUri, false);
 	if (proj is &fallbackWorkspace)
 	{
@@ -962,6 +971,7 @@ bool wantsDCDServer(string workspaceUri)
 	}
 	if (!proj.config.d.enableAutoComplete)
 	{
+		trace("Not starting DCD in ", workspaceUri, " since config field d.enableAutoComplete is false");
 		return false;
 	}
 
