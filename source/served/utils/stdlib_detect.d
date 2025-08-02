@@ -1,7 +1,7 @@
 module served.utils.stdlib_detect;
 
 import std.algorithm : countUntil, splitter, startsWith;
-import std.array : appender, replace;
+import std.array : Appender, appender, replace;
 import std.ascii : isWhite;
 import std.conv : to;
 import std.experimental.logger : trace, warning;
@@ -359,9 +359,39 @@ bool parseDmdConfImports(R)(R confPath, scope const(char)[] confDirPath, out str
 
 bool parseLdcConfImports(string confPath, scope const(char)[] binDirPath, out string[] paths)
 {
-	import external.ldc.config;
+	Appender!(string[]) ret;
+	scope(exit) paths = ret.data;
 
-	auto ret = appender!(string[]);
+	import std.algorithm;
+	import std.array;
+	import std.file;
+
+	if (confPath.isDir)
+	{
+		auto configFiles = confPath.dirEntries(SpanMode.shallow)
+			.filter!`a.isFile`
+			.map!`a.name`
+			// FIXME this should be numeric sort
+			.array
+			.sort;
+
+		import std.conv;
+		trace("the config files are: ", text(configFiles));
+
+		foreach (file; configFiles)
+			parseLdcConfImportsSingleFile(file, binDirPath, ret);
+	}
+	else
+		parseLdcConfImportsSingleFile(confPath, binDirPath, ret);
+
+	if (!ret.data.length)
+		warning("failed to find phobos/druntime paths in ldc conf ", confPath, " - going to continue looking elsewhere...");
+	return ret.data.length > 0;
+}
+
+void parseLdcConfImportsSingleFile(string confPath, scope const(char)[] binDirPath, ref Appender!(string[]) ret)
+{
+	import external.ldc.config;
 
 	binDirPath = binDirPath.replace('\\', '/');
 
@@ -401,11 +431,6 @@ bool parseLdcConfImports(string confPath, scope const(char)[] binDirPath, out st
 			parseSection(cast(GroupSetting) s);
 		}
 	}
-
-	paths = ret.data;
-	if (!ret.data.length)
-		warning("failed to find phobos/druntime paths in ldc conf ", confPath, " - going to continue looking elsewhere...");
-	return ret.data.length > 0;
 }
 
 deprecated string[] parseDflagsImports(scope const(char)[] options, bool windows)
