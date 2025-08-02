@@ -388,6 +388,12 @@ bool parseLdcConfImports(string confPath, scope const(char)[] binDirPath, out st
 	}
 
 	trace("test ldc conf ", confPath);
+	Setting[] settings;
+	try
+		settings = parseConfigFile(confPath);
+	catch (Exception e)
+		throw new Exception("Could not read ldc2 config file: " ~ confPath ~ ": " ~ e.msg);
+
 	foreach (s; parseConfigFile(confPath))
 	{
 		if (s.type == Setting.Type.group && s.name == "default")
