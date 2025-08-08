@@ -1,5 +1,7 @@
 module served.utils.serverconfig;
 
+import served.lsp.protocol : DocumentUri;
+
 /// UDA event called when configuration for any workspace or the unnamed
 /// workspace got changed.
 ///
@@ -27,7 +29,7 @@ struct ConfigWorkspace
 	/// Workspace URI, resolved to a local workspace URI, or null if none found.
 	/// May be null for invalid workspaces or if this is the unnamed workspace.
 	/// Check `isUnnamedWorkspace` to see if this is the unnamed workspace.
-	string uri;
+	DocumentUri uri;
 	/// Only true _iff_ this config applies to the unnamed workspace (folder-less workspace)
 	bool isUnnamedWorkspace;
 	/// 0-based index which workspace is being processed out of the total count. (for progress reporting)
@@ -35,7 +37,7 @@ struct ConfigWorkspace
 	/// Number of workspaces which are being processed right now in total. (for progress reporting)
 	size_t numWorkspaces;
 
-	static ConfigWorkspace exactlyOne(string uri)
+	static ConfigWorkspace exactlyOne(DocumentUri uri)
 	{
 		return ConfigWorkspace(uri, false, 0, 1);
 	}

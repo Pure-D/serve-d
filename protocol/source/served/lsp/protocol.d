@@ -1334,7 +1334,7 @@ struct CreateFileOptions
 @serdeFallbackStruct
 struct CreateFile
 {
-	string uri;
+	DocumentUri uri;
 	@serdeOptional Optional!CreateFileOptions options;
 	@serdeOptional Optional!ChangeAnnotationIdentifier annotationId;
 	string kind = "create";
@@ -1367,7 +1367,7 @@ struct DeleteFileOptions
 @serdeFallbackStruct
 struct DeleteFile
 {
-	string uri;
+	DocumentUri uri;
 	@serdeOptional Optional!DeleteFileOptions options;
 	@serdeOptional Optional!ChangeAnnotationIdentifier annotationId;
 	string kind = "delete";
@@ -2168,7 +2168,7 @@ struct CreateFilesParams
 @serdeFallbackStruct
 struct FileCreate
 {
-	string uri;
+	DocumentUri uri;
 }
 
 @serdeFallbackStruct
@@ -2195,7 +2195,7 @@ struct DeleteFilesParams
 @serdeFallbackStruct
 struct FileDelete
 {
-	string uri;
+	DocumentUri uri;
 }
 
 @serdeFallbackStruct
@@ -3395,7 +3395,7 @@ struct CodeAction
 	}
 
 	/// Extension that reads {"uri"} from the custom JSON data.
-	Optional!string uri()
+	Optional!DocumentUri uri()
 	{
 		return readData!string("uri");
 	}
@@ -4147,7 +4147,7 @@ struct ApplyWorkspaceEditResponse
 @serdeFallbackStruct
 struct WorkspaceFolder
 {
-	string uri;
+	DocumentUri uri;
 	string name;
 }
 

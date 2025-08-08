@@ -40,7 +40,7 @@ void combineDiagnostics()
 /// Params:
 ///   slot = the diagnostic provider slot to edit
 ///   uri = the document uri to attach the diagnostics array for
-ref auto createDiagnosticsFor(int slot)(string uri)
+ref auto createDiagnosticsFor(int slot)(DocumentUri uri)
 {
 	static assert(slot < NumDiagnosticProviders);
 	foreach (ref existing; diagnostics[slot])

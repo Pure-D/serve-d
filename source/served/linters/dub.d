@@ -149,7 +149,7 @@ void lint(Document document)
 		trace(issues);
 		auto result = appender!(PublishDiagnosticsParams[]);
 
-		void pushError(Diagnostic error, string uri)
+		void pushError(Diagnostic error, DocumentUri uri)
 		{
 			bool found;
 			foreach (ref elem; result.data)
@@ -232,7 +232,7 @@ void lint(Document document)
 }
 
 void extendErrorRange(ref TextRange range, WorkspaceD.Instance instance,
-	string uri, Diagnostic info = Diagnostic.init)
+	DocumentUri uri, Diagnostic info = Diagnostic.init)
 {
 	auto doc = documents.tryGet(uri);
 	if (!doc.rawText.length)

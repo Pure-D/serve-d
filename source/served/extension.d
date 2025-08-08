@@ -550,7 +550,7 @@ void doStartup(string workspaceUri, UserConfiguration userConfig)
 	struct Root
 	{
 		RootSuggestion root;
-		string uri;
+		DocumentUri uri;
 		WorkspaceD.Instance instance;
 	}
 
@@ -617,7 +617,7 @@ bool[] forceLoadProjects(string[] rootPaths)
 {
 	struct Root
 	{
-		string uri;
+		DocumentUri uri;
 		WorkspaceD.Instance instance;
 		bool success;
 	}
