@@ -745,25 +745,25 @@ struct TextDocumentManager
 {
 	/// Internal document storage. Only iterate over this using `foreach`, other
 	/// operations are not considered officially supported.
-	Document[] documentStore;
+	Document[DocumentUri] documentStore;
 
 	/// Same as $(LREF tryGet) but throws an exception if the URI doesn't exist.
 	ref Document opIndex(DocumentUri uri)
 	{
-		auto idx = documentStore.countUntil!(a => a.uri == uri);
-		if (idx == -1)
+		auto docP = uri in documentStore;
+		if (!docP)
 			throw new Exception("Document '" ~ uri ~ "' not found");
-		return documentStore[idx];
+		return *docP;
 	}
 
 	/// Tries to get a document from a URI, returns Document.init if it is not
 	/// in the in-memory cache / not sent by the client.
-	Document tryGet(DocumentUri uri)
+	Document tryGet(DocumentUri uri) pure nothrow @nogc
 	{
-		auto idx = documentStore.countUntil!(a => a.uri == uri);
-		if (idx == -1)
-			return Document.init;
-		return documentStore[idx];
+		auto docP = uri in documentStore;
+		if (!docP)
+			return typeof(return).init;
+		return *docP;
 	}
 
 	deprecated ref Document loadFromFilesystem()(DocumentUri uri)
@@ -790,24 +790,19 @@ struct TextDocumentManager
 	ref Document getOrFromFilesystem(DocumentUri uri, out bool inserted)
 	{
 		import served.lsp.uri : uriToFile;
-		import fs = std.file;
+		import std.file : readText;
 
-		auto idx = documentStore.countUntil!(a => a.uri == uri);
-		if (idx != -1)
-		{
-			inserted = false;
-			return documentStore[idx];
-		}
+		auto docP = uri in documentStore;
+		inserted = docP is null;
+		if (docP)
+			return *docP;
 
-		string path = uriToFile(uri);
-		auto content = fs.readText(path);
+		typeof(return) doc;
+		doc.uri = uri;
+		doc.version_ = -1;
+		doc.setContent(uri.uriToFile.readText());
 
-		auto index = documentStore.length++;
-		documentStore[index].uri = uri;
-		documentStore[index].version_ = -1;
-		documentStore[index].setContent(content);
-		inserted = true;
-		return documentStore[index];
+		return documentStore[uri] = doc;
 	}
 
 	///
@@ -850,14 +845,7 @@ struct TextDocumentManager
 	/// documents as it will break all features in that file until reopened.
 	bool unloadDocument(DocumentUri uri)
 	{
-		auto idx = documentStore.countUntil!(a => a.uri == uri);
-		if (idx == -1)
-			return false;
-
-		documentStore[idx] = documentStore[$ - 1];
-		documentStore.length--;
-		documentStore = documentStore.assumeSafeAppend;
-		return true;
+		return documentStore.remove(uri);
 	}
 
 	/// Returns the currently preferred syncKind to use with the client.
@@ -878,16 +866,7 @@ struct TextDocumentManager
 	/// if it did exist.
 	ref Document insertOrUpdate(Document d)
 	{
-		auto idx = documentStore.countUntil!(a => a.uri == d.uri);
-		if (idx != -1)
-		{
-			return documentStore[idx] = d;
-		}
-		else
-		{
-			auto index = documentStore.length++;
-			return documentStore[index] = d;
-		}
+		return documentStore[d.uri] = d;
 	}
 
 	/// Processes an LSP packet and performs the document update in-memory that
@@ -921,16 +900,16 @@ struct TextDocumentManager
 		{
 			auto params = msg.paramsJson.deserializeJson!DidChangeTextDocumentParams;
 			auto targetUri = params.textDocument.uri;
-			auto idx = documentStore.countUntil!(a => a.uri == targetUri);
-			if (idx >= 0)
+			if (auto docP = targetUri in documentStore)
 			{
-				documentStore[idx].version_ = params.textDocument.version_;
+				ref doc = *docP;
+				doc.version_ = params.textDocument.version_;
 				foreach (change; params.contentChanges)
 				{
 					if (!change.range.isNone)
-						documentStore[idx].applyChange(change.range.deref, change.text);
+						doc.applyChange(change.range.deref, change.text);
 					else
-						documentStore[idx].setContent(change.text);
+						doc.setContent(change.text);
 				}
 			}
 			return true;
