@@ -17,7 +17,7 @@ struct ProfileGCEntry
 	size_t bytesAllocated;
 	size_t allocationCount;
 	string type;
-	string uri, displayFile;
+	DocumentUri uri, displayFile;
 	uint line;
 }
 
@@ -150,7 +150,7 @@ void setupProfileGCWatchers()
 }
 
 @onProjectAvailable
-void onProfileGCProjectAvailable(WorkspaceD.Instance instance, string dir, string uri)
+void onProfileGCProjectAvailable(WorkspaceD.Instance instance, string dir, DocumentUri uri)
 {
 	profileGCCache.update(uri.chomp("/") ~ "/profilegc.log");
 }

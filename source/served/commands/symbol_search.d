@@ -105,7 +105,7 @@ SymbolInformationEx[] provideDocumentSymbolsOld(DocumentSymbolParamsEx params)
 	return params.verbose ? retVerbose.data : ret.data;
 }
 
-SymbolInformationEx makeSymbolInfoEx(scope const ref DefinitionElement def, string uri, Position startPosition, Position endPosition)
+SymbolInformationEx makeSymbolInfoEx(scope const ref DefinitionElement def, DocumentUri uri, Position startPosition, Position endPosition)
 {
 	SymbolInformationEx info;
 	info.name = def.name;

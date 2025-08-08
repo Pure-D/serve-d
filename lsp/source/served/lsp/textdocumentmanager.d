@@ -748,7 +748,7 @@ struct TextDocumentManager
 	Document[] documentStore;
 
 	/// Same as $(LREF tryGet) but throws an exception if the URI doesn't exist.
-	ref Document opIndex(string uri)
+	ref Document opIndex(DocumentUri uri)
 	{
 		auto idx = documentStore.countUntil!(a => a.uri == uri);
 		if (idx == -1)
@@ -758,7 +758,7 @@ struct TextDocumentManager
 
 	/// Tries to get a document from a URI, returns Document.init if it is not
 	/// in the in-memory cache / not sent by the client.
-	Document tryGet(string uri)
+	Document tryGet(DocumentUri uri)
 	{
 		auto idx = documentStore.countUntil!(a => a.uri == uri);
 		if (idx == -1)
@@ -766,7 +766,7 @@ struct TextDocumentManager
 		return documentStore[idx];
 	}
 
-	deprecated ref Document loadFromFilesystem()(string uri)
+	deprecated ref Document loadFromFilesystem()(DocumentUri uri)
 	{
 		static assert(false, "use getOrFromFilesystem instead (LSP open takes priority over filesystem)");
 	}
@@ -787,7 +787,7 @@ struct TextDocumentManager
 	/// Throws: FileException in case the file doesn't exist or other file
 	///         system errors. In this case no new document should have been
 	///         inserted yet.
-	ref Document getOrFromFilesystem(string uri, out bool inserted)
+	ref Document getOrFromFilesystem(DocumentUri uri, out bool inserted)
 	{
 		import served.lsp.uri : uriToFile;
 		import fs = std.file;
@@ -839,7 +839,7 @@ struct TextDocumentManager
 	}
 
 	/// ditto
-	ref Document getOrFromFilesystem(string uri)
+	ref Document getOrFromFilesystem(DocumentUri uri)
 	{
 		bool b;
 		return getOrFromFilesystem(uri, b);
@@ -848,7 +848,7 @@ struct TextDocumentManager
 	/// Unloads the given URI so it's no longer accessible. Note that this
 	/// should only be done for documents loaded manually and never for LSP
 	/// documents as it will break all features in that file until reopened.
-	bool unloadDocument(string uri)
+	bool unloadDocument(DocumentUri uri)
 	{
 		auto idx = documentStore.countUntil!(a => a.uri == uri);
 		if (idx == -1)
@@ -902,7 +902,7 @@ struct TextDocumentManager
 		{
 			auto params = msg.paramsJson.deserializeJson!DidOpenTextDocumentParams;
 			// there may be at most one didOpen request, but library code can
-			// load files from the filesystem 
+			// load files from the filesystem
 			insertOrUpdate(Document(params.textDocument));
 			return true;
 		}
@@ -1058,7 +1058,7 @@ struct PerDocumentCache(T)
 
 	Entry[] entries;
 
-	T cached(ref TextDocumentManager source, string uri)
+	T cached(ref TextDocumentManager source, DocumentUri uri)
 	{
 		auto newest = source.tryGet(uri);
 		foreach (entry; entries)
@@ -1361,7 +1361,7 @@ void main() {
 		// ü®™🍳键 “purple” 在表中
 
 	} else { // line 31
-		//表中不存在 键 “purple” 
+		//表中不存在 键 “purple”
 	}
 
 	string x;

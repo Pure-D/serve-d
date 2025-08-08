@@ -308,7 +308,7 @@ struct UnittestInfo
 
 struct RescanTestsParams
 {
-	string uri = null;
+	DocumentUri uri = null;
 }
 
 /// Parameters for served/listArchTypes

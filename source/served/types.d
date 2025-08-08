@@ -301,7 +301,7 @@ struct Workspace
 	{
 		static struct WorkspaceState
 		{
-			string uri, name;
+			DocumentUri uri, name;
 			bool initialized;
 			bool selected;
 			const(string)[string] pendingErrors;
@@ -352,7 +352,7 @@ Workspace fallbackWorkspace;
 Workspace[] workspaces;
 ClientCapabilities capabilities;
 
-size_t workspaceIndex(string uri)
+size_t workspaceIndex(DocumentUri uri)
 {
 	if (!uri.startsWith("file://"))
 		throw new Exception("Passed a non file:// uri to workspace(uri): '" ~ uri ~ "'");
@@ -372,7 +372,7 @@ size_t workspaceIndex(string uri)
 	return best;
 }
 
-ref Workspace handleThings(return ref Workspace workspace, string uri, bool userExecuted,
+ref Workspace handleThings(return ref Workspace workspace, DocumentUri uri, bool userExecuted,
 		string file = __FILE__, size_t line = __LINE__)
 {
 	if (userExecuted)
@@ -411,7 +411,7 @@ ref Workspace handleThings(return ref Workspace workspace, string uri, bool user
 	return workspace;
 }
 
-ref Workspace workspace(string uri, bool userExecuted = true,
+ref Workspace workspace(DocumentUri uri, bool userExecuted = true,
 		string file = __FILE__, size_t line = __LINE__)
 {
 	if (!uri.length)
@@ -423,7 +423,7 @@ ref Workspace workspace(string uri, bool userExecuted = true,
 	return workspaces[best].handleThings(uri, userExecuted, file, line);
 }
 
-ref Workspace bestWorkspaceByDependency(string uri)
+ref Workspace bestWorkspaceByDependency(DocumentUri uri)
 {
 	size_t best = size_t.max;
 	size_t bestLength;
@@ -472,12 +472,12 @@ WorkspaceD.Instance activeInstance() @property
 	return _activeInstance;
 }
 
-string workspaceRootFor(string uri)
+string workspaceRootFor(DocumentUri uri)
 {
 	return workspace(uri).folder.uri.uriToFile;
 }
 
-bool hasWorkspace(string uri)
+bool hasWorkspace(DocumentUri uri)
 {
 	foreach (i, ref workspace; workspaces)
 		if (uri.startsWith(workspace.folder.uri))
@@ -485,7 +485,7 @@ bool hasWorkspace(string uri)
 	return false;
 }
 
-ref Configuration config(string uri, bool userExecuted = true,
+ref Configuration config(DocumentUri uri, bool userExecuted = true,
 		string file = __FILE__, size_t line = __LINE__)
 {
 	return workspace(uri, userExecuted, file, line).config;
@@ -615,12 +615,12 @@ enum onRegisteredComponents;
 /// Should not access any components, otherwise it will force a load, but only
 /// show hints in the UI. When it's accessed and actually being loaded the
 /// events `onAddingProject` and `onAddedProject` will be emitted.
-/// Signature: `(WorkspaceD.Instance, string dir, string uri)`
+/// Signature: `(WorkspaceD.Instance, string dir, DocumentUri uri)`
 enum onProjectAvailable;
 
 /// Event called when a new workspaced instance is created. Called before dub or
 /// fsworkspace is loaded.
-/// Signature: `(WorkspaceD.Instance, string dir, string uri)`
+/// Signature: `(WorkspaceD.Instance, string dir, DocumentUri uri)`
 enum onAddingProject;
 
 /// Event called when a new project root is finished setting up. Called when all
