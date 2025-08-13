@@ -902,14 +902,13 @@ struct TextDocumentManager
 			auto targetUri = params.textDocument.uri;
 			if (auto docP = targetUri in documentStore)
 			{
-				ref doc = *docP;
-				doc.version_ = params.textDocument.version_;
+				(*docP).version_ = params.textDocument.version_;
 				foreach (change; params.contentChanges)
 				{
 					if (!change.range.isNone)
-						doc.applyChange(change.range.deref, change.text);
+						(*docP).applyChange(change.range.deref, change.text);
 					else
-						doc.setContent(change.text);
+						(*docP).setContent(change.text);
 				}
 			}
 			return true;
