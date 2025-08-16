@@ -1349,8 +1349,8 @@ void main() {
 	enum testSOF_offset = 0;
 	enum testSOF_position = Position(0, 0);
 
-	enum testEOF_byte = 872;
-	enum testEOF_offset = 805;
+	enum testEOF_byte = 871;
+	enum testEOF_offset = 804;
 	enum testEOF_position = Position(36, 1);
 
 	// in line before unicode
