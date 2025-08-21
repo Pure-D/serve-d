@@ -781,16 +781,18 @@ struct TextDocumentManager
 	///           URIs. (e.g. normalized URIs)
 	///     inserted = if specified, gets set to true if the file was read from
 	///                filesystem and false if it was already present.
+	///     skipTextValidation = if specified, skips UTF-8 validation of document
+    ///                text read from filesystem.
 	///
 	/// Returns: the created document
 	///
 	/// Throws: FileException in case the file doesn't exist or other file
 	///         system errors. In this case no new document should have been
 	///         inserted yet.
-	ref Document getOrFromFilesystem(DocumentUri uri, out bool inserted)
+	ref Document getOrFromFilesystem(DocumentUri uri, out bool inserted, bool skipTextValidation = false)
 	{
 		import served.lsp.uri : uriToFile;
-		import std.file : readText;
+		import std.file : read, readText;
 
 		auto docP = uri in documentStore;
 		inserted = docP is null;
@@ -800,7 +802,9 @@ struct TextDocumentManager
 		typeof(return) doc;
 		doc.uri = uri;
 		doc.version_ = -1;
-		doc.setContent(uri.uriToFile.readText());
+        const path = uri.uriToFile;
+        const text = skipTextValidation ? (cast(string)path.read) : path.readText;
+		doc.setContent(text);
 
 		return documentStore[uri] = doc;
 	}
