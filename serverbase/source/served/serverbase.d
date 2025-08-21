@@ -108,7 +108,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		static assert(false, "Missing members or memberModules field in ExtensionModule " ~ ExtensionModule.stringof);
 	mixin EventProcessor!(ExtensionModule, serverConfig.eventConfig) eventProcessor;
 
-	/// Calls a method associated with the given request type in the 
+	/// Calls a method associated with the given request type in the
 	ResponseMessageRaw processRequest(RequestMessageRaw msg)
 	{
 		debug(PerfTraceLog) mixin(traceStatistics(__FUNCTION__));
@@ -457,7 +457,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 
 	/// Runs the language server and returns true once it exited gracefully or
 	/// false if it didn't exit gracefully.
-	bool run()
+	bool run(in Duration loopIterationDelay = 10.msecs)
 	{
 		auto input = newStdinReader();
 		input.start();
@@ -470,11 +470,11 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		rpc = new RPCProcessor(input, stdout);
 		rpc.call();
 		trace("RPC started");
-		return runImpl(); 
+		return runImpl(loopIterationDelay);
 	}
 
 	/// Same as `run`, assumes `rpc` is initialized and ready
-	bool runImpl()
+	bool runImpl(in Duration loopIterationDelay = 10.msecs)
 	{
 		fibersMutex = new Mutex();
 
@@ -563,7 +563,7 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				else
 					pushFiber(msg.fiberName, gotNotify(msg));
 			}
-			Thread.sleep(10.msecs);
+			Thread.sleep(loopIterationDelay);
 			synchronized (fibersMutex)
 				fibers.call();
 
