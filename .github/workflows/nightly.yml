@@ -11,7 +11,7 @@ jobs:
       fail-fast: false
       matrix:
         # ubuntu / linux must run on kinda old linux for glibc compatibility!
-        os: [ubuntu-20.04, windows-latest, macos-latest]
+        os: [ubuntu-22.04, windows-latest, macos-latest]
         arch: [x86_64]
         include:
           # use for 32 bit build
@@ -51,14 +51,14 @@ jobs:
       # Linux release
       - name: Build Linux release
         run: ./ci/build.sh
-        if: matrix.os == 'ubuntu-20.04'
+        if: matrix.os == 'ubuntu-22.04'
         env:
           ARCH: ${{ matrix.arch }}
           ARCH_SHORT: ${{ steps.vars.outputs.arch_short }}
           BUILD: ${{ steps.vars.outputs.build }}
 
       - name: Deploy Linux release
-        if: matrix.os == 'ubuntu-20.04'
+        if: matrix.os == 'ubuntu-22.04'
         uses: WebFreak001/deploy-nightly@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -70,7 +70,7 @@ jobs:
           asset_content_type: application/x-gtar
 
       - name: Deploy Linux release (tar.gz)
-        if: matrix.os == 'ubuntu-20.04'
+        if: matrix.os == 'ubuntu-22.04'
         uses: WebFreak001/deploy-nightly@master
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
