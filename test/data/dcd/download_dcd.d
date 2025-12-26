@@ -70,8 +70,8 @@ void main()
 	{
 		version (AArch64)
 		{
-			string zip = "dcd-v" ~ ver ~ "-osx-arm64.tar.gz";
-			string url = format!"https://github.com/dlang-community/DCD/releases/download/v%s/dcd-v%s-osx-arm64.tar.gz"(ver, ver);
+			string zip = "dcd-v" ~ ver ~ "-osx-aarch64.tar.gz";
+			string url = format!"https://github.com/dlang-community/DCD/releases/download/v%s/dcd-v%s-osx-aarch64.tar.gz"(ver, ver);
 		}
 		else
 		{
