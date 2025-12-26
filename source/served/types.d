@@ -45,7 +45,7 @@ import mir.serde;
 import workspaced.api;
 
 deprecated("import stdlib_detect directly")
-public import served.utils.stdlib_detect : parseDmdConfImports, parseDflagsImports;
+public import served.utils.stdlib_detect : parseDflagsImports, parseDmdConfImports;
 
 static immutable IncludedFeatures = ["d", "workspaces"];
 
@@ -96,6 +96,7 @@ struct Configuration
 		bool enableGCProfilerDecorations = true;
 		bool enableDCDHighlight = true;
 		bool enableFallbackHighlight = true;
+		bool enableInlayHints = false;
 		bool neverUseDub = false;
 		string[] projectImportPaths;
 		string dubConfiguration;

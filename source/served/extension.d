@@ -45,6 +45,7 @@ public import served.commands.folding;
 public import served.commands.format;
 public import served.commands.highlight;
 public import served.commands.index;
+public import served.commands.inlay_hints;
 public import served.commands.references;
 public import served.commands.rename;
 public import served.commands.symbol_search;
@@ -300,22 +301,23 @@ InitializeResult initialize(InitializeParams params)
 	ServerCapabilities serverCapabilities = {
 		textDocumentSync: textDocumentSync,
 		// only provide fixes when doCompleteSnippets is requested
-		completionProvider: completionProvider,
-		referencesProvider: true,
-		signatureHelpProvider: signatureHelpProvider,
-		workspaceSymbolProvider: true,
-		definitionProvider: true,
-		hoverProvider: true,
 		codeActionProvider: codeActionProvider,
 		codeLensProvider: codeLensProvider,
-		documentSymbolProvider: true,
-		documentFormattingProvider: true,
-		documentRangeFormattingProvider: true,
 		colorProvider: DocumentColorOptions.init,
+		completionProvider: completionProvider,
+		definitionProvider: true,
+		documentFormattingProvider: true,
 		documentHighlightProvider: true,
+		documentRangeFormattingProvider: true,
+		documentSymbolProvider: true,
 		foldingRangeProvider: foldingRangeProvider,
+		hoverProvider: true,
+		inlayHintProvider: true,
+		referencesProvider: true,
 		renameProvider: renameProvider,
-		workspace: workspaceCapabilities
+		signatureHelpProvider: signatureHelpProvider,
+		workspace: workspaceCapabilities,
+		workspaceSymbolProvider: true,
 	};
 	result.capabilities = serverCapabilities;
 
@@ -1384,6 +1386,7 @@ alias memberModules = AliasSeq!(
 	served.commands.format,
 	served.commands.highlight,
 	served.commands.index,
+	served.commands.inlay_hints,
 	served.commands.references,
 	served.commands.rename,
 	served.commands.symbol_search,
