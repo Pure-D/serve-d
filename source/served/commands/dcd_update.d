@@ -32,8 +32,7 @@ version (Win32)
 		bool isDCDFromSource()
 		{
 			// needed to check for 64 bit process compatibility on 32 bit binaries because of WoW64
-			import core.sys.windows.windows : GetNativeSystemInfo, SYSTEM_INFO,
-				PROCESSOR_ARCHITECTURE_AMD64, PROCESSOR_ARCHITECTURE_IA64;
+			import core.sys.windows.windows : GetNativeSystemInfo, PROCESSOR_ARCHITECTURE_AMD64, PROCESSOR_ARCHITECTURE_IA64, SYSTEM_INFO;
 
 			SYSTEM_INFO sysInfo;
 			GetNativeSystemInfo(&sysInfo);
@@ -167,7 +166,7 @@ void updateDCD()
 		else version (OSX)
 		{
 			version (AArch64)
-				url = commonPrefix ~ "-osx-arm64.tar.gz";
+				url = commonPrefix ~ "-osx-aarch64.tar.gz";
 			else
 				url = commonPrefix ~ "-osx-x86_64.tar.gz";
 		}
@@ -175,9 +174,9 @@ void updateDCD()
 		if (!url.length)
 			assert(false, "this branch should not be reachable on this platform");
 
-		import std.process : pipeProcess, Redirect, Config, wait;
-		import std.zip : ZipArchive;
 		import core.thread : Fiber;
+		import std.process : Config, pipeProcess, Redirect, wait;
+		import std.zip : ZipArchive;
 
 		string destFile = buildPath(outputFolder, url.baseName);
 
