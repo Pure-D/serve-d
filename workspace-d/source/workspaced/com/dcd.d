@@ -18,8 +18,8 @@ import std.string;
 import std.typecons;
 
 import workspaced.api;
-import workspaced.helpers;
 import workspaced.com.dcd_version;
+import workspaced.helpers;
 
 import served.dcd.client;
 
@@ -524,6 +524,33 @@ class DCDComponent : ComponentWrapper
 		return ret;
 	}
 
+	/// Finds all inlay hints (badges shown in code, helping show what types
+	/// resolve to)
+	Future!(InlayHint[]) getInlayHints(scope const(char)[] code)
+	{
+		// TODO: support code range
+		auto ret = new typeof(return);
+		gthreads.create({
+			mixin(traceTask);
+			try
+			{
+				if (!running)
+				{
+					ret.finish([]);
+					return;
+				}
+
+				auto inlayHints = client.requestInlayHints(CodeRequest("stdin", code));
+				ret.finish(inlayHints);
+			}
+			catch (Throwable t)
+			{
+				ret.error(t);
+			}
+		});
+		return ret;
+	}
+
 	/// Returns the used socket file. Only available on OSX, linux and BSD with DCD >= 0.8.0
 	/// Throws an error if not available.
 	string getSocketFile()
@@ -709,6 +736,7 @@ class NullDCDClient : IDCDClient
 		"DCDResponse.Completion[] requestSymbolSearch(string query)",
 		"LocalUse requestLocalUse(CodeRequest loc)",
 		"Completion requestAutocomplete(CodeRequest loc)",
+		"InlayHint[] requestInlayHints(CodeRequest loc)",
 	];
 
 	static foreach (method; Methods)

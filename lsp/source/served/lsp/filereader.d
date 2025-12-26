@@ -1,7 +1,7 @@
 module served.lsp.filereader;
 
-import core.thread;
 import core.sync.mutex;
+import core.thread;
 
 import std.algorithm;
 import std.stdio;
@@ -12,8 +12,8 @@ import std.stdio;
 /// transmitted.
 version (Windows) class WindowsStdinReader : FileReader
 {
-	import core.sys.windows.windows;
 	import core.sync.event;
+	import core.sys.windows.windows;
 
 	this()
 	{
@@ -87,8 +87,8 @@ version (Windows)
 /// ditto
 version (Windows) class WindowsFileReader : FileReader
 {
-	import core.sys.windows.windows;
 	import core.sync.event;
+	import core.sys.windows.windows;
 
 	this(File file)
 	{
@@ -168,11 +168,11 @@ version (Posix) class PosixStdinReader : PosixFileReader
 version (Posix) class PosixFileReader : FileReader
 {
 	import core.stdc.errno;
+	import core.sync.event;
 	import core.sys.posix.sys.select;
 	import core.sys.posix.sys.time;
 	import core.sys.posix.sys.types;
 	import core.sys.posix.unistd;
-	import core.sync.event;
 
 	File stdFile;
 	Event closeEvent;
@@ -194,7 +194,7 @@ version (Posix) class PosixFileReader : FileReader
 	{
 		closeEvent.reset();
 		scope (exit)
-			closeEvent.set();
+			closeEvent.setIfInitialized();
 		int fd = stdFile.fileno;
 
 		ubyte[4096] buffer;

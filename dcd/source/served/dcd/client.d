@@ -49,6 +49,7 @@ interface IDCDClient
 	DCDResponse.Completion[] requestSymbolSearch(string query);
 	LocalUse requestLocalUse(CodeRequest loc);
 	Completion requestAutocomplete(CodeRequest loc);
+	InlayHint[] requestInlayHints(CodeRequest loc);
 }
 
 class ExternalDCDClient : IDCDClient
@@ -186,6 +187,35 @@ class ExternalDCDClient : IDCDClient
 		return data;
 	}
 
+	InlayHint[] requestInlayHints(CodeRequest loc)
+	{
+		auto pipes = doClient(["--inlayHints"]);
+		scope (exit)
+		{
+			pipes.pid.wait();
+			pipes.destroy();
+		}
+		pipes.stdin.write(loc.sourceCode);
+		pipes.stdin.close();
+		auto results = appender!(InlayHint[]);
+		while (pipes.stdout.isOpen && !pipes.stdout.eof)
+		{
+			string line = (() @trusted => pipes.stdout.readln())();
+			if (line.length == 0)
+				continue;
+			string[] splits = line.chomp.split('\t');
+			if (splits.length >= 3)
+			{
+				InlayHint hint;
+				hint.kind = splits[0] == "" ? char.init : splits[1][0];
+				hint.identifier = splits[1];
+				hint.symbolLocation = splits[2].to!size_t;
+				results ~= hint;
+			}
+		}
+		return results.data;
+	}
+
 	DCDResponse.Completion[] requestSymbolSearch(string query)
 	{
 		auto pipes = doClient(["--search", query]);
@@ -228,7 +258,7 @@ class ExternalDCDClient : IDCDClient
 		}
 		pipes.stdin.write(loc.sourceCode);
 		pipes.stdin.close();
-		
+
 		string header = (() @trusted => pipes.stdout.readln())().chomp;
 		if (header == "00000" || !header.length)
 			return LocalUse.init;
@@ -280,7 +310,7 @@ class ExternalDCDClient : IDCDClient
 			c.type = CompletionType.identifiers;
 			return c;
 		}
-		
+
 		c.type = cast(CompletionType)data[0];
 		if (c.type == CompletionType.identifiers
 			|| c.type == CompletionType.calltips)
@@ -355,7 +385,7 @@ private:
 class BuiltinDCDClient : IDCDClient
 {
 	public static enum minSupportedServerInclusive = [0, 8, 0];
-	public static enum maxSupportedServerExclusive = [0, 14, 0];
+	public static enum maxSupportedServerExclusive = [0, 17, 0];
 
 	public static immutable clientVersion = DCD_VERSION;
 
@@ -561,6 +591,18 @@ class BuiltinDCDClient : IDCDClient
 		return performRequest(request).completions.map!"a.documentation".array;
 	}
 
+	InlayHint[] requestInlayHints(CodeRequest loc)
+	{
+		AutocompleteRequest request;
+		request.kind = RequestKind.inlayHints;
+		loc.apply(request);
+		return performRequest(request).completions.map!(a => InlayHint(
+				a.kind,
+				a.identifier,
+				a.symbolLocation
+		)).array;
+	}
+
 	DCDResponse.Completion[] requestSymbolSearch(string query)
 	{
 		AutocompleteRequest request;
@@ -639,6 +681,13 @@ struct LocalUse
 		declarationLocation = res.symbolLocation;
 		uses = res.completions.map!"a.symbolLocation".array;
 	}
+}
+
+struct InlayHint
+{
+	char kind;
+	string identifier;
+	size_t symbolLocation;
 }
 
 private string unescapeTabs(string val)

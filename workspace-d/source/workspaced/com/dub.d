@@ -1093,7 +1093,7 @@ class BackwardsCompatiblePackageManager : PackageManager
 		{
 			auto folderName = name.main.toString ~ "-" ~ vers.toString;
 			auto path = location.packagePath ~ folderName ~ name.main.toString;
-			if (!this.existsDirectory(path))
+			if (!this.fs.existsDirectory(path))
 				continue;
 
 			auto p = this.load(path);
