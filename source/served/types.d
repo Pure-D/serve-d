@@ -87,6 +87,7 @@ struct Configuration
 		bool enableSDLLinting = true;
 		bool enableStaticLinting = true;
 		bool enableDubLinting = true;
+		bool enableCcdbLinting = true;
 		bool enableAutoComplete = true;
 		bool enableAutoImportCompletions = true;
 		bool enableFormatting = true;
@@ -98,7 +99,9 @@ struct Configuration
 		bool enableFallbackHighlight = true;
 		bool enableInlayHints = false;
 		bool neverUseDub = false;
+		bool neverUseCcdb = false;
 		string[] projectImportPaths;
+		string ccdbPath;
 		string dubConfiguration;
 		string dubArchType;
 		string dubBuildType;

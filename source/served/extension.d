@@ -33,6 +33,7 @@ import workspaced.coms;
 
 // list of all commands for auto dispatch
 public import served.commands.calltips;
+public import served.commands.ccdb;
 public import served.commands.code_actions;
 public import served.commands.code_lens;
 public import served.commands.color;
@@ -113,6 +114,14 @@ void changedConfig(ConfigWorkspace target, string[] paths, served.types.Configur
 				backend.get!DCDComponent(workspaceFs)
 					.addImports(config.d.projectImportPaths.map!(a => a.userPath).array);
 			break;
+		case "d.ccdbPath":
+			if (config.d.ccdbPath.length &&
+				backend.has!ClangCompilationDatabaseComponent(workspaceFs))
+			{
+				const ccdbPath = config.d.ccdbPath.userPath.buildNormalizedPath();
+				backend.get!ClangCompilationDatabaseComponent(workspaceFs).setDbPath(ccdbPath);
+			}
+			break;
 		case "d.dubConfiguration":
 			if (backend.has!DubComponent(workspaceFs))
 			{
@@ -172,9 +181,11 @@ void changedConfig(ConfigWorkspace target, string[] paths, served.types.Configur
 			{
 				import served.linters.dscanner : clear1 = clear;
 				import served.linters.dub : clear2 = clear;
+				import served.linters.ccdb : clear3 = clear;
 
 				clear1();
 				clear2();
+				clear3();
 			}
 			break;
 		case "d.enableStaticLinting":
@@ -189,6 +200,14 @@ void changedConfig(ConfigWorkspace target, string[] paths, served.types.Configur
 			if (!config.d.enableDubLinting)
 			{
 				import served.linters.dub : clear;
+
+				clear();
+			}
+			break;
+		case "d.enableCcdbLinting":
+			if (!config.d.enableCcdbLinting)
+			{
+				import served.linters.ccdb : clear;
 
 				clear();
 			}
@@ -216,7 +235,7 @@ string[] getPossibleSourceRoots(string workspaceFolder)
 	import std.path : isAbsolute;
 
 	auto confPaths = config(workspaceFolder.uriFromFile, false).d.projectImportPaths.map!(
-			a => a.isAbsolute ? a : buildNormalizedPath(workspaceRoot, a));
+		a => a.isAbsolute ? a : buildNormalizedPath(workspaceRoot, a));
 	if (!confPaths.empty)
 		return confPaths.array;
 	auto a = buildNormalizedPath(workspaceFolder, "source");
@@ -392,6 +411,8 @@ void doGlobalStartup(UserConfiguration config)
 		backend.register!DubComponent(false);
 		trace("Registering fsworkspace");
 		backend.register!FSWorkspaceComponent(false);
+		trace("Registering ccdb");
+		backend.register!ClangCompilationDatabaseComponent;
 		trace("Registering dcd");
 		backend.register!DCDComponent;
 		trace("Registering dcdext");
@@ -765,6 +786,19 @@ void delayedProjectActivation(WorkspaceD.Instance instance, string workspaceRoot
 
 	emitExtensionEvent!onAddingProject(instance, workspaceRoot, workspaceUri);
 
+	scope (success)
+	{
+		trace("Started files provider for root ", root);
+
+		trace("Loaded Components for ", instance.cwd, ": ",
+			instance.instanceComponents.map!"a.info.name");
+
+		emitExtensionEvent!onAddedProject(instance, workspaceRoot, workspaceUri);
+
+		rootTimer.stop();
+		info("Root ", root, " initialized in ", rootTimer.peek);
+	}
+
 	bool disableDub = proj.config.d.neverUseDub || !root.useDub;
 	bool loadedDub;
 	Exception err;
@@ -855,44 +889,69 @@ void delayedProjectActivation(WorkspaceD.Instance instance, string workspaceRoot
 		}
 
 		if (!loadedDub)
+		{
 			error("Exception starting dub: ", err);
+			proj.startupError(workspaceRoot, translate!"d.ext.dubFail"(instance.cwd, err ? err.msg
+					: ""));
+		}
 		else
-			trace("Started dub with root dependencies ", instance.get!DubComponent.rootDependencies);
+			trace("Started dub with root dependencies ", instance
+					.get!DubComponent.rootDependencies);
 	}
-	if (!loadedDub)
-	{
-		if (!disableDub)
-		{
-			error("Failed starting dub in ", root, " - falling back to fsworkspace");
-			proj.startupError(workspaceRoot, translate!"d.ext.dubFail"(instance.cwd, err ? err.msg : ""));
-		}
-		try
-		{
-			trace("Starting fsworkspace...");
 
-			instance.config.set("fsworkspace", "additionalPaths",
-					getPossibleSourceRoots(workspaceRoot));
-			if (!backend.attachEager(instance, "fsworkspace", err))
-				throw new Exception("Attach returned failure: " ~ err.msg);
-		}
-		catch (Exception e)
-		{
-			error(e);
-			proj.startupError(workspaceRoot, translate!"d.ext.fsworkspaceFail"(instance.cwd));
-		}
-	}
-	else
+	if (loadedDub)
 		didLoadDubProject();
 
-	trace("Started files provider for root ", root);
+	string ccdbPath = proj.config.d.ccdbPath;
+	if (!ccdbPath.length && !loadedDub && !proj.config.d.neverUseCcdb)
+		ccdbPath = discoverCcdb(workspaceRoot);
+	bool loadedCcdb;
+	if (ccdbPath.length)
+	{
+		trace("starting CCDB with ", ccdbPath);
 
-	trace("Loaded Components for ", instance.cwd, ": ",
-			instance.instanceComponents.map!"a.info.name");
+		try
+		{
+			if (backend.attachEager(instance, "ccdb", err))
+			{
+				instance.get!ClangCompilationDatabaseComponent.setDbPath(ccdbPath);
+				loadedCcdb = true;
+			}
+		}
+		catch (Exception ex)
+		{
+			err = ex;
+		}
+		if (!loadedCcdb)
+		{
 
-	emitExtensionEvent!onAddedProject(instance, workspaceRoot, workspaceUri);
+			error("Exception loading CCDB: ", err);
+			proj.startupError(workspaceRoot, translate!"d.ext.ccdbFail"(instance.cwd, err ? err.msg : ""));
+		}
+		else
+			trace("Initialized CCDB with import paths ", instance
+					.get!ClangCompilationDatabaseComponent.importPaths);
+	}
 
-	rootTimer.stop();
-	info("Root ", root, " initialized in ", rootTimer.peek);
+	if (loadedDub || loadedCcdb)
+		return;
+
+	error("Failed starting dub or CCDB in ", root, " - falling back to fsworkspace");
+
+	try
+	{
+		trace("Starting fsworkspace...");
+
+		instance.config.set("fsworkspace", "additionalPaths",
+			getPossibleSourceRoots(workspaceRoot));
+		if (!backend.attachEager(instance, "fsworkspace", err))
+			throw new Exception("Attach returned failure: " ~ err.msg);
+	}
+	catch (Exception e)
+	{
+		error(e);
+		proj.startupError(workspaceRoot, translate!"d.ext.fsworkspaceFail"(instance.cwd));
+	}
 }
 
 void notifySkippedRoots()
@@ -1098,7 +1157,10 @@ void didChangeWorkspaceFolders(DidChangeWorkspaceFoldersParams params)
 @protocolNotification("textDocument/didOpen")
 void onDidOpenDocument(DidOpenTextDocumentParams params)
 {
-	string lintSetting = config(params.textDocument.uri).d.lintOnFileOpen;
+	auto config = workspace(params.textDocument.uri).config;
+	auto document = documents[params.textDocument.uri];
+
+	string lintSetting = config.d.lintOnFileOpen;
 	bool shouldLint;
 	if (lintSetting == "always")
 		shouldLint = true;
@@ -1106,8 +1168,18 @@ void onDidOpenDocument(DidOpenTextDocumentParams params)
 		shouldLint = workspaceIndex(params.textDocument.uri) != size_t.max;
 
 	if (shouldLint)
+	{
 		onDidChangeDocument(DidChangeTextDocumentParams(
-			VersionedTextDocumentIdentifier(params.textDocument.uri, params.textDocument.version_)));
+				VersionedTextDocumentIdentifier(
+				params.textDocument.uri, params.textDocument.version_)));
+
+		if (config.d.enableCcdbLinting && document.languageId == "d")
+		{
+			import served.linters.ccdb;
+
+			lint(document);
+		}
+	}
 }
 
 @protocolNotification("textDocument/didClose")
@@ -1300,10 +1372,8 @@ ServedInfoResponse getServedInfo(ServedInfoParams params)
 @protocolNotification("textDocument/didSave")
 void onDidSaveDocument(DidSaveTextDocumentParams params)
 {
-	auto workspaceRoot = workspaceRootFor(params.textDocument.uri);
 	auto config = workspace(params.textDocument.uri).config;
 	auto document = documents[params.textDocument.uri];
-	auto fileName = params.textDocument.uri.uriToFile.baseName;
 
 	if (document.getLanguageId == "d" || document.getLanguageId == "diet")
 	{
@@ -1321,6 +1391,13 @@ void onDidSaveDocument(DidSaveTextDocumentParams params)
 			if (config.d.enableDubLinting)
 			{
 				import served.linters.dub;
+
+				lint(document);
+			}
+		}, {
+			if (config.d.enableCcdbLinting && document.languageId == "d")
+			{
+				import served.linters.ccdb;
 
 				lint(document);
 			}
@@ -1374,6 +1451,7 @@ shared static ~this()
 //dfmt off
 alias memberModules = AliasSeq!(
 	served.commands.calltips,
+	served.commands.ccdb,
 	served.commands.code_actions,
 	served.commands.code_lens,
 	served.commands.color,
