@@ -211,10 +211,10 @@ class DscannerComponent : ComponentWrapper
 
 	private static AutoFixFormatting parseDfmtArgs(string[] dfmtArgs)
 	{
+		import dfmt.config : BraceStyle;
+		import dfmt.editorconfig : EOL, IndentStyle;
 		import std.getopt;
 		import workspaced.com.dfmt;
-		import dfmt.editorconfig : IndentStyle, EOL;
-		import dfmt.config : BraceStyle;
 
 		auto config = DfmtComponent.parseConfig(dfmtArgs);
 
@@ -295,7 +295,7 @@ class DscannerComponent : ComponentWrapper
 
 		auto tokenIndex = issue.range[0].index == 0
 			? tokens.tokenIndexAtPosition(issue.range[0].line, issue.range[0].column)
-			: tokens.tokenIndexAtByteIndex(issue.range[0].index);
+			: tokens.tokenIndexAtByteIndex(cast(size_t) issue.range[0].index);
 		if (tokenIndex >= tokens.length)
 		{
 			if (tokens.length)
