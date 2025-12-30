@@ -41,8 +41,8 @@ class DCDComponent : ComponentWrapper
 		installedVersion = workspaced.globalConfiguration.get("dcd", "_installedVersion", "");
 
 		if (installedVersion.length
-				&& this.clientPath == workspaced.globalConfiguration.get("dcd", "_clientPath", "")
-				&& this.serverPath == workspaced.globalConfiguration.get("dcd", "_serverPath", ""))
+			&& this.clientPath == workspaced.globalConfiguration.get("dcd", "_clientPath", "")
+			&& this.serverPath == workspaced.globalConfiguration.get("dcd", "_serverPath", ""))
 		{
 			if (workspaced.globalConfiguration.get("dcd", "_usingInternal", false))
 				client = new BuiltinDCDClient();
@@ -68,7 +68,8 @@ class DCDComponent : ComponentWrapper
 		trace("Detected dcd-server ", serverPathInfo, installedVersion);
 
 		if (!checkVersion(installedVersion, BuiltinDCDClient.minSupportedServerInclusive)
-				|| checkVersion(installedVersion, BuiltinDCDClient.maxSupportedServerExclusive))
+			|| checkVersion(installedVersion, BuiltinDCDClient
+				.maxSupportedServerExclusive))
 		{
 			trace("Using dcd-client instead of internal workspace-d client");
 
@@ -93,18 +94,19 @@ class DCDComponent : ComponentWrapper
 		assert(this.clientPath == clientPath);
 		assert(this.serverPath == serverPath);
 
-		//dfmt off
 		if (isOutdated)
 			workspaced.messageHandler.warn(refInstance, "dcd",
 				WarningId.dcdOutdated, "DCD is outdated");
-		//dfmt on
 
 		workspaced.globalConfiguration.set("dcd", "_usingInternal",
-				cast(ExternalDCDClient) client ? false : true);
+			cast(ExternalDCDClient) client ? false : true);
 		workspaced.globalConfiguration.set("dcd", "_clientPath", clientPath);
 		workspaced.globalConfiguration.set("dcd", "_serverPath", serverPath);
 		workspaced.globalConfiguration.set("dcd", "_installedVersion", installedVersion);
 	}
+
+	// using both static and __gshared because it didn't work without both for me, but I couldn't isolate it
+	static __gshared bool ignoreOutdatedThisSession = false; // @suppress(dscanner.unnecessary.duplicate_attribute)
 
 	/// Returns: true if DCD version is less than latestKnownVersion or if server and client mismatch or if it doesn't exist.
 	bool isOutdated()
@@ -123,10 +125,19 @@ class DCDComponent : ComponentWrapper
 			}
 		}
 
+		if (ignoreOutdatedThisSession)
+			return false;
+
 		if (installedVersion.isLocallyCompiledDCD)
 			return false;
 
 		return !checkVersion(installedVersion, latestKnownVersion);
+	}
+
+	/// During the runtime of this serve-d run, ignore DCD outdated warnings.
+	void ignoreOutdatedForSession()
+	{
+		ignoreOutdatedThisSession = true;
 	}
 
 	/// Returns: The current detected installed version of dcd-client.
@@ -134,8 +145,8 @@ class DCDComponent : ComponentWrapper
 	///          client.
 	string clientInstalledVersion() @property const
 	{
-		return cast(ExternalDCDClient) client ? installedVersion :
-			BuiltinDCDClient.clientVersion ~ "-workspaced-builtin";
+		return cast(ExternalDCDClient) client ? installedVersion
+			: BuiltinDCDClient.clientVersion ~ "-workspaced-builtin";
 	}
 
 	/// Returns: The current detected installed version of dcd-server. `null` if
@@ -208,7 +219,8 @@ class DCDComponent : ComponentWrapper
 
 		client.runningPort = port;
 		client.socketFile = buildPath(tempDir,
-				"workspace-d-sock" ~ thisProcessID.to!string ~ "-" ~ uniform!ulong.to!string(36));
+			"workspace-d-sock" ~ thisProcessID.to!string ~ "-"
+				~ uniform!ulong.to!string(36));
 
 		string[] serverArgs;
 		static if (platformSupportsDCDUnixSockets)
@@ -218,7 +230,7 @@ class DCDComponent : ComponentWrapper
 
 		trace("Start dcd-server ", serverArgs);
 		serverPipes = raw(serverArgs ~ imports,
-				Redirect.stdin | Redirect.stderr | Redirect.stdoutToStderr);
+			Redirect.stdin | Redirect.stderr | Redirect.stdoutToStderr);
 		while (!serverPipes.stderr.eof)
 		{
 			string line = serverPipes.stderr.readln();
@@ -361,8 +373,11 @@ class DCDComponent : ComponentWrapper
 				}
 
 				ret.finish(client.requestSymbolSearch(query)
-					.map!(a => DCDSearchResult(a.symbolFilePath,
-					cast(int)a.symbolLocation, [cast(char) a.kind].idup)).array);
+					.map!(a => DCDSearchResult(
+					a.symbolFilePath,
+					cast(int) a.symbolLocation,
+					[cast(char) a.kind].idup
+					)).array);
 			}
 			catch (Throwable t)
 			{
@@ -382,7 +397,9 @@ class DCDComponent : ComponentWrapper
 	void addImports(string[] imports)
 	{
 		imports.sort!"a<b";
-		knownImports = multiwayUnion([knownImports.filterNonEmpty, imports.filterNonEmpty]).array;
+		knownImports = multiwayUnion([
+			knownImports.filterNonEmpty, imports.filterNonEmpty
+		]).array;
 		updateImports();
 	}
 
@@ -596,7 +613,7 @@ class DCDComponent : ComponentWrapper
 					{
 						calltips ~= item.definition;
 						symbols ~= DCDCompletions.Symbol(item.symbolFilePath,
-							cast(int)item.symbolLocation, item.documentation);
+							cast(int) item.symbolLocation, item.documentation);
 					}
 					completions._calltips = calltips.data;
 					completions._symbols = symbols.data;
@@ -608,9 +625,9 @@ class DCDComponent : ComponentWrapper
 					foreach (item; c.completions)
 					{
 						identifiers ~= DCDIdentifier(item.identifier,
-							item.kind == char.init ? "" : [cast(char)item.kind].idup,
+							item.kind == char.init ? "" : [cast(char) item.kind].idup,
 							item.definition, item.symbolFilePath,
-							cast(int)item.symbolLocation, item.documentation,
+							cast(int) item.symbolLocation, item.documentation,
 							item.typeOf);
 					}
 					completions._identifiers = identifiers.data;
@@ -680,12 +697,14 @@ private:
 
 	auto raw(string[] args, Redirect redirect = Redirect.all)
 	{
-		return pipeProcess(args, redirect, null, Config.none, refInstance ? instance.cwd : null);
+		return pipeProcess(args, redirect, null, Config.none, refInstance
+				? instance.cwd : null);
 	}
 
 	auto rawExec(string[] args)
 	{
-		return execute(args, null, Config.none, size_t.max, refInstance ? instance.cwd : null);
+		return execute(args, null, Config.none, size_t.max, refInstance
+				? instance.cwd : null);
 	}
 
 	bool isSocketRunning(string socket)

@@ -172,6 +172,7 @@ d.coverage.tooltip: Coverage in this file generated from the according .lst file
 
 d.served.failDCD: Could not start DCD. (root={0}, path={1}, {2})
 d.served.outdatedDCD: DCD is outdated. (target={0}, installed={1})
+d.served.ignoreDCDUpdate: Continue anyway
 d.served.failDscanner: Could not start DScanner. (root={0}, path={1})
 d.served.tooManySubprojects.path: There are too many subprojects in this project according to d.manyProjectsThreshold\n\nDo you want to load `{0}`?
 d.served.tooManySubprojects.load: Load

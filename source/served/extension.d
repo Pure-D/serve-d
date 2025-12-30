@@ -445,13 +445,29 @@ void doGlobalStartup(UserConfiguration config)
 						action = translate!"d.ext.compileProgram"("DCD");
 					else
 						action = translate!"d.ext.downloadProgram"("DCD");
+					string continueAnyway = translate!"d.served.ignoreDCDUpdate";
 
-					auto res = rpc.window.requestMessage(MessageType.error, outdatedMessage, [
-							action
-						]);
+					string[] actions = [action, continueAnyway];
+					if (!backend.has!DCDComponent)
+						actions.length--;
+
+					auto res = rpc.window.requestMessage(MessageType.error, outdatedMessage, actions);
 
 					if (res == action)
 						spawnFiber("updateDCD", (&updateDCD).toDelegate);
+					else if (res == continueAnyway)
+					{
+						import served.backend.lazy_workspaced : LazyWorkspaceD;
+
+						backend.get!DCDComponent.ignoreOutdatedForSession();
+						dcdUpdating = false;
+						foreach (instance; backend.instances) {
+							if (auto lazyInstance = cast(LazyWorkspaceD.LazyInstance) instance) {
+								if (!lazyInstance.isPending("dcd"))
+									startDCDServer(instance, instance.cwd.uriFromFile);
+							}
+						}
+					}
 				});
 			}
 		}

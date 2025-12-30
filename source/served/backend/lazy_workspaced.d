@@ -26,6 +26,11 @@ class LazyWorkspaceD : WorkspaceD
 			return wasAccessed;
 		}
 
+		bool isPending(string component) const
+		{
+			return lazyComponents.any!(c => c.info.name == component);
+		}
+
 		void onLazyLoad(string component, LazyLoadHook hook)
 		{
 			foreach (com; instanceComponents)
