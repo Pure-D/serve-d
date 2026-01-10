@@ -2,7 +2,7 @@ module workspaced.backend;
 
 import dparse.lexer : StringCache;
 
-import std.algorithm : canFind, map, max, min, remove, startsWith;
+import std.algorithm : canFind, map, max, min, remove, startsWith, countUntil;
 import std.array : array;
 import std.conv;
 import std.file : exists, mkdir, mkdirRecurse, rmdirRecurse, tempDir, write;
@@ -641,13 +641,19 @@ class WorkspaceD
 	}
 
 	/// Creates a new workspace with the given cwd with optional config overrides and preload components for non-autoRegister components.
-	/// Throws: Exception if normalized cwd already exists as instance.
+	/// A fix has been administered to it, which returns the already existing instance instead of throwing an exception,
+	/// since said exception is not handled down the line, and some editors handle the LSP protocol in different ways.
 	Instance addInstance(string cwd, Configuration configOverrides = Configuration.none,
 			string[] preloadComponents = [])
 	{
 		cwd = buildNormalizedPath(cwd);
-		if (instances.canFind!(a => a.cwd == cwd))
-			throw new Exception("Instance with cwd '" ~ cwd ~ "' already exists!");
+		// HACK: Either some editors like KATE uses LSP in some undocumented ways or some prior check for existing instances
+		// are not done. This changes the behavior to return the existing instance if one exists with the same `cwd`.
+		const has = instances.countUntil!(a => a.cwd == cwd);
+		if (has != -1)
+			return instances[has];
+		// if (instances.canFind!(a => a.cwd == cwd))
+				// throw new Exception("Instance with cwd '" ~ cwd ~ "' already exists!");
 		configOverrides.loadBase(globalConfiguration);
 		auto inst = createInstance(cwd, configOverrides);
 		this.preloadComponents(inst, preloadComponents);
