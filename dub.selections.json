@@ -25,7 +25,7 @@
 		"mir-core": "1.7.3",
 		"mir-cpuid": "1.2.11",
 		"mir-ion": "2.3.5",
-		"mir-linux-kernel": "1.0.1",
+		"mir-linux-kernel": "1.2.1",
 		"msgpack-d": "1.0.5",
 		"openssl": "3.4.0",
 		"openssl-static": "1.0.5+3.0.8",

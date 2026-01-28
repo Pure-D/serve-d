@@ -12,8 +12,10 @@
 		"libdparse": "0.25.1",
 		"mir-algorithm": "3.22.4",
 		"mir-core": "1.7.3",
+		"mir-cpuid": "1.2.11",
+		"mir-ion": "2.3.5",
 		"msgpack-d": "1.0.5",
-		"serve-d": {"path":".."},
+		"serve-d": {"path":"../"},
 		"silly": "1.1.1",
 		"standardpaths": "0.8.2",
 		"xdgpaths": "0.2.5"
