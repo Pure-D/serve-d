@@ -8,7 +8,7 @@ import std.array;
 import std.ascii;
 import std.conv;
 import std.datetime;
-import std.experimental.logger : trace;
+import std.experimental.logger : trace, warning, info;
 import std.json;
 import std.path;
 import std.process;
@@ -22,6 +22,13 @@ import workspaced.com.dcd_version;
 import workspaced.helpers;
 
 import served.dcd.client;
+
+version(Windows)
+{
+	// Import Job Objects functions for child process management
+	// This is in serverbase which workspace-d depends on
+	import served.utils.jobs : isJobObjectInitialized, addProcessToJobByProcessPipes;
+}
 
 @component("dcd")
 class DCDComponent : ComponentWrapper
@@ -231,6 +238,27 @@ class DCDComponent : ComponentWrapper
 		trace("Start dcd-server ", serverArgs);
 		serverPipes = raw(serverArgs ~ imports,
 			Redirect.stdin | Redirect.stderr | Redirect.stdoutToStderr);
+		
+		// Add DCD server process to job object on Windows for automatic cleanup
+		version(Windows)
+		{
+			if (isJobObjectInitialized)
+			{
+				if (!addProcessToJobByProcessPipes(serverPipes))
+				{
+					warning("[DCD] Failed to add dcd-server to job object - it may not terminate automatically");
+				}
+				else
+				{
+					info("[DCD] dcd-server process added to job object successfully");
+				}
+			}
+			else
+			{
+				warning("[DCD] Job object not initialized - dcd-server may not terminate automatically");
+			}
+		}
+		
 		while (!serverPipes.stderr.eof)
 		{
 			string line = serverPipes.stderr.readln();

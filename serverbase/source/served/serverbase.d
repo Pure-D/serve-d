@@ -88,6 +88,11 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 
 	import io = std.stdio;
 
+	version(Windows)
+	{
+		import served.utils.jobs;
+	}
+
 	static if (is(typeof(ExtensionModule.shutdownRequested)))
 		alias shutdownRequested = ExtensionModule.shutdownRequested;
 	else
@@ -360,6 +365,14 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				static if (is(typeof(ExtensionModule.shutdown)))
 					ExtensionModule.shutdown();
 			}
+			
+			// Clean up Windows Job Object
+			version(Windows)
+			{
+				info("[LIFECYCLE] Cleaning up job object");
+				cleanupJobObject();
+			}
+			
 			return;
 		}
 
@@ -459,10 +472,46 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 	/// false if it didn't exit gracefully.
 	bool run(in Duration loopIterationDelay = 10.msecs)
 	{
+		// Initialize Windows Job Object for child process management
+		version(Windows)
+		{
+			info("[LIFECYCLE] Initializing Windows Job Object for child process management");
+			initializeJobObject();
+			
+			if (isJobObjectInitialized)
+			{
+				info("[LIFECYCLE] Job object initialized successfully");
+				if (isSelfInJob)
+				{
+					info("[LIFECYCLE] serve-d added itself to job object");
+					info("[LIFECYCLE] ALL child processes will terminate automatically if serve-d crashes");
+				}
+				else
+				{
+					warning("[LIFECYCLE] serve-d not in job object - may not be fully protected");
+				}
+			}
+			else
+			{
+				warning("[LIFECYCLE] Failed to initialize job object - child process cleanup may not work");
+			}
+		}
+		
 		auto input = newStdinReader();
 		input.start();
 		scope (exit)
+		{
 			input.stop();
+			// Clean up Job Object when exiting, regardless of how we exit
+			version(Windows)
+			{
+				if (isJobObjectInitialized)
+				{
+					info("[LIFECYCLE] run() exiting, cleaning up job object");
+					cleanupJobObject();
+				}
+			}
+		}
 		for (int timeout = 10; timeout >= 0 && !input.isRunning; timeout--)
 			Thread.sleep(1.msecs);
 		trace("Started reading from stdin");

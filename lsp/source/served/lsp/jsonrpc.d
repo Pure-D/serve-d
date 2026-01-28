@@ -654,6 +654,7 @@ private:
 				request.paramsJson = slices.params.idup;
 
 			if (request.paramsJson.length
+				&& request.paramsJson != "null"
 				&& request.paramsJson.ptr[0] != '['
 				&& request.paramsJson.ptr[0] != '{')
 			{
