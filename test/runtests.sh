@@ -6,69 +6,86 @@ GREEN="\033[32m"
 YELLOW="\033[33m"
 NORMAL="\033[0m"
 
-if [ -z "${DC-}" ]; then
-	DC="dmd"
-fi
+DC="${DC:-dmd}"
 
 fail_count=0
 pass_count=0
 
-inCIEnvironment () [[ ! -z "${CI:-}" ]]
+in_ci() { [[ -n "${CI:-}" ]]; }
+
+ci_group_start() { in_ci && echo "::group::$1"; }
+ci_group_end()   { in_ci && echo "::endgroup::"; }
+
 
 echo "Compiling serve-d in release mode with ${DC}..."
+ci_group_start "Building serve-d"
 
-inCIEnvironment && echo "::group::Building serve-d"
-pushd ..
-if [ "$DC" = "dmd" ]; then
-	echo "(Debug build because using DMD)"
-	dub build --compiler="${DC}"
+pushd .. > /dev/null
+if [[ "$DC" == "dmd" ]]; then
+    echo "(Debug build because using DMD)"
+    dub build --compiler="${DC}"
 else
-	dub build --build=release --compiler="${DC}"
+    dub build --build=release --compiler="${DC}"
 fi
-popd
-inCIEnvironment && echo "::endgroup::"
+popd > /dev/null
 
-tests="${@:1}"
-if [ -z "$tests" ]; then
-	tests=tc*
+ci_group_end
+
+if [[ $# -gt 0 ]]; then
+    tests=("$@")
+else
+    # Collect matching dirs into an array to avoid word-splitting / glob issues
+    tests=(tc*)
 fi
 
-echo "Running tests with ${DC}..."
+if [[ ${#tests[@]} -eq 0 ]]; then
+    echo "No test cases found." >&2
+    exit 1
+fi
 
-for testCase in $tests; do
-	# GitHub Actions grouping
-	echo -e "${YELLOW}$testCase${NORMAL}"
+echo "Running ${#tests[@]} test(s) with ${DC}..."
 
-	inCIEnvironment && echo "::group::$testCase"
-	pushd $testCase
+for testCase in "${tests[@]}"; do
+    echo -e "${YELLOW}${testCase}${NORMAL}"
+    ci_group_start "$testCase"
 
-	if [ -f .needs_dcd ]; then
-		pushd ../data/dcd
-		$DC -I../../../workspace-d/source -run download_dcd.d
-		popd
-		cp ../data/dcd/dcd-server* .
-		cp ../data/dcd/dcd-client* .
-	fi
+    pushd "$testCase" > /dev/null
 
-	dub upgrade 2>&1
+    # Optional: download and stage DCD binaries
+    if [[ -f .needs_dcd ]]; then
+        pushd ../data/dcd > /dev/null
+        "$DC" -I../../../workspace-d/source -run download_dcd.d
+        popd > /dev/null
 
-	dub --compiler="${DC}" 2>&1
-	if [[ $? -eq 0 ]]; then
-		inCIEnvironment && echo "::endgroup::"
-		echo -e "${YELLOW}$testCase:${NORMAL} ... ${GREEN}Test Pass${NORMAL}";
-		let pass_count=pass_count+1
-	else
-		inCIEnvironment && echo "::endgroup::"
-		echo -e "${YELLOW}$testCase:${NORMAL} ... ${RED}Test Fail${NORMAL}";
-		let fail_count=fail_count+1
-	fi
+        # Only copy if the binaries were actually produced
+        for bin in ../data/dcd/dcd-server* ../data/dcd/dcd-client*; do
+            [[ -e "$bin" ]] && cp "$bin" .
+        done
+    fi
 
-	popd
+    # Upgrade deps; failures are non-fatal (network may be unavailable in CI)
+    dub upgrade 2>&1 || true
+
+    # Run the test; capture exit code without breaking set -e
+    result=0
+    dub --compiler="${DC}" 2>&1 || result=$?
+
+    ci_group_end
+
+    if [[ $result -eq 0 ]]; then
+        echo -e "${YELLOW}${testCase}:${NORMAL} ... ${GREEN}Test Pass${NORMAL}"
+        (( pass_count++ )) || true
+    else
+        echo -e "${YELLOW}${testCase}:${NORMAL} ... ${RED}Test Fail${NORMAL}"
+        (( fail_count++ )) || true
+    fi
+
+    popd > /dev/null
 done
 
 if [[ $fail_count -eq 0 ]]; then
-	echo -e "${GREEN}${pass_count} tests passed and ${fail_count} failed.${NORMAL}"
+    echo -e "${GREEN}${pass_count} tests passed and ${fail_count} failed.${NORMAL}"
 else
-	echo -e "${RED}${pass_count} tests passed and ${fail_count} failed.${NORMAL}"
-	exit 1
+    echo -e "${RED}${pass_count} tests passed and ${fail_count} failed.${NORMAL}"
+    exit 1
 fi
