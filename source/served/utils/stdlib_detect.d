@@ -259,8 +259,8 @@ private string getUserHomeDirectoryLDC()
 {
 	version (Windows)
 	{
-		import core.sys.windows.windows;
 		import core.sys.windows.shlobj;
+		import core.sys.windows.windows;
 
 		wchar[MAX_PATH] buf;
 		HRESULT res = SHGetFolderPathW(null, CSIDL_FLAG_CREATE | CSIDL_APPDATA, null, SHGFP_TYPE
@@ -424,7 +424,7 @@ void parseLdcConfImportsSingleFile(string confPath, scope const(char)[] binDirPa
 	catch (Exception e)
 		throw new Exception("Could not read ldc2 config file: " ~ confPath ~ ": " ~ e.msg);
 
-	foreach (s; parseConfigFile(confPath))
+	foreach (s; settings)
 	{
 		if (s.type == Setting.Type.group && s.name == "default")
 		{
