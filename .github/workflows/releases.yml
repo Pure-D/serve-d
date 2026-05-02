@@ -38,6 +38,11 @@ jobs:
         with:
             compiler: ldc-latest
 
+      - name: cache dependency binaries
+        uses: WebFreak001/dub-upgrade@v0.1.0
+        with:
+          args: --missing-only -S
+
       - name: Run tests
         run: dub test
 
@@ -128,3 +133,4 @@ jobs:
         uses: WebFreak001/dub-upgrade@v0.1.0
         with:
           store: true
+          args: --missing-only -S
