@@ -29,6 +29,11 @@ jobs:
         with:
           compiler: ${{ matrix.dc }}
 
+      - name: cache dependency binaries
+        uses: WebFreak001/dub-upgrade@v0.1.0
+        with:
+          args: --missing-only -S
+
       - name: Run workspace-d tests
         run: dub test :workspace-d
         timeout-minutes: 30
@@ -86,3 +91,9 @@ jobs:
         timeout-minutes: 30
         env:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
+
+      - name: cache dependency binaries
+        uses: WebFreak001/dub-upgrade@v0.1.0
+        with:
+          store: true
+          args: --missing-only -S
