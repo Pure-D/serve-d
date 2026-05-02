@@ -9,13 +9,17 @@ import workspaced.com.dcd : DCDComponent;
 @protocolMethod("textDocument/inlayHint")
 InlayHint[] provideInlayHints(InlayHintParams params)
 {
+	auto document = documents[params.textDocument.uri];
+	if (document.getLanguageId != "d")
+		return null;
+
+	const config = workspace(params.textDocument.uri).config;
+	if (!config.d.enableInlayHints)
+		return null;
+
 	auto instance = activeInstance = backend.getBestInstance!DCDComponent(
 			params.textDocument.uri.uriToFile);
 	if (!instance)
-		return null;
-
-	auto document = documents[params.textDocument.uri];
-	if (document.getLanguageId != "d")
 		return null;
 
 	auto result = instance.get!DCDComponent.getInlayHints(document.rawText).getYield;
