@@ -8,7 +8,7 @@ import std.conv;
 import std.file : exists, mkdir, mkdirRecurse, rmdirRecurse, tempDir, write;
 import std.parallelism : defaultPoolThreads, TaskPool;
 import std.path : buildNormalizedPath, buildPath;
-import std.range : chain;
+import std.range : chain, empty, front;
 import std.sumtype : match, SumType, This;
 import std.traits : getUDAs, isSomeString;
 
