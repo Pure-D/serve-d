@@ -2,7 +2,7 @@ module workspaced.backend;
 
 import dparse.lexer : StringCache;
 
-import std.algorithm : canFind, map, max, min, remove, startsWith;
+import std.algorithm : canFind, find, map, max, min, remove, startsWith;
 import std.array : array;
 import std.conv;
 import std.file : exists, mkdir, mkdirRecurse, rmdirRecurse, tempDir, write;
@@ -641,13 +641,15 @@ class WorkspaceD
 	}
 
 	/// Creates a new workspace with the given cwd with optional config overrides and preload components for non-autoRegister components.
-	/// Throws: Exception if normalized cwd already exists as instance.
+	/// Returns the existing instance if one with the same normalized cwd already exist,
+	/// otherwise creates and returns a new one
 	Instance addInstance(string cwd, Configuration configOverrides = Configuration.none,
 			string[] preloadComponents = [])
 	{
 		cwd = buildNormalizedPath(cwd);
-		if (instances.canFind!(a => a.cwd == cwd))
-			throw new Exception("Instance with cwd '" ~ cwd ~ "' already exists!");
+		auto existing = instances.find!(a => a.cwd == cwd);
+		if (!existing.empty)
+			return existing.front;	
 		configOverrides.loadBase(globalConfiguration);
 		auto inst = createInstance(cwd, configOverrides);
 		this.preloadComponents(inst, preloadComponents);
