@@ -8,7 +8,7 @@ import std.conv;
 import std.file : exists, mkdir, mkdirRecurse, rmdirRecurse, tempDir, write;
 import std.parallelism : defaultPoolThreads, TaskPool;
 import std.path : buildNormalizedPath, buildPath;
-import std.range : chain, empty, front;
+import std.range : chain;
 import std.sumtype : match, SumType, This;
 import std.traits : getUDAs, isSomeString;
 
@@ -641,15 +641,13 @@ class WorkspaceD
 	}
 
 	/// Creates a new workspace with the given cwd with optional config overrides and preload components for non-autoRegister components.
-	/// Returns the existing instance if one with the same normalized cwd already exist,
-	/// otherwise creates and returns a new one
+	/// Throws: Exception if normalized cwd already exists as instance.
 	Instance addInstance(string cwd, Configuration configOverrides = Configuration.none,
 			string[] preloadComponents = [])
 	{
 		cwd = buildNormalizedPath(cwd);
-		auto existing = instances.find!(a => a.cwd == cwd);
-		if (!existing.empty)
-			return existing.front;	
+		if (instances.canFind!(a => a.cwd == cwd))
+			throw new Exception("Instance with cwd '" ~ cwd ~ "' already exists!");	
 		configOverrides.loadBase(globalConfiguration);
 		auto inst = createInstance(cwd, configOverrides);
 		this.preloadComponents(inst, preloadComponents);
