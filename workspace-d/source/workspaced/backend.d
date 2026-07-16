@@ -2,7 +2,7 @@ module workspaced.backend;
 
 import dparse.lexer : StringCache;
 
-import std.algorithm : canFind, find, map, max, min, remove, startsWith;
+import std.algorithm : canFind, map, max, min, remove, startsWith;
 import std.array : array;
 import std.conv;
 import std.file : exists, mkdir, mkdirRecurse, rmdirRecurse, tempDir, write;

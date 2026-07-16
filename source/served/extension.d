@@ -583,37 +583,48 @@ void doStartup(string workspaceUri, UserConfiguration userConfig)
 		info("registering instance for root ", root);
 
 		auto workspaceRoot = root.dir;
-		WConfiguration config;
-		config.base = [
-			"dcd": WConfiguration.Section([
-				"clientPath": WConfiguration.ValueT(proj.config.dcdClientPath.userPath),
-				"serverPath": WConfiguration.ValueT(proj.config.dcdServerPath.userPath),
-				"port": WConfiguration.ValueT(9166)
-			]),
-			"dmd": WConfiguration.Section([
-				"path": WConfiguration.ValueT(proj.config.d.dmdPath.userPath)
-			])
-		];
-		auto instance = backend.addInstance(workspaceRoot, config);
+
+		auto instance = backend.getInstance(workspaceRoot);
+		if (instance is null)
+		{
+			WConfiguration config;
+			config.base = [
+				"dcd": WConfiguration.Section([
+					"clientPath": WConfiguration.ValueT(proj.config.dcdClientPath.userPath),
+					"serverPath": WConfiguration.ValueT(proj.config.dcdServerPath.userPath),
+					"port": WConfiguration.ValueT(9166)
+				]),
+				"dmd": WConfiguration.Section([
+					"path": WConfiguration.ValueT(proj.config.d.dmdPath.userPath)
+				])
+			];
+			instance = backend.addInstance(workspaceRoot, config);
+
+			emitExtensionEvent!onProjectAvailable(instance, workspaceRoot, workspaceUri);
+
+			if (auto lazyInstance = cast(LazyWorkspaceD.LazyInstance)instance)
+			{
+				auto lazyLoadCallback(WorkspaceD.Instance instance, string workspaceRoot, string workspaceUri, RootSuggestion root)
+				{
+					return () => delayedProjectActivation(instance, workspaceRoot, workspaceUri, root);
+				}
+
+				lazyInstance.onLazyLoadInstance(lazyLoadCallback(instance, workspaceRoot, workspaceUri, root));
+			}
+			else
+			{
+				delayedProjectActivation(instance, workspaceRoot, workspaceUri, root);
+			}
+		}
+		else
+		{
+			info("instance for root ", workspaceRoot, " already registered by another workspace, reusing it");
+		}
+
 		if (!activeInstance)
 			activeInstance = instance;
 
 		roots ~= Root(root, workspaceUri, instance);
-		emitExtensionEvent!onProjectAvailable(instance, workspaceRoot, workspaceUri);
-
-		if (auto lazyInstance = cast(LazyWorkspaceD.LazyInstance)instance)
-		{
-			auto lazyLoadCallback(WorkspaceD.Instance instance, string workspaceRoot, string workspaceUri, RootSuggestion root)
-			{
-				return () => delayedProjectActivation(instance, workspaceRoot, workspaceUri, root);
-			}
-
-			lazyInstance.onLazyLoadInstance(lazyLoadCallback(instance, workspaceRoot, workspaceUri, root));
-		}
-		else
-		{
-			delayedProjectActivation(instance, workspaceRoot, workspaceUri, root);
-		}
 	}
 
 	trace("Starting auto completion service...");
