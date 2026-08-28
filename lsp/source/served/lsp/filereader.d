@@ -23,6 +23,7 @@ version (Windows) class WindowsStdinReader : FileReader
 	override void stop()
 	{
 		wantStop = true;
+		CancelSynchronousIo(thread);
 		closeEvent.wait(5.seconds);
 	}
 
@@ -35,37 +36,31 @@ version (Windows) class WindowsStdinReader : FileReader
 		auto stdin = GetStdHandle(STD_INPUT_HANDLE);
 		ubyte[4096] buffer;
 
+		thread = GetCurrentThread();
+
 		while (!wantStop)
 		{
-			switch (WaitForSingleObject(stdin, 1000))
+			DWORD len;
+
+			if (!ReadFile(stdin, &buffer, buffer.length, &len, null))
 			{
-			case WAIT_TIMEOUT:
-				break;
-			case WAIT_OBJECT_0:
-				DWORD len;
-				if (!ReadFile(stdin, &buffer, buffer.length, &len, null))
-				{
-					stderr.writeln("ReadFile failed ", GetLastError());
-					break;
-				}
-				if (len == 0)
-				{
-					stderr.writeln("WindowsStdinReader EOF");
-					return;
-				}
-				synchronized (mutex)
-					data ~= buffer[0 .. len];
-				break;
-			case WAIT_FAILED:
-				stderr.writeln("stdin read failed ", GetLastError());
-				break;
-			case WAIT_ABANDONED:
-				stderr.writeln("stdin read wait was abandoned ", GetLastError());
-				break;
-			default:
-				stderr.writeln("Unexpected WaitForSingleObject response");
-				break;
+				auto error = GetLastError();
+
+				if (error == ERROR_OPERATION_ABORTED)
+					continue;
+
+				stderr.writeln("ReadFile failed ", error);
+				return;
 			}
+
+			if (len == 0)
+			{
+				stderr.writeln("WindowsStdinReader EOF");
+				return;
+			}
+
+			synchronized (mutex)
+				data ~= buffer[0 .. len];
 		}
 	}
 
@@ -74,8 +69,10 @@ version (Windows) class WindowsStdinReader : FileReader
 		return isRunning;
 	}
 
-	private bool wantStop;
-	private Event closeEvent;
+private:
+	bool wantStop;
+	Event closeEvent;
+	HANDLE thread;
 }
 
 version (Windows)
