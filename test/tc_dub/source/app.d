@@ -24,10 +24,10 @@ void main()
 	// if no dependencies are fetched
 	// or with all dependencies there a lot more
 	assert(dub.imports.length >= 2, dub.imports.to!string);
-	assert(dub.stringImports[$ - 1].endsWith("views")
-			|| dub.stringImports[$ - 1].endsWith("views/")
-			|| dub.stringImports[$ - 1].endsWith("views\\"),
-			dub.stringImports.to!string ~ " doesn't end with `views`!");
+	assert(dub.stringImports[0].endsWith("views")
+			|| dub.stringImports[0].endsWith("views/")
+			|| dub.stringImports[0].endsWith("views\\"),
+			dub.stringImports.to!string ~ "[0] doesn't end with `views`!");
 	assert(dub.fileImports.length > 10);
 	assert(dub.configurations.length == 2);
 	assert(dub.buildTypes.length);

@@ -105,6 +105,7 @@ d.ext.dubInvalidRecipeSyntax: Im dub.json/dub.sdl Rezept wurde ein Fehler gefund
 d.ext.dubRecipeMaybeBroken: Konnte dub nicht starten. Das dub.json/dub.sdl Rezept könnte möglicherweise Fehlerhaft sein! Bitte Fehler beheben und neu speichern.
 d.ext.dubUpgradeFail: Konnte nicht dub upgrade durchführen
 d.ext.dubImportFail: Konnte keine Importpfäde finden. Bitte Einstellungen in der Statusleiste überprüfen.
+d.ext.ccdbFail: Konnte die Clang Kompilierung Datenbank (compile_commands.json) für {0} nicht starten ({1}). Funktionalität begrenzt!
 d.ext.configSwitchFail: Konfiguration konnte nicht gewechselt werden. In die Entwicklertools umschalten für Details.
 d.ext.archSwitchFail: Architektur konnte nicht gewechselt werden. In die Entwicklertools umschalten für Details.
 d.ext.buildTypeSwitchFail: Build Type konnte nicht gewechselt werden. In die Entwicklertools umschalten für Details.
