@@ -451,6 +451,14 @@ class RPCProcessor : Fiber
 		return resolveWait(i, timeout);
 	}
 
+	/// Blocks until the reader has new input or `timeout` elapses, so a caller
+	/// driving the loop can wait instead of polling.
+	/// Returns: false without waiting when input is already buffered.
+	bool waitForInput(Duration timeout)
+	{
+		return reader.waitForData(timeout);
+	}
+
 private:
 	void onData(RequestMessageRaw req)
 	{
