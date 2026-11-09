@@ -21,10 +21,10 @@ jobs:
           dc: dmd-latest
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Install D compiler
-        uses: dlang-community/setup-dlang@v1
+        uses: dlang-community/setup-dlang@v2
         timeout-minutes: 5
         with:
           compiler: ${{ matrix.dc }}
