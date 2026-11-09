@@ -8,6 +8,7 @@ jobs:
 
   bump_tag:
     name: Bump Git tag
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
 
