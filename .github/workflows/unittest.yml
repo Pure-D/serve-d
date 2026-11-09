@@ -13,12 +13,12 @@ jobs:
       matrix:
         # ubuntu / linux must run on kinda old linux for glibc compatibility!
         os: [ubuntu-22.04, windows-latest, macos-latest]
-        dc: [dmd-latest, ldc-latest]
+        dc: [dmd-2.113.1, ldc-latest]
         exclude:
         - os: windows-latest
-          dc: dmd-latest
+          dc: dmd-2.113.1
         - os: macos-latest
-          dc: dmd-latest
+          dc: dmd-2.113.1 
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
