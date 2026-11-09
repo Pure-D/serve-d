@@ -16,9 +16,9 @@ jobs:
         dc: [dmd-2.113.0, ldc-latest]
         exclude:
         - os: windows-latest
-          dc: dmd-2.113.0
+          dc: dmd-2.112.1
         - os: macos-latest
-          dc: dmd-2.113.0 
+          dc: dmd-2.112.1 
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
