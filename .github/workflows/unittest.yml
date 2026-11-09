@@ -13,7 +13,7 @@ jobs:
       matrix:
         # ubuntu / linux must run on kinda old linux for glibc compatibility!
         os: [ubuntu-22.04, windows-latest, macos-latest]
-        dc: [dmd-2.113.0, ldc-latest]
+        dc: [dmd-2.112.1, ldc-latest]
         exclude:
         - os: windows-latest
           dc: dmd-2.112.1
