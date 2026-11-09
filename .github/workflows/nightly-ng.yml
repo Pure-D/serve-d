@@ -18,7 +18,7 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
       - name: Update tag
-        run: git tag -sfm "Bump nightly tag" nightly-ng
+        run: git tag -fm "Bump nightly tag" nightly-ng
 
       - name: Push tag
         run: git push -f origin nightly-ng
