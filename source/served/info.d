@@ -1,4 +1,4 @@
 module served.info;
 
-static immutable Version = [0, 7, 6];
-static immutable VersionSuffix = ""; // like beta.1
+static immutable Version = [0, 8, 1];
+static immutable VersionSuffix = "beta.1"; // like beta.1

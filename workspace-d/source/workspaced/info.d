@@ -5,10 +5,10 @@ import OS = std.system;
 import std.conv;
 import std.json;
 
-static immutable Version = [3, 8, 0];
+static immutable Version = [3, 9, 0];
 static immutable string BundledDependencies = "dub, dfmt and dscanner are bundled within (compiled in)";
 
-static immutable latestKnownDCDVersion = [0, 13, 6];
+static immutable latestKnownDCDVersion = [0, 16, 9];
 
 version (Windows) version (DigitalMars) static assert(false,
 		"DMD not supported on Windows. Please use LDC.");
