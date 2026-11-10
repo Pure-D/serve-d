@@ -1,0 +1,5 @@
+name "installer"
+description "Builds workspace-d and its dependencies"
+copyright "Copyright © 2017, webfreak"
+authors "webfreak"
+targetName "iworkspaced"

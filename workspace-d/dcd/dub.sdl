@@ -1,0 +1,3 @@
+name "dcd"
+
+dependency "dcd:common" version="~>0.13.0"

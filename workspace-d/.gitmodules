@@ -1,0 +1,9 @@
+[submodule "dfmt"]
+	path = dfmt
+	url = https://github.com/dlang-community/dfmt
+[submodule "D-Scanner"]
+	path = D-Scanner
+	url = https://github.com/dlang-community/D-Scanner
+[submodule "libdparse"]
+	path = libdparse
+	url = https://github.com/WebFreak001/libdparse

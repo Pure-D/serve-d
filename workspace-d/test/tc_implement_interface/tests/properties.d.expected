@@ -1,0 +1,28 @@
+implement 33
+int tree() @property
+return m_tree
+void tree(int value) @property
+m_tree = value;
+
+int car() @property
+return mCar
+void car(int foobar) @property
+mCar = foobar;
+
+int heli() @property
+return _heli
+void heli(int value) @property
+_heli = value;
+
+int Sharp() @property
+return sharp
+void Sharp(int value) @property
+sharp = value;
+
+int getJava()
+return java
+void setJava(int value)
+java = value;
+
+int getter() @property
+void setter(int value) @property

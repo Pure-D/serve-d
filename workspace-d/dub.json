@@ -1,0 +1,47 @@
+{
+	"name": "workspace-d",
+	"description": "Provides functions for IDEs for managing DCD, Dscanner and Dfmt. Usable as application and library",
+	"license": "MIT",
+	"copyright": "Copyright © 2017-2021, webfreak",
+	"authors": [
+		"webfreak"
+	],
+	"dependencies": {
+		"workspace-d:dcd": "*",
+		"dub": "1.28.0-beta.1",
+		"painlessjson": "1.4.0",
+		"standardpaths": "0.8.2",
+		"dfmt": "0.14.2",
+		"dscanner": "0.12.0",
+		"inifiled": "1.3.3",
+		"libdparse": "0.19.0",
+		"emsi_containers": "0.8.0"
+	},
+	"subPackages": [
+		"./installer",
+		"./dcd",
+		"./dml"
+	],
+	"configurations": [
+		{
+			"name": "executable",
+			"targetType": "executable",
+			"mainSourceFile": "source/app.d"
+		},
+		{
+			"name": "library",
+			"targetType": "library",
+			"excludedSourceFiles": [
+				"source/app.d"
+			]
+		},
+		{
+			"name": "unittest",
+			"mainSourceFile": "source/app.d",
+			"dflags": ["-checkaction=context"],
+			"dependencies": {
+				"silly": "~>1.1.1"
+			}
+		}
+	]
+}

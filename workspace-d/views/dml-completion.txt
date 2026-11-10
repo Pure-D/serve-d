@@ -1,0 +1,365 @@
+// enums
+enum FontFamily --- font families enum
+{
+	Cursive; --- Cursive font
+	Fantasy; --- Fantasy font
+	MonoSpace; --- Monospace font (fixed pitch font), e.g. Courier New
+	SansSerif; --- Sans Serif font, e.g. Arial
+	Serif; --- Serif font, e.g. Times New Roman
+	Unspecified; --- Unknown / not set / does not matter
+}
+enum Visibility --- Visibility (see Android View Visibility)
+{
+	Gone; --- Completely hidden, as not has been added
+	Invisible; --- Not visible, but occupies a space in layout
+	Visible; --- Visible on screen (default)
+}
+enum Align --- Align option bit constants
+{
+	Bottom; --- vertically align to the bottom of box
+	Center; --- align to the center of box (VCenter | HCenter)
+	HCenter; --- horizontally align to the center of box
+	Left; --- horizontally align to the left of box
+	Right; --- horizontally align to the right of box
+	Top; --- vertically align to the top of box
+	TopLeft; --- align to the top left corner of box (Left | Top)
+	Unspecified; --- alignment is not specified
+	VCenter; --- vertically align to the center of box
+}
+enum State --- Widget state flags - bits
+{
+	Activated; --- widget is activated
+	Checkable; --- widget can be checked
+	Checked; --- widget is checked
+	Default; --- widget is default control for form (should be focused when window gains focus first time)
+	Enabled; --- widget can process mouse and key events
+	Focused; --- widget has focus
+	Hovered; --- mouse pointer is over this widget
+	Normal; --- state not specified / normal
+	Parent; --- return state of parent instead of widget's state when requested
+	Pressed; --- pressed (e.g. clicked by mouse)
+	Selected; --- widget is selected
+	WindowFocused; --- window is focused
+}
+enum TextFlag --- text drawing flag bits
+{
+	HotKeys; --- text contains hot key prefixed with & char (e.g. "&File")
+	StrikeThrough; --- strikethrough text when drawing
+	Underline; --- underline text when drawing
+	UnderlineHotKeys; --- underline hot key when drawing
+	UnderlineHotKeysWhenAltPressed; --- underline hot key when drawing
+}
+enum DockAlignment
+{
+	Bottom;
+	Left;
+	Right;
+	Top;
+}
+enum Orientation
+{
+	Horizontal;
+	Vertical;
+}
+enum PopupFlags --- popup behavior flags - for PopupWidget.flags property
+{
+	CloseOnClickOutside; --- close popup when mouse button clicked outside of its bounds
+}
+// widget
+class Widget --- Base class for all widgets.
+{
+	Align alignment; --- sets alignment (combined vertical and horizontal)
+	number alpha; --- set widget drawing alpha value (0=opaque .. 255=transparent)
+	color backgroundColor; --- set background color for widget - override one from style
+	string backgroundImageId; --- background image id
+	bool checkable; --- when true, control supports Checked state
+	bool checked; --- set checked state
+	bool clickable; --- when true, user can click this control, and get onClick listeners called
+	bool enabled; --- change enabled state
+	bool focusable; --- whether widget can be focused
+	bool focusGroup; --- When focus group is set for some parent widget, focus from one of containing widgets can be moved using keyboard only to one of other widgets containing in it and cannot bypass bounds of focusGroup.
+	string fontFace; --- set font face for widget - override one from style
+	FontFamily fontFamily; --- set font family for widget - override one from style
+	bool fontItalic; --- set font style (italic/normal) for widget - override one from style
+	number fontSize; --- font size in pixels
+	number fontWeight; --- set font weight for widget - override one from style
+	string id; --- set widget id
+	number layoutHeight; --- sets layout height options (WRAP_CONTENT, FILL_PARENT, or some constant value)
+	number layoutWeight; --- sets layout weight (while resizing to fill parent, widget will be resized proportionally to this value)
+	number layoutWidth; --- sets layout width options (WRAP_CONTENT, FILL_PARENT, or some constant value)
+	rect margins; --- margins (between widget bounds and its background)
+	number maxHeight; --- set max height constraint (SIZE_UNSPECIFIED for no constraint)
+	number maxWidth; --- set max width constraint (SIZE_UNSPECIFIED for no constraint)
+	number minHeight; --- set min height constraint (0 for no constraint)
+	number minWidth; --- set min width constraint (0 for no constraint)
+	rect padding; --- padding (between background bounds and content of widget)
+	State resetState; --- remove state flags
+	State setState; --- add state flags
+	State state; --- set new widget state
+	string styleId; --- widget style id, null if not set
+	number tabOrder; --- tab order - hint for focus movement using Tab/Shift+Tab
+	string text; --- sets widget content text (override to support this)
+	color textColor; --- set text color (ARGB 32 bit value)
+	TextFlag textFlags; --- set text flags
+	bool trackHover; --- mouse movement processing flag
+	Visibility visibility; --- sets widget visibility (Visible, Invisible, Gone)
+}
+class WidgetGroup --- Base class for widgets which have children.
+{
+	include Widget;
+}
+class WidgetGroupDefaultDrawing --- WidgetGroup with default drawing of children (just draw all children)
+{
+	include Widget;
+}
+// appframe
+class AppFrame
+{
+	include VerticalLayout;
+}
+// combobox
+class ComboBoxBase --- Abstract ComboBox
+{
+	number selectedItemIndex; --- Selected item index
+	include HorizontalLayout;
+}
+class ComboBox --- ComboBox with list of strings
+{
+	include ComboBoxBase;
+}
+class ComboEdit --- Editable ComboBox with list of strings
+{
+	bool readOnly;
+	include ComboBox;
+}
+// controls
+class AbstractSlider --- base class for widgets like scrollbars and sliders
+{
+	number pageSize; --- set page size (visible area size)
+	number position; --- sets new slider position
+	include WidgetGroup;
+}
+class Button --- Text only button
+{
+	string textResource;
+	include Widget;
+}
+class CheckBox --- checkbox
+{
+	include ImageTextButton;
+}
+class HSpacer --- horizontal spacer to fill empty space in horizontal layouts
+{
+	include Widget;
+}
+class ImageButton --- button with image only
+{
+	include ImageWidget;
+}
+class ImageTextButton --- button with image and text
+{
+	include HorizontalLayout;
+}
+class ImageWidget --- static image widget
+{
+	string drawable; --- set custom drawable (not one from resources)
+	string drawableId; --- set drawable image id
+	include Widget;
+}
+class RadioButton --- radio button
+{
+	include ImageTextButton;
+}
+class ScrollBar --- scroll bar - either vertical or horizontal
+{
+	include AbstractSlider;
+}
+class TextWidget --- static text widget
+{
+	string textResource; --- set text resource ID to show
+	include Widget;
+}
+class VSpacer --- vertical spacer to fill empty space in vertical layouts
+{
+	include Widget;
+}
+// docks
+class DockHost --- Layout for docking support - contains body widget and optional docked windows
+{
+	include WidgetGroupDefaultDrawing;
+}
+class DockWindow --- docked window
+{
+	DockAlignment dockAlignment;
+	include VerticalLayout;
+}
+// editors
+class EditBox --- multiline editor
+{
+	number maxFontSize;
+	number minFontSize;
+	include EditWidgetBase;
+}
+class EditLine --- single line editor
+{
+	include EditWidgetBase;
+}
+class EditWidgetBase --- base for all editor widgets
+{
+	bool readOnly; --- readonly flag (when true, user cannot change content of editor)
+	bool replaceMode; --- replace mode flag (when true, entered character replaces character under cursor)
+	bool showLineNumbers; --- when true, line numbers are shown
+	number tabSize; --- sets tab size (in number of spaces)
+	bool useSpacesForTabs; --- when true, spaces will be inserted instead of tabs
+	bool wantTabs; --- when true, Tab / Shift+Tab presses are processed internally in widget (e.g. insert tab character) instead of focus change navigation
+	include ScrollWidgetBase;
+}
+// grid
+class GridWidgetBase --- Abstract grid widget
+{
+	number cols; --- set column count
+	number defColumnWidth; --- default column width - for newly added columns
+	number defRowHeight; --- default row height - for newly added columns
+	number fixedCols; --- fixed (non-scrollable) data column count
+	number fixedRows; --- fixed (non-scrollable) data row count
+	number headerCols; --- row header column count
+	number headerRows; --- col header row count
+	number rows; --- set row count
+	bool rowSelect; --- when true, allows only select the whole row
+	bool showColHeaders; --- flag to enable column headers
+	bool showRowHeaders; --- flag to enable row headers
+	include ScrollWidgetBase;
+}
+class StringGridWidget --- Grid view with string data shown. All rows are of the same height
+{
+	include StringGridWidgetBase;
+}
+class StringGridWidgetBase
+{
+	include GridWidgetBase;
+}
+// layouts
+class FrameLayout --- place all children into same place (usually, only one child should be visible at a time)
+{
+	include WidgetGroupDefaultDrawing;
+}
+class HorizontalLayout --- Arranges children horizontally
+{
+	include LinearLayout;
+}
+class LinearLayout --- Arranges items either vertically or horizontally
+{
+	Orientation orientation; --- sets linear layout orientation
+	include Widget;
+}
+class ResizerWidget --- Resizer control. Put it between other items in LinearLayout to allow resizing its siblings. While dragging, it will resize previous and next children in layout
+{
+	include Widget;
+}
+class TableLayout --- layout children as table with rows and columns
+{
+	number colCount; --- number of columns
+	include WidgetGroupDefaultDrawing;
+}
+class VerticalLayout --- Arranges children vertically
+{
+	include LinearLayout;
+}
+// lists
+class ListWidget --- List widget - shows content as hori
+{
+	Orientation orientation; --- sets linear layout orientation
+	number selectedItemIndex; --- Selected item index
+	bool selectOnHover; --- when true, mouse hover selects underlying item
+	include WidgetGroup;
+}
+// menu
+class MainMenu --- main menu (horizontal)
+{
+	include MenuWidgetBase;
+}
+class MenuItemWidget --- widget to draw menu item
+{
+	include WidgetGroupDefaultDrawing;
+}
+class MenuWidgetBase --- base class for menus
+{
+	include ListWidget;
+}
+class PopupMenu --- popup menu widget (vertical layout of items)
+{
+	include MenuWidgetBase;
+}
+// popup
+class PopupWidget --- popup widget container
+{
+	PopupFlags flags; --- set popup behavior flags
+	include LinearLayout;
+}
+// scroll
+class ScrollWidget --- Widget which can show content of widget group with optional scrolling
+{
+	include ScrollWidgetBase;
+}
+class ScrollWidgetBase --- Abstract scrollable widget
+{
+	include WidgetGroup;
+}
+// srcedit
+class SourceEdit
+{
+	include EditBox;
+}
+// statusline
+class StatusLine --- Status line control
+{
+	include HorizontalLayout;
+}
+// styles
+// tabs
+class TabControl --- tab header - tab labels, with optional More button
+{
+	include WidgetGroupDefaultDrawing;
+}
+class TabHost --- container for widgets controlled by TabControl
+{
+	include FrameLayout;
+}
+class TabItemWidget --- tab item widget - to show tab header
+{
+	include HorizontalLayout;
+}
+class TabWidget --- compound widget - contains from TabControl widget (tabs header) and TabHost (content pages)
+{
+	include VerticalLayout;
+}
+// toolbars
+class ToolBar --- Layout with buttons
+{
+	include HorizontalLayout;
+}
+class ToolBarHost --- Layout with several toolbars
+{
+	include HorizontalLayout;
+}
+class ToolBarImageButton --- image button for toolbar
+{
+	include ImageButton;
+}
+class ToolBarSeparator --- separator for toolbars
+{
+	include ImageWidget;
+}
+// tree
+class TreeItemWidget --- Item widget for displaying in trees
+{
+	include HorizontalLayout;
+}
+class TreeWidget --- Tree widget with items which can have icons and labels
+{
+	include TreeWidgetBase;
+}
+class TreeWidgetBase --- Abstract tree widget
+{
+	include ScrollWidget;
+}
