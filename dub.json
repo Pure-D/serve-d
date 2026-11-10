@@ -57,5 +57,11 @@
 				"silly": "~>1.1.1"
 			}
 		}
-	]
+	],
+	"buildTypes": {
+		"prod": {
+			"buildOptions": ["inline", "optimize"],
+			"buildRequirements": ["allowWarnings", "requireBoundsCheck", "requireContracts"]
+		}
+	}
 }
