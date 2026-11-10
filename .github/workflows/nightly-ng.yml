@@ -1,0 +1,160 @@
+name: Publish Nightly-NG release
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+jobs:
+
+  bump_tag:
+    name: Bump Git tag
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Update tag
+        run: git tag -fm "Bump nightly tag" nightly-ng
+
+      - name: Push tag
+        run: git push -f origin nightly-ng
+
+  publish_nightly:
+    name: Publish Nightly-NG
+    strategy:
+      fail-fast: false
+      matrix:
+        # ubuntu / linux must run on kinda old linux for glibc compatibility!
+        os: [ubuntu-22.04, windows-latest, macos-latest]
+        arch: [x86_64]
+        include:
+          # use for 32 bit build
+          - os: windows-latest
+            arch: x86
+          - os: macos-latest
+            arch: arm64-apple-macos
+            arch_short: arm64
+            build: release
+            cross: "1"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - id: vars
+        shell: bash
+        run: |
+          if [ -z "${{matrix.arch_short}}" ]; then
+            echo "arch_short=${{matrix.arch}}" >> $GITHUB_OUTPUT
+          else
+            echo "arch_short=${{matrix.arch_short}}" >> $GITHUB_OUTPUT
+          fi
+          if [ -z "${{matrix.build}}" ]; then
+            echo "build=release-debug" >> $GITHUB_OUTPUT
+          else
+            echo "build=${{matrix.build}}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install D compiler
+        uses: dlang-community/setup-dlang@v2
+        with:
+            compiler: ldc-latest
+
+      - name: Cache dependency binaries
+        uses: WebFreak001/dub-upgrade@v0.3.0
+
+      - name: Run tests
+        run: dub test
+
+      # Linux release
+      - name: Build Linux release
+        run: ./ci/build.sh
+        if: matrix.os == 'ubuntu-22.04'
+        env:
+          ARCH: ${{ matrix.arch }}
+          ARCH_SHORT: ${{ steps.vars.outputs.arch_short }}
+          BUILD: ${{ steps.vars.outputs.build }}
+
+      - name: Publish Linux release
+        if: matrix.os == 'ubuntu-22.04'
+        uses: WebFreak001/deploy-nightly@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/439662295/assets{?name,label}
+          release_id: 439662295
+          asset_path: ./serve-d.tar.xz
+          asset_name: serve-d_linux-nightly-${{ steps.vars.outputs.arch_short }}-$$.tar.xz
+          asset_content_type: application/x-gtar
+
+      - name: Publish Linux release (tar.gz)
+        if: matrix.os == 'ubuntu-22.04'
+        uses: WebFreak001/deploy-nightly@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/439662295/assets{?name,label}
+          release_id: 439662295
+          asset_path: ./serve-d.tar.gz
+          asset_name: serve-d_linux-nightly-${{ steps.vars.outputs.arch_short }}-$$.tar.gz
+          asset_content_type: application/gzip
+
+      # OSX release
+      - name: Build OSX release
+        run: ./ci/build.sh
+        if: matrix.os == 'macos-latest'
+        env:
+          MACOSX_DEPLOYMENT_TARGET: '10.12'
+          ARCH: ${{ matrix.arch }}
+          ARCH_SHORT: ${{ steps.vars.outputs.arch_short }}
+          BUILD: ${{ steps.vars.outputs.build }}
+          CROSS: ${{ matrix.cross }}
+
+      - name: Publish OSX release
+        if: matrix.os == 'macos-latest'
+        uses: WebFreak001/deploy-nightly@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/439662295/assets{?name,label}
+          release_id: 439662295
+          asset_path: ./serve-d.tar.xz
+          asset_name: serve-d_osx-nightly-${{ steps.vars.outputs.arch_short }}-$$.tar.xz
+          asset_content_type: application/x-gtar
+
+      - name: Publish OSX release (tar.gz)
+        if: matrix.os == 'macos-latest'
+        uses: WebFreak001/deploy-nightly@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/439662295/assets{?name,label}
+          release_id: 439662295
+          asset_path: ./serve-d.tar.gz
+          asset_name: serve-d_osx-nightly-${{ steps.vars.outputs.arch_short }}-$$.tar.gz
+          asset_content_type: application/gzip
+
+      # Windows release
+      - name: Build Windows release
+        run: .\ci\build.bat
+        if: matrix.os == 'windows-latest'
+        env:
+          BUILD: ${{ steps.vars.outputs.build }}
+          ARCH: ${{ matrix.arch }}
+          ARCH_SHORT: ${{ steps.vars.outputs.arch_short }}
+          CROSS: ${{ matrix.cross }}
+
+      - name: Publish Windows release
+        if: matrix.os == 'windows-latest'
+        uses: WebFreak001/deploy-nightly@master
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: https://uploads.github.com/repos/Pure-D/serve-d/releases/439662295/assets{?name,label}
+          release_id: 439662295
+          asset_path: ./serve-d.zip
+          asset_name: serve-d_windows-nightly-${{ steps.vars.outputs.arch_short }}-$$.zip
+          asset_content_type: application/zip
