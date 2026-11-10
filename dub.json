@@ -52,5 +52,11 @@
 				"silly": "~>1.1.1"
 			}
 		}
-	]
+	],
+	"buildTypes": {
+		"dist": {
+			"buildOptions": ["inline", "optimize"],
+			"buildRequirements": ["allowWarnings", "requireBoundsCheck", "requireContracts"]
+		}
+	}
 }
