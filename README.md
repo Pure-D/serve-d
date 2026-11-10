@@ -1,7 +1,9 @@
-# serve-d
+# serve-d v0.8
 
-![build status](https://github.com/Pure-D/serve-d/workflows/Run%20Unittests/badge.svg)
-![deploy nightly](https://github.com/Pure-D/serve-d/workflows/Deploy%20Nightly/badge.svg)
+> [!NOTE]
+> The new v0.8 branch of serve-d is intended as a stopgap solution to provide a better out-of-the-box experience
+until a tested and stable v0.9 release is ready.
+> Technically, it is a continuation of the v0.7 branch but with upgraded dependencies.
 
 Join the chat:
 
