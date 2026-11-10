@@ -1,15 +1,15 @@
 {
 	"name": "serve-d",
-	"description": "Microsoft Language Server Protocol implementation using workspace-d",
+	"description": "Microsoft Language Server Protocol implementation for the D Programming Language",
 	"license": "MIT",
-	"copyright": "Copyright © 2017-2021, webfreak",
+	"copyright": "Copyright © 2017-2021 webfreak; Copyright © 2026 Mindy Batek",
 	"dependencies": {
-		"workspace-d": "3.7.0",
-		"eventsystem": "~>1.2.0",
-		"libddoc": "0.7.4",
+		"workspace-d": {"path": "workspace-d"},
+		"eventsystem": "~>1.3.0",
+		"libddoc": "0.8.0",
 		"rm-rf": "~>0.1.0",
 		"diet-complete": "~>0.0.3",
-		"emsi_containers": "0.8.0",
+		"emsi_containers": "0.9.0",
 		"serve-d:http": "*",
 		"serve-d:lsp": "*",
 		"serve-d:serverbase": "*"

@@ -8,14 +8,14 @@
 	],
 	"dependencies": {
 		"workspace-d:dcd": "*",
-		"dub": "1.28.0-beta.1",
+		"dub": "1.43.0-beta.1",
 		"painlessjson": "1.4.0",
-		"standardpaths": "0.8.2",
-		"dfmt": "0.14.2",
-		"dscanner": "0.12.0",
+		"standardpaths": "0.8.3",
+		"dfmt": "0.15.2",
+		"dscanner": "0.16.0-beta.5",
 		"inifiled": "1.3.3",
-		"libdparse": "0.19.0",
-		"emsi_containers": "0.8.0"
+		"libdparse": "0.25.1",
+		"emsi_containers": "0.9.0"
 	},
 	"subPackages": [
 		"./installer",

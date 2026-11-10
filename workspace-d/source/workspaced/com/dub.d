@@ -30,6 +30,7 @@ import dub.generators.build;
 import dub.generators.generator;
 
 import dub.internal.vibecompat.core.log;
+import dub.internal.vibecompat.inet.path;
 import dub.internal.vibecompat.inet.url;
 
 import dub.recipe.io;
@@ -106,9 +107,9 @@ class DubComponent : ComponentWrapper
 		{
 			optionalifyRecipe(pkg);
 			foreach (dep; pkg.getAllDependencies()
-				.filter!(a => optionalified.canFind(a.name)))
+				.filter!(a => optionalified.canFind(a.name.toString)))
 			{
-				auto d = _dub.project.getDependency(dep.name, true);
+				auto d = _dub.project.getDependency(dep.name.toString, true);
 				if (!d)
 					missingPackages++;
 				else
@@ -849,7 +850,7 @@ DubPackageInfo getInfo(in Package dep)
 	info.fill(dep.recipe);
 	foreach (subDep; dep.getAllDependencies())
 	{
-		info.dependencies[subDep.name] = subDep.spec.toString;
+		info.dependencies[subDep.name.toString] = subDep.spec.toString;
 	}
 	return info;
 }
@@ -874,7 +875,7 @@ string[] listDependencies(scope const Package pkg)
 	if (deps is null)
 		return dependencies;
 	foreach (dep; deps)
-		dependencies ~= dep.name;
+		dependencies ~= dep.name.toString;
 	return dependencies;
 }
 

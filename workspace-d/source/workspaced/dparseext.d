@@ -10,7 +10,9 @@ import dparse.lexer;
 import dparse.parser;
 import dparse.rollback_allocator;
 import dsymbol.builtin.names;
-import dsymbol.modulecache : ASTAllocator, ModuleCache;
+import dsymbol.modulecache : ModuleCache;
+static import std.experimental.allocator.gc_allocator;
+alias ASTAllocator = std.experimental.allocator.gc_allocator.GCAllocator;
 
 string makeString(in IdentifierOrTemplateChain c)
 {

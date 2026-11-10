@@ -267,7 +267,7 @@ void main()
 	test.build(document);
 	assert(test.syntaxErrorsAt(Position(0, 0)).length == 0);
 	assert(test.syntaxErrorsAt(Position(3, 4)).length == 1);
-	assert(test.syntaxErrorsAt(Position(3, 4))[0].message == "Expected `(` instead of `x`");
+	assert(test.syntaxErrorsAt(Position(3, 4))[0].message == "Expected `(` instead of identifier `x`");
 	assert(test.syntaxErrorsAt(Position(3, 4))[0].range == TextRange(3, 1, 3, 5));
 
 	document = Document.nullDocument(q{
