@@ -198,6 +198,7 @@ class DubComponent : ComponentWrapper
 
 		GeneratorSettings settings;
 		settings.platform = _platform;
+		settings.cache = __traits(getMember, _dub, "m_dirs").cache;
 		settings.config = _configuration;
 		settings.buildType = _buildType;
 		settings.compiler = _compiler;
