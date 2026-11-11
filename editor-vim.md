@@ -1,6 +1,6 @@
 # serve-d with Vim / NeoVim
 
-## Using ycmd
+## Using *ycmd*
 
 [Download or build serve-d](README.md#Installation) and edit your `.vimrc`.
 
@@ -38,15 +38,15 @@ Put this in a file called `.ycm_extra_conf.py` and save it in your
 project root or move it further up the folder hierarchy, if you know
 what you are doing.
 
-## Using coc's
+## Using *coc's*
 
-### Using `CocInstall`
+### Using *CocInstall*
 
 ```
 :CocInstall coc-dlang
 ```
 
-### Manually through coc-settings.json
+### Manually through *coc-settings.json*
 
 First [download or build serve-d](README.md#Installation)
 
@@ -71,7 +71,7 @@ A `coc-settings.json` file looking like this works well (you can open it with `:
 }
 ```
 
-## Using `nvim-lspconfig`
+## Using *nvim-lspconfig*
 
 Neovim has a builtin LSP client and official LSP configs for it
 [here](https://github.com/neovim/nvim-lspconfig).
