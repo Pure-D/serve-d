@@ -1,6 +1,6 @@
 # serve-d with Vim / NeoVim
 
-## Using ycmd
+## Using *ycmd*
 
 [Download or build serve-d](README.md#Installation) and edit your `.vimrc`.
 
@@ -38,15 +38,15 @@ Put this in a file called `.ycm_extra_conf.py` and save it in your
 project root or move it further up the folder hierarchy, if you know
 what you are doing.
 
-## Using coc's
+## Using *coc's*
 
-### Using `CocInstall`
+### Using *CocInstall*
 
 ```
 :CocInstall coc-dlang
 ```
 
-### Manually through coc-settings.json
+### Manually through *coc-settings.json*
 
 First [download or build serve-d](README.md#Installation)
 
@@ -71,19 +71,21 @@ A `coc-settings.json` file looking like this works well (you can open it with `:
 }
 ```
 
-## Using nvim-lspconfig
+## Using *nvim-lspconfig*
 
-Neovim has a builtin LSP client and official LSP configs for it,
+Neovim has a builtin LSP client and official LSP configs for it
 [here](https://github.com/neovim/nvim-lspconfig).
 
 After installing `nvim-lspconfig` using your preferred plugin manager, you must
 load serve-d, like the following:
 
 ```lua
-require'lspconfig'.serve_d.setup{}
+vim.lsp.enable('serve_d')
 ```
 
-You can read more about the setup function through `:help lspconfig-setup`
+Documentation for configuring the LSP within Neovim can be found
+[here](https://neovim.io/doc/user/lsp/#lsp-config) or by running `:help lsp` from
+within Neovim.
 
 ### User Configuration
 
@@ -94,11 +96,11 @@ For example, let's assume that you want to change the braces style so that they 
 `dfmt` is used by `serve-d` by default; it allows the option for the `"stroustrup"` style.
 
 ```lua
-require'lspconfig'.serve_d.setup({
-	settings = {
-		dfmt = {
-			braceStyle = "stroustrup",
-		},
-	},
+vim.lsp.config('serve_d', {
+  settings = {
+    dfmt = {
+      braceStyle = "stroustrup",
+    },
+  },
 })
 ```
