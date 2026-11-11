@@ -105,6 +105,7 @@ d.ext.dubInvalidRecipeSyntax: There is an issue in your dub.json/dub.sdl package
 d.ext.dubRecipeMaybeBroken: Dub could not be started. Your dub.json/dub.sdl package recipe might be faulty! Fix it and save the file again.
 d.ext.dubUpgradeFail: Could not upgrade dub project
 d.ext.dubImportFail: Could not update import paths. Please check your build settings in the status bar.
+d.ext.ccdbFail: Could not initialize Clang Compilation Database (compile_commands.json) for {0} ({1}). Falling back to limited functionality!
 d.ext.configSwitchFail: Failed to switch configuration. See console for details.
 d.ext.archSwitchFail: Failed to switch arch type. See console for details.
 d.ext.buildTypeSwitchFail: Failed to switch build type. See console for details.

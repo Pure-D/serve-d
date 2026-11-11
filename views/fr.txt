@@ -90,7 +90,8 @@ d.ext.config.invalid.archType: L'architecture '{0}' spécifiée dans la configur
 d.ext.config.invalid.buildType: Le type de construction '{0}' spécifié dans la configuration n'est pas disponible !
 d.ext.config.invalid.compiler: Le compilateur '{0}' spécifié dans la configuration n'est pas disponible !
 d.ext.dubFail : Dub n'a pas pu être initialisé pour {0}. Vous n'aurez pas accès à toutes les fonctionnalités.\n\n{1}
-d.ext.fsworkspaceFail:  Dub n'a pas pu être initialisé fsworkspace pour {0}. Regardez votre console pour plus de détails
+d.ext.ccdbFail : La base de données de compilation Clang (compile_commands.json) n'a pas pu être initialisée pour {0} ({1}). Vous n'aurez pas accès à toutes les fonctionnalités.
+d.ext.fsworkspaceFail:  fsworkspace n'a pas pu être initialisé pour {0}. Regardez votre console pour plus de détails.
 d.ext.dcdFail: DCD n'a pas pu être initialisé pour l'espace de travail {0}.{1}
 d.ext.gcLens: {0} octets alloués / {1} allocations
 d.ext.stdlibNoPhobosNoDRuntime: Le d.stdlibPath configuré ne contient pas de chemin vers phobos ou druntime. L'autocomplétion pourra manquer certains symboles !
