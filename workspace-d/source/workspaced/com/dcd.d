@@ -632,6 +632,12 @@ class DCDComponent : ComponentWrapper
 					}
 					completions._identifiers = identifiers.data;
 				}
+				else if (c.type == DCDCompletionType.init)
+				{
+					// DCD leaves completionType unset when it finds no
+					// completions (e.g. calltips on an undefined function)
+					completions.type = DCDCompletions.Type.identifiers;
+				}
 				else
 				{
 					completions.type = DCDCompletions.Type.raw;

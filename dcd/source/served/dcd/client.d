@@ -384,8 +384,8 @@ private:
 
 class BuiltinDCDClient : IDCDClient
 {
-	public static enum minSupportedServerInclusive = [0, 8, 0];
-	public static enum maxSupportedServerExclusive = [0, 17, 0];
+	public static enum minSupportedServerInclusive = [0, 19, 0];
+	public static enum maxSupportedServerExclusive = [0, 20, 0];
 
 	public static immutable clientVersion = DCD_VERSION;
 

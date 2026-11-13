@@ -273,7 +273,7 @@ InitializeResult initialize(InitializeParams params)
 	CompletionOptions completionProvider = {
 		resolveProvider: doCompleteSnippets,
 		triggerCharacters: [
-			".", "=", "/", "*", "+", "-"
+			".", "=", "/", "*", "+", "-", "!", "@"
 		],
 		completionItem: CompletionOptions.CompletionItem(true.opt)
 	};

@@ -1096,6 +1096,66 @@ unittest
 	assert(!isInComment("int x;\n// line comment\n", 23, backend));
 }
 
+// Strips the receiver parameter from a UFCS function definition
+private string stripFirstParameter(string label)
+{
+	size_t[][] ranges;
+	if (!label.length)
+		return label;
+
+	// Find the last top-level paren pair: skips template parens `!(...)`.
+	size_t open = label.lastIndexOf('(');
+	if (open == size_t.max || open + 1 >= label.length)
+		return label;
+	size_t close = label.lastIndexOf(')');
+	if (close == size_t.max || close <= open)
+		return label;
+
+	size_t start = open + 1;
+	size_t depth = 0;
+	for (size_t i = open + 1; i < close; i++)
+	{
+		immutable c = label[i];
+		if (c == '(' || c == '[' || c == '{')
+			depth++;
+		else if (c == ')' || c == ']' || c == '}')
+			depth--;
+		else if (c == ',' && depth == 0)
+		{
+			ranges ~= trimRange(label, start, i);
+			start = i + 1;
+		}
+	}
+	// trailing parameter (or the only one) if the parens aren't empty
+	if (start < close)
+		ranges ~= trimRange(label, start, close);
+
+	if (ranges.length == 0)
+		return label;
+	if (ranges.length == 1)
+		return label[0 .. ranges[0][0]] ~ label[ranges[0][1] .. $];
+	// Drop the receiver and the separator (", ") that follows it.
+	return label[0 .. ranges[0][0]] ~ label[ranges[1][0] .. $];
+}
+
+private size_t[] trimRange(string label, size_t start, size_t end)
+{
+	while (start < end && (label[start] == ' ' || label[start] == '\t'))
+		start++;
+	while (end > start && (label[end - 1] == ' ' || label[end - 1] == '\t'))
+		end--;
+	return [start, end];
+}
+
+unittest
+{
+	assert(stripFirstParameter("void func(int a, int b)") == "void func(int b)");
+	assert(stripFirstParameter("void func(T)(T a, int b)") == "void func(T)(int b)");
+	assert(stripFirstParameter("void func(int a)") == "void func()");
+	assert(stripFirstParameter("void func()") == "void func()");
+	assert(stripFirstParameter("int x") == "int x");
+}
+
 auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, DCDExtComponent dcdext,
 	SnippetInfo info = SnippetInfo.init)
 {
@@ -1108,6 +1168,11 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 		item.kind = identifier.type.convertFromDCDType;
 		if (identifier.documentation.length)
 			item.documentation = MarkupContent(identifier.documentation.ddocToMarked);
+
+		immutable bool isUFCS = identifier.type == "F";
+		string definition = isUFCS
+			? stripFirstParameter(identifier.definition)
+			: identifier.definition;
 		
 		if (identifier.definition.length == 0)
 		{
@@ -1146,7 +1211,7 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 				case 'k':
 					detailDescription = "Keyword";
 					break;
-				case 'f':
+				case 'f', 'F':
 					detailDescription = "Function";
 					break;
 				case 'g':
@@ -1182,18 +1247,19 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 			auto definitionSpace = identifier.definition.indexOf(' ');
 			if (definitionSpace != -1)
 			{
-				detailDescription = identifier.definition[0 .. definitionSpace];
+				if (!isUFCS)
+					detailDescription = identifier.definition[0 .. definitionSpace];
 				
 				// if function, only show the parenthesis content
-				if (identifier.type == "f")
+				if (identifier.type.among!("f", "F"))
 				{
-					auto paren = identifier.definition.indexOf('(');
+					auto paren = definition.indexOf('(');
 					if (paren != -1)
-						detailDetail = " " ~ identifier.definition[paren .. $];
+						detailDetail = " " ~ definition[paren .. $];
 				}
 			}
 
-			if (identifier.typeOf.length && identifier.type != "f")
+			if (identifier.typeOf.length && !identifier.type.among!("f", "F"))
 			{
 				detailDescription = identifier.typeOf;
 			}
@@ -1204,7 +1270,7 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 				// enum definitions are the enum identifiers (not the type)
 				detailDescription = "enum";
 			}
-			else if (identifier.type == "f" && dcdext)
+			else if (identifier.type.among!("f", "F") && dcdext)
 			{
 				CalltipsSupport funcParams = dcdext.extractCallParameters(
 					identifier.definition, cast(int) identifier.definition.length - 1, true);
@@ -1221,13 +1287,13 @@ auto convertDCDIdentifiers(DCDIdentifier[] identifiers, bool argumentSnippets, D
 				else
 					detailDescription = "auto";
 
-				detailDetail = " " ~ identifier.definition[nameEnd .. $];
+				detailDetail = " " ~ definition[nameEnd .. $];
 			}
 
 			item.sortText = identifier.identifier ~ " " ~ identifier.definition;
 
 			// TODO: only add arguments when this is a function call, eg not on template arguments
-			if (identifier.type == "f" && argumentSnippets
+			if (identifier.type.among!("f", "F") && argumentSnippets
 				&& info.level.among!(SnippetLevel.method, SnippetLevel.value))
 			{
 				item.insertTextFormat = InsertTextFormat.snippet;
