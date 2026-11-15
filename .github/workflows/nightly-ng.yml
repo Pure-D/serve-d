@@ -17,8 +17,15 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Update tag
-        run: git tag -fm "Bump nightly tag" nightly-ng
+      - name: Update tag if outdated
+        id: update-tag
+        run: |
+          if [ "$(git rev-list -n 1 HEAD)" != "$(git rev-list -n 1 tags/nightly-ng)" ]; then
+            git tag -f nightly-ng
+            echo "Tag updated: $(git rev-list -n 1 tags/nightly-ng)"
+          else
+            echo "Tag is up-to-date."
+          fi
 
       - name: Push tag
         run: git push -f origin nightly-ng
