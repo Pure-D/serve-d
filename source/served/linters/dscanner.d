@@ -181,8 +181,8 @@ DScannerAutoFix.CodeReplacement diagnosticDataToCodeReplacement(JsonValue json)
 {
 	return DScannerAutoFix.CodeReplacement(
 		[
-			json.object["r"].array[0].integer,
-			json.object["r"].array[1].integer
+			json.object["r"].array[0].integer.to!size_t,
+			json.object["r"].array[1].integer.to!size_t,
 		],
 		json.object["t"].string
 	);
@@ -221,8 +221,8 @@ TextRange getDscannerDiagnosticRange(Document document, ResolvedLocation[2] rang
 		size_t index;
 
 		return TextRange(
-			document.nextPositionBytes(pos, index, range[0].index),
-			document.nextPositionBytes(pos, index, range[1].index)
+			document.nextPositionBytes(pos, index, range[0].index.to!size_t),
+			document.nextPositionBytes(pos, index, range[1].index.to!size_t)
 		);
 	}
 	else
