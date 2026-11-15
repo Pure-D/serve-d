@@ -17,6 +17,9 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
+      - name: Fetch tags
+        run: git fetch --tags --force
+
       - name: Update tag if outdated
         id: update-tag
         run: |
