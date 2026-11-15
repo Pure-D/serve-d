@@ -1,7 +1,7 @@
 {
 	"fileVersion": 1,
 	"versions": {
-		"dcd": "0.16.2",
+		"dcd": "0.16.9",
 		"dfmt": "0.15.2",
 		"dscanner": "0.16.0-beta.5",
 		"dub": "1.40.0",
@@ -10,10 +10,10 @@
 		"isfreedesktop": "0.1.1",
 		"libddoc": "0.8.0",
 		"libdparse": "0.25.1",
-		"mir-algorithm": "3.22.4",
-		"mir-core": "1.7.3",
+		"mir-algorithm": "3.22.5",
+		"mir-core": "1.7.4",
 		"msgpack-d": "1.0.5",
-		"serve-d": {"path":".."},
+		"serve-d": {"path":"../"},
 		"silly": "1.1.1",
 		"standardpaths": "0.8.2",
 		"xdgpaths": "0.2.5"

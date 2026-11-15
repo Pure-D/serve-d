@@ -1,11 +1,11 @@
 {
 	"fileVersion": 1,
 	"versions": {
-		"mir-algorithm": "3.22.4",
-		"mir-core": "1.7.3",
+		"mir-algorithm": "3.22.5",
+		"mir-core": "1.7.4",
 		"mir-cpuid": "1.2.11",
 		"mir-ion": "2.3.5",
-		"serve-d": {"path":".."},
+		"serve-d": {"path":"../"},
 		"silly": "1.1.1"
 	}
 }
