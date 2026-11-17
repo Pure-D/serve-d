@@ -2,6 +2,7 @@ name: Publish Nightly-NG release
 on:
   schedule:
     - cron: '0 0 * * *'
+      timezone: 'UTC'
   workflow_dispatch:
 
 jobs:
