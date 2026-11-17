@@ -50,7 +50,7 @@ jobs:
         if: matrix.os == 'ubuntu-22.04'
         env:
           ARCH: ${{ matrix.arch }}
-          BUILD: release
+          BUILD: prod
           CROSS: ${{ matrix.cross }}
 
       - name: Deploy Linux release
@@ -82,7 +82,7 @@ jobs:
         env:
           MACOSX_DEPLOYMENT_TARGET: '10.12'
           ARCH: ${{ matrix.arch }}
-          BUILD: release
+          BUILD: prod
           CROSS: ${{ matrix.cross }}
 
       - name: Deploy OSX release
@@ -112,7 +112,7 @@ jobs:
         run: (.\ci\build.bat) -and (rdmd ci\validate_version.d)
         if: matrix.os == 'windows-latest'
         env:
-          BUILD: release
+          BUILD: prod
           ARCH: ${{ matrix.arch }}
           CROSS: ${{ matrix.cross }}
 

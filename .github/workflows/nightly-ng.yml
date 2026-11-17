@@ -49,7 +49,7 @@ jobs:
           - os: macos-latest
             arch: arm64-apple-macos
             arch_short: arm64
-            build: release
+            build: prod
             cross: "1"
     runs-on: ${{ matrix.os }}
     steps:
