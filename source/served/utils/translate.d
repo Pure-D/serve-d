@@ -162,7 +162,7 @@ string formatTranslation(Args...)(string text, Args formatArgs)
 				length++;
 
 				text = text[0 .. startIndex] ~ insert ~ text[startIndex + length .. $];
-				end = startIndex + insert.length;
+				end = startIndex + insert.length - 1;
 			}
 			else // {arg num}
 			{
@@ -189,7 +189,7 @@ string formatTranslation(Args...)(string text, Args formatArgs)
 					}
 
 					text = text[0 .. startIndex] ~ insert ~ text[end + 1 .. $];
-					end = startIndex + insert.length;
+					end = startIndex + insert.length - 1;
 				}
 			}
 		}
@@ -231,6 +231,13 @@ unittest
 
 	assert(formatTranslation("DCD is outdated. (target={0}, installed={1})",
 			"v1.12.0", "v1.11.1") == "DCD is outdated. (target=v1.12.0, installed=v1.11.1)");
+}
+
+unittest
+{
+	// an escape sequence directly following a placeholder must still be processed
+	assert(formatTranslation("{0}\\n\\nX", "a") == "a\n\nX");
+	assert(formatTranslation("{0}\\tX", "a") == "a\tX");
 }
 
 unittest
