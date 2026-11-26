@@ -77,6 +77,66 @@ else
 		enum isDCDFromSource = false;
 }
 
+version (Windows)
+{
+	import core.sys.windows.basetsd : HANDLE;
+	import core.sys.windows.windef : DWORD, LPWSTR;
+	import core.sys.windows.winbase : CloseHandle, GetCurrentProcessId, OpenProcess,
+		TerminateProcess, INVALID_HANDLE_VALUE;
+	import core.sys.windows.winnt : PROCESS_QUERY_INFORMATION, PROCESS_TERMINATE;
+	import core.sys.windows.tlhelp32 : CreateToolhelp32Snapshot, Process32FirstW,
+		Process32NextW, PROCESSENTRY32W, TH32CS_SNAPPROCESS;
+
+	extern(Windows) int QueryFullProcessImageNameW(HANDLE process, DWORD flags,
+		LPWSTR buffer, DWORD* size);
+
+	/// Windows locks running .exe files, so stop any dcd-server started from
+	/// `folder` before its binaries are replaced.
+	private void killDCDServersIn(string folder)
+	{
+		import std.string : icmp;
+		import std.utf : toUTF8;
+
+		enum processName = "dcd-server.exe";
+
+		auto snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+		if (snapshot == INVALID_HANDLE_VALUE)
+			return;
+		scope (exit) CloseHandle(snapshot);
+
+		PROCESSENTRY32W entry;
+		entry.dwSize = cast(typeof(entry.dwSize)) PROCESSENTRY32W.sizeof;
+		if (!Process32FirstW(snapshot, &entry))
+			return;
+
+		do
+		{
+			if (entry.th32ProcessID == GetCurrentProcessId())
+				continue;
+
+			auto process = OpenProcess(PROCESS_QUERY_INFORMATION | PROCESS_TERMINATE,
+				0, entry.th32ProcessID);
+			if (!process)
+				continue;
+			scope (exit) CloseHandle(process);
+
+			wchar[1024] buffer;
+			DWORD size = cast(DWORD) buffer.length;
+			if (!QueryFullProcessImageNameW(process, 0, buffer.ptr, &size)
+					|| size < processName.length)
+				continue;
+
+			auto exePath = buffer[0 .. size].toUTF8;
+			if (exePath.length >= folder.length
+					&& exePath.length >= processName.length
+					&& icmp(exePath[0 .. folder.length], folder) == 0
+					&& icmp(exePath[$ - processName.length .. $], processName) == 0)
+				TerminateProcess(process, 1);
+		}
+		while (Process32NextW(snapshot, &entry));
+	}
+}
+
 __gshared string dcdUpdateReason = null;
 __gshared bool dcdUpdating;
 @protocolNotification("served/updateDCD")
@@ -94,7 +154,7 @@ void updateDCD()
 		rpc.notifyMethod("coded/logInstall", "Installing DCD");
 
 	string outputFolder = determineOutputFolder;
-	if (fs.exists(outputFolder))
+	void removeOldDCD()
 	{
 		foreach (file; ["dcd", "DCD", "dcd-client", "dcd-server"])
 		{
@@ -108,6 +168,32 @@ void updateDCD()
 			}
 		}
 	}
+	if (fs.exists(outputFolder))
+	{
+		version (Windows)
+		{
+			import core.thread : Thread;
+			import core.time : msecs;
+
+			killDCDServersIn(outputFolder);
+			foreach (attempt; 0 .. 10)
+			{
+				try
+				{
+					removeOldDCD();
+					break;
+				}
+				catch (Exception e)
+				{
+					if (attempt == 9)
+						throw e;
+					Thread.sleep(250.msecs);
+				}
+			}
+		}
+		else
+			removeOldDCD();
+	}
 	if (!fs.exists(outputFolder))
 		fs.mkdirRecurse(outputFolder);
 	string ext = "";
@@ -120,8 +206,8 @@ void updateDCD()
 
 	enum latestReleaseBinaryBroken = false;
 
-	// the latest version that has downloads available
-	enum bundledDCDVersion = "v0.15.2";
+	// download the exact version serve-d was built against so the two can't drift
+	enum bundledDCDVersion = "v" ~ format!"%(%s.%)"(DCDComponent.latestKnownVersion);
 
 	bool compileFromSource = isDCDFromSource || latestReleaseBinaryBroken;
 	if (!compileFromSource
