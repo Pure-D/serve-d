@@ -206,8 +206,8 @@ void updateDCD()
 
 	enum latestReleaseBinaryBroken = false;
 
-	// the latest version that has downloads available
-	enum bundledDCDVersion = "v0.15.2";
+	// download the exact version serve-d was built against so the two can't drift
+	enum bundledDCDVersion = "v" ~ format!"%(%s.%)"(DCDComponent.latestKnownVersion);
 
 	bool compileFromSource = isDCDFromSource || latestReleaseBinaryBroken;
 	if (!compileFromSource
