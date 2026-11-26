@@ -305,7 +305,7 @@ void updateDCD()
 			if (!fs.exists(finalDestinationClient))
 				finalDestinationClient = buildPath(outputFolder, "bin", "dcd-client" ~ ext);
 			if (!fs.exists(finalDestinationServer))
-				finalDestinationServer = buildPath(outputFolder, "bin", "dcd-client" ~ ext);
+				finalDestinationServer = buildPath(outputFolder, "bin", "dcd-server" ~ ext);
 
 			triedPaths = [
 				"dcd-client" ~ ext, "dcd-server" ~ ext, "bin/dcd-client" ~ ext,
