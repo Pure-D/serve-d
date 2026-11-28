@@ -38,6 +38,14 @@ struct LanguageServerConfig
 	int gcCollectSeconds = 30;
 	/// ditto
 	int gcMinimizeTimes = 5;
+	/// Bytes that must have been allocated since the last collection for the
+	/// periodic collector to run again. One collection also always runs once the
+	/// server goes quiet.
+	size_t gcCollectMinAllocated = 128 * 1024 * 1024;
+
+	/// How long to block waiting for input while idle, in milliseconds. Incoming
+	/// data wakes it immediately. 0 polls instead.
+	int idleWaitMsecs = 1000;
 }
 
 // dumps a performance/GC trace log to served_trace.log
@@ -483,8 +491,14 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			int gcCollects, totalGcCollects;
 			StopWatch gcInterval;
 			gcInterval.start();
+			// Nothing is freed between collections, so usedSize growth is the
+			// amount allocated, from any thread or fiber.
+			size_t gcUsedAtLastCollect;
+			// Detects the busy -> quiet edge. Keyed on messages, not live fibers: a
+			// fiber can block forever on a client reply, which is idle, not busy.
+			bool activityThisInterval, activitySinceCollect;
 
-			void collectGC()
+			void collectGC(bool forceMinimize = false)
 			{
 				import core.memory : GC;
 
@@ -498,7 +512,10 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 				static if (serverConfig.gcMinimizeTimes > 0)
 				{
 					gcCollects++;
-					if (gcCollects >= serverConfig.gcMinimizeTimes)
+					// release memory if we can once things have settled; an idle
+					// server no longer collects often enough to reach
+					// gcMinimizeTimes on its own
+					if (forceMinimize || gcCollects >= serverConfig.gcMinimizeTimes)
 					{
 						GC.minimize();
 						gcCollects = 0;
@@ -507,6 +524,8 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 
 				gcSpeed.stop();
 				auto after = GC.stats();
+				gcUsedAtLastCollect = after.usedSize;
+				activitySinceCollect = false;
 
 				if (before != after)
 					tracef("GC run in %s. Freed %s bytes (%s bytes allocated, %s bytes available)", gcSpeed.peek,
@@ -551,6 +570,11 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 		static if (is(typeof(ExtensionModule.parallelMain)))
 			pushFiber("parallelMain", &ExtensionModule.parallelMain);
 
+		// The RPC manager and parallelMain live forever; anything else is work.
+		size_t permanentFibers;
+		synchronized (fibersMutex)
+			permanentFibers = fibers.length;
+
 		while (rpc.state != Fiber.State.TERM)
 		{
 			while (rpc.hasData)
@@ -562,8 +586,33 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 					pushFiber(msg.fiberName, gotRequest(msg));
 				else
 					pushFiber(msg.fiberName, gotNotify(msg));
+
+				static if (serverConfig.gcCollectSeconds > 0)
+					activityThisInterval = activitySinceCollect = true;
 			}
-			Thread.sleep(loopIterationDelay);
+			// Wait for input when there is nothing to do at all. Otherwise keep the
+			// fixed cadence: a live fiber may need resuming to make progress.
+			static if (serverConfig.idleWaitMsecs > 0)
+			{
+				bool nothingToDo;
+				synchronized (fibersMutex)
+					nothingToDo = fibers.length <= permanentFibers;
+
+				// created by parallelMain; until then there are no timeouts
+				if (nothingToDo && timeoutsMutex !is null)
+					synchronized (timeoutsMutex)
+						nothingToDo = timeouts.length == 0;
+
+				// keep the fixed cadence unless we really blocked: waitForInput
+				// returns false when raw bytes are already buffered (a message
+				// arriving in pieces), and skipping the sleep there would spin
+				if (!nothingToDo
+					|| !rpc.waitForInput(serverConfig.idleWaitMsecs.msecs))
+					Thread.sleep(loopIterationDelay);
+			}
+			else
+				Thread.sleep(loopIterationDelay);
+
 			synchronized (fibersMutex)
 				fibers.call();
 
@@ -571,7 +620,20 @@ mixin template LanguageServerRouter(alias ExtensionModule, LanguageServerConfig 
 			{
 				if (gcInterval.peek > serverConfig.gcCollectSeconds.seconds)
 				{
-					collectGC();
+					import core.memory : GC;
+
+					immutable busy = activityThisInterval;
+					activityThisInterval = false;
+
+					// busy: collect once enough was allocated to be worth marking
+					if (GC.stats().usedSize >= gcUsedAtLastCollect
+							+ serverConfig.gcCollectMinAllocated)
+						collectGC();
+					// gone quiet: collect once and release memory if we can
+					else if (activitySinceCollect && !busy)
+						collectGC(true);
+					else
+						gcInterval.reset();
 				}
 			}
 		}
