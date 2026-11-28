@@ -1062,8 +1062,14 @@ void startDCDServer(WorkspaceD.Instance instance, string workspaceUri)
 	}
 	catch (Exception e)
 	{
+		// errorlog is only filled by component bind failures; the actual
+		// startServer/refreshImports reason lives in the exception itself.
+		string bindLog = instance.config.get("dcd", "errorlog", "");
+		string reason = e.msg.length ? e.msg : "unknown error";
+		if (bindLog.length)
+			reason ~= "\n" ~ bindLog;
 		rpc.window.showErrorMessage(translate!"d.ext.dcdFail"(instance.cwd,
-				instance.config.get("dcd", "errorlog", "")));
+				reason, proj.config.dcdServerPath.userPath));
 		error(e);
 		trace("Instance Config: ", instance.config);
 		return;

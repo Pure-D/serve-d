@@ -90,7 +90,7 @@ d.ext.config.invalid.archType: Arch Type '{0}' which is specified in the config 
 d.ext.config.invalid.buildType: Build Type '{0}' which is specified in the config is not available!
 d.ext.config.invalid.compiler: Compiler '{0}' which is specified in the config is not available!
 d.ext.fsworkspaceFail: Could not initialize fsworkspace for {0}. See console for details!
-d.ext.dcdFail: Could not initialize DCD for {0}.{1}
+d.ext.dcdFail: Could not initialize DCD for {0}.\n\nReason: {1}\n\nHow to fix: make sure dcd-server exists and is executable at "{2}" and that no other dcd-server is already using the port, then restart DCD (code-d: "Restart DCD Server", or "Kill DCD Server" first). If DCD is missing or outdated, accept the "Download DCD" prompt or set d.dcdServerPath/d.dcdClientPath. See the output panel for details.
 d.ext.gcLens: {0} bytes allocated / {1} allocations
 d.ext.stdlibNoPhobosNoDRuntime: Your d.stdlibPath setting doesn't contain a path to phobos or druntime. Auto completion might lack some symbols!
 d.ext.stdlibNoPhobos: Your d.stdlibPath setting doesn't contain a path to phobos. Auto completion might lack some symbols!
