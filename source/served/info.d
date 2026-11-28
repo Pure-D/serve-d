@@ -1,6 +1,6 @@
 module served.info;
 
-static immutable Version = [0, 9, 0];
+static immutable Version = [0, 9, 1];
 static immutable VersionSuffix = "";
 static immutable string BundledDependencies = "dub, dfmt and dscanner are bundled within (compiled in)";
 
