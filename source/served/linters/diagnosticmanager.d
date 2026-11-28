@@ -6,7 +6,7 @@ import std.algorithm : map, sort;
 import served.utils.memory;
 import served.types;
 
-enum NumDiagnosticProviders = 3;
+enum NumDiagnosticProviders = 4;
 alias DiagnosticCollection = PublishDiagnosticsParams[];
 DiagnosticCollection[NumDiagnosticProviders] diagnostics;
 
